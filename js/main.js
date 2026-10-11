@@ -1868,9 +1868,9 @@ function kill(t, attacker, wname) {
 }
 function addKillFeed(a, t, w) {
   const kf = document.getElementById('killfeed');
-  const d = document.createElement('div'); d.className = 'kf';
+  const d = document.createElement('div'); d.className = 'kf' + ((a && a.isPlayer) || (t && t.isPlayer) ? ' mine' : '');
   const nm = (c) => `<b class="${c && c.isPlayer ? 'me' : ''}">${c ? c.name : ''}</b>`;
-  d.innerHTML = a && a !== t ? `${nm(a)} <span class="w">a éliminé</span> ${nm(t)} <span class="w">· ${w || ''}</span>` : `${nm(t)} <span class="w">a succombé à la tempête</span>`;
+  d.innerHTML = a && a !== t ? `${nm(a)} <span class="w">a éliminé</span> ${nm(t)} ${w ? `<span class="w">· ${w}</span>` : ''}` : `${nm(t)} <span class="w">a succombé à la tempête</span>`;
   kf.prepend(d);
   while (kf.children.length > 6) kf.lastChild.remove();
   setTimeout(() => { d.style.opacity = '0'; setTimeout(() => d.remove(), 700); }, 6000);
@@ -2970,15 +2970,19 @@ function updateHUD(dt) {
   hudAcc += dt;
   if (hudAcc < 0.1) return;
   hudAcc = 0;
-  $('hpFill').style.width = Math.max(0, player.hp) + '%'; $('hpTxt').textContent = Math.max(0, Math.ceil(player.hp));
-  $('shieldFill').style.width = player.shield + '%'; $('shieldTxt').textContent = Math.ceil(player.shield);
+  { // the trail lags behind the fill (CSS transition delay) to show how much a hit took
+    const hp = Math.max(0, Math.ceil(player.hp)), sh = Math.ceil(player.shield);
+    $('hpFill').style.width = $('hpTrail').style.width = hp + '%'; $('hpTxt').innerHTML = `${hp}<small>/100</small>`;
+    $('shieldFill').style.width = $('shieldTrail').style.width = sh + '%'; $('shieldTxt').innerHTML = `${sh}<small>/100</small>`;
+    $('bars').classList.toggle('low', hp <= 30 && hp > 15); $('bars').classList.toggle('crit', hp <= 15);
+  }
   { let n = 0; for (const c of chars) if (c.alive) n++; $('aliveN').textContent = n; }
   $('killsN').textContent = player.kills;
   updateTeamHUD();
   updateHUDStatic();
   const it = player.item;
   if (buildMode) $('ammoInfo').innerHTML = `${player.mats[player.matSel]} <small>${player.matSel === 'wood' ? 'bois' : player.matSel === 'stone' ? 'pierre' : 'métal'} · ${keyLabel(BIND.matCycle)} changer · clic droit</small>`;
-  else if (it && it.kind === 'weapon' && it.id !== 'pickaxe') { const Wd = WEAPONS[it.id]; $('ammoInfo').innerHTML = player.reloading > 0 ? `<small>Rechargement…</small>` : `${it.mag} <small>/ ${player.ammo[Wd.ammo]}</small>`; }
+  else if (it && it.kind === 'weapon' && it.id !== 'pickaxe') { const Wd = WEAPONS[it.id]; $('ammoInfo').innerHTML = `<span class="wn" style="color:${RAR[it.rarity].css}">${Wd.name}</span>` + (player.reloading > 0 ? `<small>Rechargement…</small>` : `${it.mag} <small>/ ${player.ammo[Wd.ammo]}</small>`); }
   else $('ammoInfo').innerHTML = '';
   const sig = player.slots.map((s) => s ? (s.id + (s.mag ?? '') + (s.count ?? '')) : '-').join() + player.cur + buildMode;
   if (sig !== lastSlotsSig) { lastSlotsSig = sig; updateHotbar(); }
@@ -2988,6 +2992,7 @@ function updateHUD(dt) {
   else if (storm.phase >= PHASES.length) st = 'Zone finale';
   else { const s = Math.max(0, Math.ceil(storm.timer)); const tt = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; st = storm.stage === 'wait' ? `Fermeture dans ${tt}` : `Se referme · ${tt}`; }
   $('stormText').textContent = st;
+  $('stormInfo').classList.toggle('closing', storm.phase >= 0 && storm.phase < PHASES.length && storm.stage !== 'wait');
   // prompt
   const pr = $('prompt');
   if (player.alive && player.mode === 'ground') {

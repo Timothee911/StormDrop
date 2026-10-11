@@ -245,3 +245,72 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 #endXpList b { color: #ffe35c; }
 #lockHint { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); background: rgba(10,14,40,.75); border: 1px solid rgba(255,255,255,.3); padding: 8px 16px; border-radius: 6px; font-weight: 800; font-size: 17px; pointer-events: none; }
 #hud.dead #lockHint { display: none; }
+
+/* ---------- v3: HUD polish (one panel style, icons, damage trail, low health) ---------- */
+#hud { --hud-panel: rgba(10, 14, 34, .64); --hud-line: rgba(255, 255, 255, .13); --hud-shadow: 0 2px 10px rgba(0, 0, 0, .28); }
+#hud, #hud * { text-shadow: 0 1px 2px rgba(0, 0, 0, .55); }
+.count, #stormInfo, .kf, .mat, #prompt, #busHint, #spectate, .tm { background: var(--hud-panel); border: 1px solid var(--hud-line); box-shadow: var(--hud-shadow); }
+
+/* banners no longer overlap: place name sits above the centre messages */
+#poiBanner { top: 6%; font-size: 40px; }
+#poiBanner.minor { font-size: 28px; }
+#centerMsg { top: 21%; }
+
+/* top right */
+.count { border-radius: 6px; padding: 5px 12px 6px; }
+.count .lbl { display: flex; align-items: center; gap: 4px; }
+.count .lbl svg { width: 12px; height: 12px; fill: var(--c-muted); }
+#stormInfo { border-radius: 6px; }
+#stormInfo.closing { border-color: rgba(155, 77, 255, .7); animation: stormPulse 1.4s ease-in-out infinite; }
+#stormInfo.closing .storm-ico { animation: stormDot 1.4s ease-in-out infinite; }
+@keyframes stormPulse { 50% { box-shadow: 0 0 0 2px rgba(155, 77, 255, .35), 0 0 18px rgba(155, 77, 255, .55); } }
+@keyframes stormDot { 50% { transform: scale(1.35); } }
+#minimap { border-radius: 10px; border-width: 3px; }
+
+/* killfeed */
+.kf { border-radius: 4px; border-left: 3px solid transparent; animation: kfIn .25s ease-out; }
+.kf.mine { border-left-color: var(--c-accent); background: linear-gradient(90deg, rgba(255, 210, 63, .2), var(--hud-panel) 60%); }
+@keyframes kfIn { from { opacity: 0; transform: translateX(-16px); } }
+
+/* health + shield */
+#bars { gap: 6px; width: 360px; }
+.barrow { display: flex; align-items: center; gap: 8px; }
+.bar-ico { width: 22px; height: 22px; flex: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
+.bar-ico.shield { fill: #6fd0ff; } .bar-ico.hp { fill: #7dea6e; }
+.bar { flex: 1; height: 24px; border-radius: 3px; border: 2px solid rgba(255, 255, 255, .3); background: rgba(5, 8, 22, .6); box-shadow: var(--hud-shadow); }
+.bar .fill, .bar .trail { position: absolute; left: 0; top: 0; bottom: 0; }
+.bar .fill { transition: width .12s ease-out; }
+.bar .trail { width: 0; background: rgba(255, 255, 255, .85); transition: width .45s ease-in .4s; }
+.bar.shield::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 2px), rgba(5, 8, 22, .7) calc(25% - 2px) 25%); }
+.bar span { font-size: 18px; }
+.bar span small { font-family: var(--font-body); font-size: 13px; font-weight: 700; opacity: .75; margin-left: 2px; }
+#bars.low .bar.hp .fill { background: linear-gradient(180deg, #ffc35a, #f08a1c); }
+#bars.low .bar-ico.hp { fill: #ffb347; }
+#bars.crit .bar.hp .fill { background: linear-gradient(180deg, #ff7a7a, #e0283f); }
+#bars.crit .bar-ico.hp { fill: #ff5a6e; }
+#bars.crit .bar.hp { animation: hpPulse .8s ease-in-out infinite; }
+@keyframes hpPulse { 50% { border-color: #ff5a6e; box-shadow: 0 0 14px rgba(255, 60, 90, .7); } }
+
+/* hotbar: dark slot, rarity shown as a bottom band + soft tint */
+.slot { border-radius: 7px; background: var(--hud-panel); border: 2px solid var(--hud-line); box-shadow: var(--hud-shadow); transition: transform .12s, border-color .12s, box-shadow .12s; }
+.slot.r0, .slot.r1, .slot.r2, .slot.r3, .slot.r4 { border-bottom-width: 4px; }
+.slot.r0 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(181, 185, 194, .35)); border-bottom-color: #b5b9c2; }
+.slot.r1 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(79, 208, 79, .4)); border-bottom-color: #4fd04f; }
+.slot.r2 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(54, 163, 255, .42)); border-bottom-color: #36a3ff; }
+.slot.r3 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(181, 88, 255, .45)); border-bottom-color: #b558ff; }
+.slot.r4 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(255, 174, 43, .48)); border-bottom-color: #ffae2b; }
+.slot.sel { border-color: var(--c-accent); transform: translateY(-8px); box-shadow: 0 0 0 2px rgba(255, 210, 63, .3), 0 0 18px rgba(255, 210, 63, .45), var(--hud-shadow); }
+.slot .nm { width: 100%; font-size: 11.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.slot .cnt { top: 3px; right: 3px; min-width: 18px; padding: 0 4px; border-radius: 9px; background: rgba(0, 0, 0, .55); font-size: 12px; line-height: 16px; text-align: center; }
+.slot svg { margin-bottom: 3px; }
+
+/* ammo + materials */
+#ammoInfo { text-align: right; font-size: 40px; line-height: 1; }
+#ammoInfo .wn { display: block; font-family: var(--font-body); font-size: 16px; font-weight: 800; font-style: italic; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 2px; }
+.mat { border-radius: 6px; padding: 4px 10px 4px 8px; }
+.mi { width: 18px; height: 18px; flex: none; }
+.mi.wood { fill: #c48a4a; } .mi.stone { fill: #a9b1ba; } .mi.metal { fill: #8aa6c2; }
+
+@media (max-width: 900px) {
+  #bars { width: 250px; } #ammoInfo { font-size: 32px; } #poiBanner { font-size: 32px; }
+}
