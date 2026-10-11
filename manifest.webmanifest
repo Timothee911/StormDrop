@@ -1,0 +1,19 @@
+{
+  "name": "STORMDROP Battle Royale",
+  "short_name": "STORMDROP",
+  "description": "Battle royale cartoon dans le navigateur : construction, tempête, bus de combat et jusqu'à 100 joueurs.",
+  "lang": "fr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#1b1460",
+  "theme_color": "#1b1460",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

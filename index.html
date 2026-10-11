@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STORMDROP — Salon</title>
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lobby.css">
+<link rel="preload" as="image" href="img/lobby-bg.webp">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1b1460">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="STORMDROP">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+<div id="bg">
+  <div class="bg-img" id="bgImg"></div>
+  <div class="bg-bolt"></div>
+  <div class="bg-shade"></div>
+  <div class="bg-glow"></div>
+  <div class="bg-clouds"></div>
+  <div class="bg-floor"></div>
+</div>
+<canvas id="stage"></canvas>
+
+<!-- Top bar -->
+<header id="topbar">
+  <div class="logo" aria-label="Stormdrop">
+    <svg viewBox="0 0 40 40" width="34" height="34" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="8" fill="#ffd23f"/><path d="M23 6 11 23h8l-3 12 13-18h-8z" fill="#2a1f7a"/></svg>
+    <span>STORM<b>DROP</b></span>
+  </div>
+  <nav id="tabs">
+    <button data-tab="home" class="on">ACCUEIL</button>
+    <button data-tab="pass">PASSE DE COMBAT</button>
+    <button data-tab="challenges">DÉFIS</button>
+    <button data-tab="locker">CASIER</button>
+    <button data-tab="shop">BOUTIQUE</button>
+  </nav>
+  <div class="tb-right">
+    <div class="pill cur" id="curPill" title="Éclats"><i class="coin"></i><span id="curVal">0</span></div>
+    <div class="lvl" id="lvlPill" title="Niveau du passe">
+      <div class="lvl-badge"><span id="lvlNum">1</span></div>
+      <div class="lvl-bar"><i id="lvlFill"></i></div>
+    </div>
+    <button class="pill install-btn hidden" id="installBtn" title="Installer l'appli"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M11 3h2v9.6l3.3-3.3 1.4 1.4L12 16.4 6.3 10.7l1.4-1.4 3.3 3.3zM4 18h16v2H4z"/></svg><span>INSTALLER</span></button>
+    <button class="pill friends-btn" id="friendsBtn" title="Amis"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3.3 3.1-6 7-6s7 2.7 7 6zm15 0c0-1.8-.7-3.4-1.9-4.6 3.3-.3 6.9 1.4 6.9 4.6z"/></svg><span id="friendsN">0</span></button>
+    <button class="icon-btn" id="settingsBtn" aria-label="Paramètres"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.7a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5A3.5 3.5 0 1 1 13 8.5a3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
+  </div>
+</header>
+
+<!-- HOME -->
+<section class="page on" id="page-home">
+  <div class="party" id="party"></div>
+  <div class="nameplate"><div class="np-lvl" id="npLvl">1</div><div class="np-name" id="npName">Tim</div><div class="np-ready">PRÊT</div></div>
+
+  <aside class="home-left">
+    <div class="card news">
+      <div class="news-tag">NOUVEAUTÉ</div>
+      <div class="news-title">Saison 1 : La Tempête</div>
+      <div class="news-text">Largages de ravitaillement, points faibles de récolte et nouvelles tenues légendaires.</div>
+    </div>
+    <div class="card quick">
+      <div class="q-head">DÉFIS DU JOUR <span id="dailyReset"></span></div>
+      <div id="quickChallenges"></div>
+    </div>
+    <div class="card last hidden" id="lastMatch"></div>
+  </aside>
+
+  <div class="home-right">
+    <div class="mode-card" id="modeCard">
+      <div class="mode-art"><canvas id="modeArt" width="300" height="140"></canvas></div>
+      <div class="mode-info">
+        <div class="mode-kicker">BATTLE ROYALE</div>
+        <div class="mode-name" id="modeName">SOLO</div>
+        <div class="mode-diff">Bots : <b id="diffLabel">Normal</b> · <span id="playersLabel">30</span> joueurs</div>
+      </div>
+      <button class="mode-change" id="diffBtn">CHANGER</button>
+    </div>
+    <button id="playBtn" class="play"><span>JOUER</span></button>
+  </div>
+</section>
+
+<!-- BATTLE PASS -->
+<section class="page" id="page-pass">
+  <div class="pass-head">
+    <div>
+      <div class="kicker">SAISON 1</div>
+      <h1>PASSE DE COMBAT</h1>
+      <div class="pass-sub">Monte de niveau en jouant pour débloquer <b>30 paliers</b> de récompenses.</div>
+    </div>
+    <div class="pass-buy" id="passBuy">
+      <div class="pb-title">PASSE PREMIUM</div>
+      <div class="pb-text">Débloque toutes les récompenses premium, dont le Renard Cyber et le Dragonnier Écarlate.</div>
+      <button class="buy-btn" id="passBuyBtn"><i class="coin"></i> 950</button>
+    </div>
+  </div>
+  <div class="pass-preview" id="passPreview"></div>
+  <div class="pass-track-wrap">
+    <button class="pt-arrow l" id="ptL" aria-label="Précédent">‹</button>
+    <div class="pass-track" id="passTrack"></div>
+    <button class="pt-arrow r" id="ptR" aria-label="Suivant">›</button>
+  </div>
+</section>
+
+<!-- CHALLENGES -->
+<section class="page" id="page-challenges">
+  <div class="ch-wrap">
+    <div class="ch-col">
+      <h2>QUOTIDIENS <span class="muted" id="dailyReset2"></span></h2>
+      <div id="dailyList"></div>
+    </div>
+    <div class="ch-col">
+      <h2>HEBDOMADAIRES</h2>
+      <div id="weeklyList"></div>
+    </div>
+    <div class="ch-col stats">
+      <h2>CARRIÈRE</h2>
+      <div id="careerStats"></div>
+    </div>
+  </div>
+</section>
+
+<!-- LOCKER -->
+<section class="page" id="page-locker">
+  <div class="locker">
+    <div class="lk-slots" id="lkSlots"></div>
+    <div class="lk-panel">
+      <div class="lk-head"><h2 id="lkTitle">TENUE</h2><span class="muted" id="lkCount"></span></div>
+      <div class="lk-grid" id="lkGrid"></div>
+    </div>
+  </div>
+  <div class="lk-detail" id="lkDetail"></div>
+</section>
+
+<!-- SHOP -->
+<section class="page" id="page-shop">
+  <div class="shop">
+    <div class="shop-head">
+      <h1>BOUTIQUE</h1>
+      <div class="shop-timer">Renouvellement dans <b id="shopTimer">--:--:--</b></div>
+    </div>
+    <div class="shop-scroll">
+      <h3>À LA UNE</h3>
+      <div class="shop-row featured" id="shopFeatured"></div>
+      <h3>QUOTIDIEN</h3>
+      <div class="shop-row daily" id="shopDaily"></div>
+      <h3>OFFRE DU JOUR</h3>
+      <div class="shop-row gift">
+        <div class="gift-card" id="giftCard">
+          <i class="coin big"></i>
+          <div><b>Cadeau quotidien</b><span>Récupère 300 Éclats gratuitement chaque jour.</span></div>
+          <button class="buy-btn" id="giftBtn">RÉCUPÉRER</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Modals -->
+<div class="modal hidden" id="buyModal">
+  <div class="modal-box buy">
+    <div class="bm-art" id="bmArt"></div>
+    <div class="bm-info">
+      <div class="bm-rar" id="bmRar"></div>
+      <div class="bm-name" id="bmName"></div>
+      <div class="bm-type" id="bmType"></div>
+      <div class="bm-desc" id="bmDesc"></div>
+      <div class="bm-btns">
+        <button class="buy-btn" id="bmBuy"></button>
+        <button class="ghost-btn" id="bmClose">FERMER</button>
+      </div>
+      <div class="bm-msg" id="bmMsg"></div>
+    </div>
+  </div>
+</div>
+
+<aside class="friends hidden" id="friendsPanel">
+  <div class="fr-head"><h2>AMIS</h2><button class="ghost-btn" id="friendsClose">FERMER</button></div>
+  <div class="fr-group" id="partyList"></div>
+  <div class="fr-sub">EN LIGNE</div>
+  <div id="friendsList"></div>
+  <div class="set-note">Les amis invités rejoignent ton groupe et jouent comme coéquipiers IA. En Solo, inviter un ami passe automatiquement en Duo ou en Escouade.</div>
+</aside>
+
+<div class="modal hidden" id="modeModal">
+  <div class="modal-box mode-pick">
+    <h2>CHOIX DU MODE</h2>
+    <div class="mp-row" id="mpModes"></div>
+    <div class="mp-label">NOMBRE DE JOUEURS</div>
+    <div class="mp-row small" id="mpPlayers"></div>
+    <div class="mp-label">DIFFICULTÉ DES BOTS</div>
+    <div class="mp-row small" id="mpDiff"></div>
+    <div class="bm-btns"><button class="buy-btn" id="mpOk">VALIDER</button></div>
+  </div>
+</div>
+
+<div class="modal hidden" id="settingsModal">
+  <div class="modal-box settings">
+    <h2>PARAMÈTRES</h2>
+    <label>Pseudo<input id="setName" maxlength="16" value="Tim"></label>
+    <div id="setForm"></div>
+    <label>Difficulté des bots
+      <select id="setDiff"><option value="facile">Facile</option><option value="normal" selected>Normal</option><option value="difficile">Difficile</option></select>
+    </label>
+    <div class="set-note">Astuce : en jeu, clique dans la fenêtre pour capturer la souris (version téléchargeable). La progression est conservée tant que cette page reste ouverte.</div>
+    <div class="bm-btns"><button class="buy-btn" id="setSave">ENREGISTRER</button></div>
+  </div>
+</div>
+
+<div class="modal hidden" id="resultModal">
+  <div class="modal-box result">
+    <div class="rs-place" id="rsPlace">#1</div>
+    <div class="rs-title" id="rsTitle"></div>
+    <div class="rs-cols">
+      <div class="rs-stats" id="rsStats"></div>
+      <div class="rs-xp">
+        <div class="rs-xp-list" id="rsXpList"></div>
+        <div class="rs-total"><span>TOTAL</span><b id="rsXpTotal">0 XP</b></div>
+        <div class="rs-level">
+          <div class="lvl-badge"><span id="rsLvl">1</span></div>
+          <div class="rs-bar"><i id="rsFill"></i></div>
+        </div>
+        <div class="rs-rewards" id="rsRewards"></div>
+      </div>
+    </div>
+    <div class="bm-btns"><button class="buy-btn" id="rsContinue">CONTINUER</button></div>
+  </div>
+</div>
+
+<div id="matchmaking" class="hidden">
+  <div class="mm-box"><div class="mm-spin"></div><div><b>RECHERCHE DE PARTIE</b><span id="mmTime">0:00</span></div></div>
+</div>
+<div id="loadScreen" class="hidden">
+  <div class="ls-art" id="lsArt"></div>
+  <div class="ls-bottom">
+    <div class="ls-tip" id="lsTip"></div>
+    <div class="ls-bar"><i id="lsFill"></i></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script type="module" src="js/lobby.js"></script>
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["https://www.perplexity.ai","https://perplexity.ai","https://testing.perplexity.ai","https://staging.perplexity.ai","https://*.preview.i.perplexity.ai","http://perplexity.localhost","http://localhost:1420","http://127.0.0.1:1420","http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  const DEFAULT_LINE_HEIGHT = 16;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // Allow entries like "https://*.preview.i.perplexity.ai" — the wildcard
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like https://www.perplexity.ai) we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+
+  // Cache resolved font URL -> data URI across captures. Fonts on a page
+  // essentially never change, and a batch run emits multiple captures back to
+  // back — without this we'd refetch + re-base64 every time.
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      // Wait for any pending web fonts to resolve so both inline metrics and
+      // the @font-face inlining below see the same loaded faces.
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+
+      // Re-embed web fonts as data-URI @font-face rules so the SVG rasterizer
+      // can resolve them — external font URLs aren't fetched during
+      // foreignObject rendering, which would otherwise force a fallback face
+      // and change text metrics.
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    // Only accept messages from the direct parent frame. Blocks sibling /
+    // unrelated-window postMessage senders that could otherwise reach us.
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_BY") {
+      const { deltaX, deltaY, deltaMode } = event.data;
+      if (!scrollForwarding || !Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return;
+      if (deltaMode !== 0 && deltaMode !== 1 && deltaMode !== 2) return;
+      const lineHeight =
+        parseFloat(getComputedStyle(document.documentElement).lineHeight) || DEFAULT_LINE_HEIGHT;
+      const scaleX = deltaMode === 1 ? lineHeight : deltaMode === 2 ? window.innerWidth : 1;
+      const scaleY = deltaMode === 1 ? lineHeight : deltaMode === 2 ? window.innerHeight : 1;
+      // The selection overlay receives the wheel event instead of this iframe.
+      // Instant scrolling preserves trackpad deltas even on smooth-scroll sites.
+      window.scrollBy({ left: deltaX * scaleX, top: deltaY * scaleY, behavior: "instant" });
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>
