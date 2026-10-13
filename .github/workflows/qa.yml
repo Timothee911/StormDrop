@@ -1,0 +1,110 @@
+name: QA à chaque push sur main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Configurer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Vérifier la syntaxe JavaScript
+        id: syntaxe
+        run: |
+          set -e
+          STATUS=0
+          for f in js/*.js sw.js; do
+            [ -f "$f" ] || continue
+            if ! node --check "$f" > /tmp/syntax_err.txt 2>&1; then
+              echo "::error file=$f::Erreur de syntaxe dans $f"
+              cat /tmp/syntax_err.txt
+              STATUS=1
+            else
+              echo "OK: $f"
+            fi
+          done
+          exit $STATUS
+
+      - name: Vérifier les références d'assets
+        id: assets
+        continue-on-error: true
+        run: |
+          set -e
+          # Regroupe toutes les références d'assets depuis index.html, game.html, style.css, lobby.css et js/*.js
+          {
+            grep -rhoE '(src|href)=["'"'"'][^"'"'"']+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico|css|js)["'"'"']' index.html game.html 2>/dev/null | sed -E 's/^(src|href)=["'"'"']//;s/["'"'"']$//' || true
+            grep -rhoE "['\"][^'\"]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]" style.css lobby.css js/*.js 2>/dev/null | tr -d "'\"" || true
+            grep -rhoE "url\(['\"]?[^)')]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]?\)" style.css lobby.css 2>/dev/null | sed -E "s/^url\(['\"]?//;s/['\"]?\)$//" || true
+          } | sed 's/^\.\///' | sort -u > /tmp/asset_refs.txt
+          MISSING=0
+          while IFS= read -r ref; do
+            [ -z "$ref" ] && continue
+            case "$ref" in http*|//*|data:*|/) continue ;; esac
+            # Tente successivement le chemin tel quel puis les préfixes ./ et ../
+            if [ ! -f "$ref" ] && [ ! -f "./$ref" ] && [ ! -f "../$ref" ]; then
+              echo "::warning file=assets::Asset manquant : $ref"
+              MISSING=$((MISSING+1))
+            fi
+          done < /tmp/asset_refs.txt
+          echo "TOTAL_MISSING=$MISSING" >> $GITHUB_ENV
+          echo "Asset check terminé ($MISSING manquant(s))."
+
+      - name: Démarrer un serveur et tester le lobby + le jeu
+        id: smoke
+        run: |
+          set -e
+          nohup python3 -m http.server 8090 > /tmp/server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+          STATUS=0
+          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/outline.js style.css lobby.css; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/$path)
+            if [ "$CODE" != "200" ]; then
+              echo "::error file=$path::HTTP $CODE lors du chargement de /$path"
+              STATUS=1
+            else
+              echo "OK : /$path → 200"
+            fi
+          done
+          kill $SERVER_PID 2>/dev/null || true
+          exit $STATUS
+
+      - name: Test navigateur réel (chargement, erreurs JS, ressources)
+        id: navigateur
+        run: |
+          set -e
+          # Installe puppeteer dans node_modules du dépôt, sans package.json
+          npm install --prefix . puppeteer@23 2>&1 | tail -1
+          nohup python3 -m http.server 8090 > /tmp/server2.log 2>&1 &
+          sleep 2
+          node .github/scripts/qa-browser.cjs || STATUS=1
+          pkill -f "http.server 8090" 2>/dev/null || true
+          exit $STATUS
+
+      - name: Rapport QA
+        if: always()
+        run: |
+          echo "### Rapport QA STORMDROP" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Commit \`${GITHUB_SHA::7}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Contrôle | Résultat |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Syntaxe JS | ${{ steps.syntaxe.outcome == 'success' && 'OK' || (steps.syntaxe.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| References d'assets | ${{ steps.assets.outcome == 'success' && 'OK' || (steps.assets.outcome == 'failure' && 'Echec' || 'Non execute') }}${{ env.TOTAL_MISSING && format(' ({0} manquant(s))', env.TOTAL_MISSING) || '' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lobby + modules servis | ${{ steps.smoke.outcome == 'success' && 'OK' || (steps.smoke.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test navigateur reel | ${{ steps.navigateur.outcome == 'success' && 'OK' || (steps.navigateur.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Non couvert : gameplay reel, multijoueur, audio en jeu, fonctionnalites avancees._" >> $GITHUB_STEP_SUMMARY
