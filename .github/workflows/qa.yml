@@ -1,0 +1,132 @@
+name: QA à chaque push sur main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Configurer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Vérifier la syntaxe JavaScript
+        id: syntaxe
+        run: |
+          set -e
+          STATUS=0
+          for f in js/*.js sw.js; do
+            [ -f "$f" ] || continue
+            if ! node --check "$f" > /tmp/syntax_err.txt 2>&1; then
+              echo "::error file=$f::Erreur de syntaxe dans $f"
+              cat /tmp/syntax_err.txt
+              STATUS=1
+            else
+              echo "OK: $f"
+            fi
+          done
+          exit $STATUS
+
+      - name: Vérifier les références d'assets
+        id: assets
+        continue-on-error: true
+        run: |
+          set -e
+          # Regroupe toutes les références d'assets depuis index.html, game.html, style.css, lobby.css et js/*.js
+          # Enregistre (fichier_source, référence) pour résoudre le chemin selon le contexte
+          {
+            # index.html/game.html référencent des chemins relatifs à la racine
+            for f in index.html game.html; do
+              grep -hoE '(src|href)=["'"'"'][^"'"'"']+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico|css|js)["'"'"']' "$f" 2>/dev/null \
+                | sed -E "s/^(src|href)=[\"']//;s/[\"']$//" | sed "s|^|$f:|" || true
+            done
+            # js/*.js référencent des chemins relatifs au dossier js/
+            for f in js/*.js; do
+              grep -hoE "['\"][^'\"]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]" "$f" 2>/dev/null \
+                | tr -d "'\"" | sed "s|^|$f:|" || true
+            done
+            # style.css/lobby.css référencent via url() et chemins textuels
+            for f in style.css lobby.css; do
+              grep -hoE "url\(['\"]?[^)')]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]?\)" "$f" 2>/dev/null \
+                | sed -E "s/^url\(['\"]?//;s/['\"]?\)$//" | sed "s|^|$f:|" || true
+              grep -hoE "['\"][^'\"]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]" "$f" 2>/dev/null \
+                | tr -d "'\"" | sed "s|^|$f:|" || true
+            done
+          } | sort -u > /tmp/asset_refs.txt
+          MISSING=0
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            SRC_FILE="${line%%:*}"
+            REF="${line#*:}"
+            case "$REF" in http*|//*|data:*|/) continue ;; esac
+            # Résout selon le répertoire du fichier source
+            SRC_DIR=$(dirname "$SRC_FILE")
+            # Chemin absolu dans le dépôt
+            RESOLVED=$(realpath -m "$SRC_DIR/$REF" 2>/dev/null || realpath -m "./$SRC_DIR/$REF")
+            # Si le chemin commence par / il est relatif à la racine
+            case "$REF" in /*) RESOLVED=$(realpath -m "./${REF#/}") ;; esac
+            if [ ! -f "$RESOLVED" ]; then
+              echo "::warning file=$SRC_FILE::Asset manquant : $REF (résolu comme $RESOLVED)"
+              MISSING=$((MISSING+1))
+            fi
+          done < /tmp/asset_refs.txt
+          echo "TOTAL_MISSING=$MISSING" >> $GITHUB_ENV
+          echo "Asset check terminé ($MISSING manquant(s))."
+
+      - name: Démarrer un serveur et tester le lobby + le jeu
+        id: smoke
+        run: |
+          set -e
+          nohup python3 -m http.server 8090 > /tmp/server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+          STATUS=0
+          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/outline.js style.css lobby.css; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/$path)
+            if [ "$CODE" != "200" ]; then
+              echo "::error file=$path::HTTP $CODE lors du chargement de /$path"
+              STATUS=1
+            else
+              echo "OK : /$path → 200"
+            fi
+          done
+          kill $SERVER_PID 2>/dev/null || true
+          exit $STATUS
+
+      - name: Test navigateur réel (chargement, erreurs JS, ressources)
+        id: navigateur
+        run: |
+          set -e
+          # Installe puppeteer dans node_modules du dépôt, sans package.json
+          npm install --prefix . puppeteer@23 2>&1 | tail -1
+          nohup python3 -m http.server 8090 > /tmp/server2.log 2>&1 &
+          sleep 2
+          node .github/scripts/qa-browser.cjs || STATUS=1
+          pkill -f "http.server 8090" 2>/dev/null || true
+          exit $STATUS
+
+      - name: Rapport QA
+        if: always()
+        run: |
+          echo "### Rapport QA STORMDROP" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Commit \`${GITHUB_SHA::7}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Contrôle | Résultat |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Syntaxe JS | ${{ steps.syntaxe.outcome == 'success' && 'OK' || (steps.syntaxe.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| References d'assets | ${{ steps.assets.outcome == 'success' && (env.TOTAL_MISSING > 0 && format('Avertissements : {0} references manquantes', env.TOTAL_MISSING) || 'OK') || (steps.assets.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lobby + modules servis | ${{ steps.smoke.outcome == 'success' && 'OK' || (steps.smoke.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test navigateur reel | ${{ steps.navigateur.outcome == 'success' && 'OK' || (steps.navigateur.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Non couvert : gameplay reel, multijoueur, audio en jeu, fonctionnalites avancees._" >> $GITHUB_STEP_SUMMARY
