@@ -43,18 +43,40 @@ jobs:
         run: |
           set -e
           # Regroupe toutes les références d'assets depuis index.html, game.html, style.css, lobby.css et js/*.js
+          # Enregistre (fichier_source, référence) pour résoudre le chemin selon le contexte
           {
-            grep -rhoE '(src|href)=["'"'"'][^"'"'"']+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico|css|js)["'"'"']' index.html game.html 2>/dev/null | sed -E 's/^(src|href)=["'"'"']//;s/["'"'"']$//' || true
-            grep -rhoE "['\"][^'\"]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]" style.css lobby.css js/*.js 2>/dev/null | tr -d "'\"" || true
-            grep -rhoE "url\(['\"]?[^)')]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]?\)" style.css lobby.css 2>/dev/null | sed -E "s/^url\(['\"]?//;s/['\"]?\)$//" || true
-          } | sed 's/^\.\///' | sort -u > /tmp/asset_refs.txt
+            # index.html/game.html référencent des chemins relatifs à la racine
+            for f in index.html game.html; do
+              grep -hoE '(src|href)=["'"'"'][^"'"'"']+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico|css|js)["'"'"']' "$f" 2>/dev/null \
+                | sed -E "s/^(src|href)=[\"']//;s/[\"']$//" | sed "s|^|$f:|" || true
+            done
+            # js/*.js référencent des chemins relatifs au dossier js/
+            for f in js/*.js; do
+              grep -hoE "['\"][^'\"]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]" "$f" 2>/dev/null \
+                | tr -d "'\"" | sed "s|^|$f:|" || true
+            done
+            # style.css/lobby.css référencent via url() et chemins textuels
+            for f in style.css lobby.css; do
+              grep -hoE "url\(['\"]?[^)')]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]?\)" "$f" 2>/dev/null \
+                | sed -E "s/^url\(['\"]?//;s/['\"]?\)$//" | sed "s|^|$f:|" || true
+              grep -hoE "['\"][^'\"]+\.(png|jpg|jpeg|webp|svg|mp3|ogg|wav|json|glb|gltf|ico)['\"]" "$f" 2>/dev/null \
+                | tr -d "'\"" | sed "s|^|$f:|" || true
+            done
+          } | sort -u > /tmp/asset_refs.txt
           MISSING=0
-          while IFS= read -r ref; do
-            [ -z "$ref" ] && continue
-            case "$ref" in http*|//*|data:*|/) continue ;; esac
-            # Tente successivement le chemin tel quel puis les préfixes ./ et ../
-            if [ ! -f "$ref" ] && [ ! -f "./$ref" ] && [ ! -f "../$ref" ]; then
-              echo "::warning file=assets::Asset manquant : $ref"
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            SRC_FILE="${line%%:*}"
+            REF="${line#*:}"
+            case "$REF" in http*|//*|data:*|/) continue ;; esac
+            # Résout selon le répertoire du fichier source
+            SRC_DIR=$(dirname "$SRC_FILE")
+            # Chemin absolu dans le dépôt
+            RESOLVED=$(realpath -m "$SRC_DIR/$REF" 2>/dev/null || realpath -m "./$SRC_DIR/$REF")
+            # Si le chemin commence par / il est relatif à la racine
+            case "$REF" in /*) RESOLVED=$(realpath -m "./${REF#/}") ;; esac
+            if [ ! -f "$RESOLVED" ]; then
+              echo "::warning file=$SRC_FILE::Asset manquant : $REF (résolu comme $RESOLVED)"
               MISSING=$((MISSING+1))
             fi
           done < /tmp/asset_refs.txt
