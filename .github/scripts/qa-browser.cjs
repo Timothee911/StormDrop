@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // QA navigateur pour STORMDROP : charge le lobby et le jeu, détecte les erreurs JS,
-// les 404 et les ressources manquantes. Vérifie que le JS s'est réellement exécuté
-// (canvas WebGL rendu via capture d'écran, conteneurs présents), pas seulement le HTML statique.
+// les 404 et les ressources manquantes. Vérifie que l'application s'est réellement
+// initialisée : une interaction du lobby (onglets) et une boucle de rendu WebGL
+// qui progresse réellement (instrumentée), pas seulement la présence du HTML statique.
 const path = require('path');
 const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer'));
 
@@ -19,35 +20,81 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
     }
   });
 
-  // Détection du chargement réel : vérifie que le JS s'est réellement exécuté
-  // (conteneurs DOM rendus, module ES chargé, canvas WebGL rendu via capture d'écran)
-  for (const [url, canvasSel, elemSel] of [
-    ['http://localhost:8090/index.html', '#stage', '.page'],
-    ['http://localhost:8090/game.html', '#game', '#hud'],
-  ]) {
+  // Instrumente la boucle de rendu WebGL AVANT la navigation (before-goto via evaluateOnNewDocument)
+  await page.evaluateOnNewDocument(() => {
+    window.__qa_gl_draw_calls = 0;
+    const origGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+      const ctx = origGetContext.call(this, type, ...args);
+      if (ctx && (type === 'webgl' || type === 'webgl2')) {
+        // Surveille les vrais appels de rendu, pas juste getContext
+        const origDrawArrays = ctx.drawArrays ? ctx.drawArrays.bind(ctx) : null;
+        const origDrawElements = ctx.drawElements ? ctx.drawElements.bind(ctx) : null;
+        if (origDrawArrays) ctx.drawArrays = (...a) => { window.__qa_gl_draw_calls++; return origDrawArrays(...a); };
+        if (origDrawElements) ctx.drawElements = (...a) => { window.__qa_gl_draw_calls++; return origDrawElements(...a); };
+      }
+      return ctx;
+    };
+  });
+
+  // Lobby : vérifie une interaction réelle (les onglets changent l'état du DOM)
+  {
+    const url = 'http://localhost:8090/index.html';
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 })
+        .catch(() => notReady.push({ url, reason: 'document pas complet après 15s' }));
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Vérifie que la boucle de rendu WebGL progresse réellement
+      const before = await page.evaluate(() => window.__qa_gl_draw_calls || 0);
+      await new Promise(r => setTimeout(r, 2000));
+      const after = await page.evaluate(() => window.__qa_gl_draw_calls || 0);
+      if (after - before <= 0) notReady.push({ url, reason: 'aucun appel de rendu WebGL observé entre deux mesures' });
+
+      // Vérifie une interaction réelle du lobby : cliquer sur un onglet différent du courant
+      // doit changer body.dataset.tab (prouve que le JS du lobby s'est attaché et s'exécute)
+      const beforeTab = await page.evaluate(() => document.body.dataset.tab);
+      const otherTabIdx = await page.evaluate((current) => {
+        const btns = Array.from(document.querySelectorAll('#tabs button'));
+        const idx = btns.findIndex(b => b.dataset.tab !== current);
+        return idx;
+      }, beforeTab);
+      if (otherTabIdx < 0) {
+        notReady.push({ url, reason: "aucun bouton dans #tabs — le lobby n'est pas initialisé" });
+      } else {
+        await (await page.$$('#tabs button'))[otherTabIdx].click();
+        await new Promise(r => setTimeout(r, 500));
+        const afterTab = await page.evaluate(() => document.body.dataset.tab);
+        if (beforeTab === afterTab) notReady.push({ url, reason: "clic sur un onglet n'a pas changé body.dataset.tab — le JS du lobby ne s'exécute pas" });
+      }
+    } catch (e) {
+      errors.push({ type: 'goto', url, message: e.message });
+    }
+  }
+
+  // Jeu : vérifie que la boucle de rendu WebGL progresse réellement sur le canvas #game
+  {
+    const url = 'http://localhost:8090/game.html';
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 })
         .catch(() => notReady.push({ url, reason: 'document pas complet après 15s' }));
       await new Promise(r => setTimeout(r, 5000));
 
-      const result = await page.evaluate(([sel, elSel]) => {
-        const canvas = document.querySelector(sel);
-        const elems = document.querySelectorAll(elSel);
-        if (!canvas) return { ok: false, reason: `canvas ${sel} absent` };
-        if (elems.length === 0) return { ok: false, reason: `conteneur ${elSel} absent` };
-        if (canvas.width === 0 || canvas.height === 0) return { ok: false, reason: 'canvas de taille nulle' };
-        return { ok: true, w: canvas.width, h: canvas.height };
-      }, [canvasSel, elemSel]);
+      const canvas = await page.$('#game');
+      if (!canvas) {
+        notReady.push({ url, reason: "canvas #game absent" });
+      } else {
+        const before = await page.evaluate(() => window.__qa_gl_draw_calls || 0);
+        await new Promise(r => setTimeout(r, 2000));
+        const after = await page.evaluate(() => window.__qa_gl_draw_calls || 0);
+        if (after - before <= 0) notReady.push({ url, reason: 'aucun appel de rendu WebGL observé entre deux mesures — le jeu ne boucle pas' });
+      }
 
-      if (!result.ok) { notReady.push({ url, reason: result.reason }); continue; }
-
-      // Capture d'écran du canvas et vérifie qu'il contient des pixels non uniformes
-      const png = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: result.w, height: result.h } });
-      if (png.length < 200) notReady.push({ url, reason: 'capture PNG trop petite' });
-      // Note : gl.readPixels est vide si preserveDrawingBuffer est false, donc on
-      // s'appuie sur la taille de la capture PNG (plusieurs Ko = contenu réel).
-      console.log(`[QA] ${url} : canvas ${result.w}x${result.h}, capture PNG ${png.length} octets`);
+      // Vérifie que le HUD est rendu
+      const hud = await page.$('#hud');
+      if (!hud) notReady.push({ url, reason: "#hud absent — le jeu ne s'est pas initialisé" });
     } catch (e) {
       errors.push({ type: 'goto', url, message: e.message });
     }

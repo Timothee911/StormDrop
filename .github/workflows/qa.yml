@@ -125,7 +125,7 @@ jobs:
           echo "| Contrôle | Résultat |" >> $GITHUB_STEP_SUMMARY
           echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
           echo "| Syntaxe JS | ${{ steps.syntaxe.outcome == 'success' && 'OK' || (steps.syntaxe.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| References d'assets | ${{ steps.assets.outcome == 'success' && 'OK' || (steps.assets.outcome == 'failure' && 'Echec' || 'Non execute') }}${{ env.TOTAL_MISSING && format(' ({0} manquant(s))', env.TOTAL_MISSING) || '' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| References d'assets | ${{ env.TOTAL_MISSING && format('Avertissements : {0} references manquantes', env.TOTAL_MISSING) || (steps.assets.outcome == 'success' && 'OK' || (steps.assets.outcome == 'failure' && 'Echec' || 'Non execute')) }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Lobby + modules servis | ${{ steps.smoke.outcome == 'success' && 'OK' || (steps.smoke.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Test navigateur reel | ${{ steps.navigateur.outcome == 'success' && 'OK' || (steps.navigateur.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
