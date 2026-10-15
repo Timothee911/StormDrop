@@ -1,4 +1,4 @@
-# STORMDROP — Battle Royale (v3)
+# STORMDROP — Battle Royale (v4)
 
 Le jeu est une appli web installable (PWA) : ouvre l'adresse en ligne, puis clique sur INSTALLER dans le lobby
 (ou sur l'icône d'installation de la barre d'adresse de Chrome / Edge). Après la première ouverture il fonctionne hors ligne.
@@ -37,6 +37,16 @@ Les touches sont définies par position physique : le jeu affiche automatiquemen
 - Voitures, bateaux, trampolines, cheminées d'air.
 - 30, 50 ou 100 joueurs, modes Solo, Duo, Escouade avec coéquipiers IA.
 - Lobby avec groupe, amis, boutique du jour, passe de combat, défis, casier, paramètres.
+
+## Nouveautés v4 — Saison Espions (inspirée du Chapitre 2 Saison 2)
+
+- **5 POI espions** : L'Agence (tour noire et or au centre de l'île, statue dorée, hélipad), Le Requin (île avec mâchoires de requin à l'entrée), Le Yacht (navire blanc et or amarré sur son île), La Grotte (bunker béton ceinturé d'un mur), La Plateforme (plateforme pétrolière sur pilotis avec trampolines d'accès).
+- **Boss mythiques** : Midas (Mitrailleuse de Midas), Skye (AR de Skye), Meowscles (AR Lourd Peow Peow), Brutus (Minigun de Brutus) et TNTina (Arc Ka-Boom). Chaque boss patrouille son POI avec ses hommes de main, a une étiquette dorée et une réserve de points de vie et de bouclier bien supérieure. Éliminé, il lâche **son arme mythique + une carte d'accès**.
+- **Hommes de main** : PNJ en costume qui patrouillent les POI espions, ripèrent quand on les attaque (tout le POI est alerté) et ne comptent pas dans les joueurs restants ni le classement.
+- **Coffres-forts** : chaque POI espion abrite un coffre-fort doré verrouillé. Il faut la carte du boss pour l'ouvrir ; avec la carte en poche, une **ligne bleue pointillée** sur la minicarte et la grande carte indique le chemin. Butin garanti : 2 coffres-forts (armes rares+), potions, munitions, matériaux.
+- **Déguisement** : les cabines téléphoniques rouges des POI espions donnent le costume d'homme de main. Déguisé, les hommes de main t'ignorent — mais tirer ou prendre des dégâts **casse le déguisement**.
+- **Armes mythiques** : nouvelle rareté Mythique (dorée) au-delà du Légendaire, avec 6 armes de boss dont l'Arc Ka-Boom (explosion de zone) et le Grappin de Skye (câble qui t'attire vers le point d'impact — caché dans le coffre-fort du Requin).
+- **Cosmétiques** : nouveaux skins Midas, Brutus, Skye, TNTina, Meowscles et Homme de main (chapeau fedora), disponibles à la boutique.
 
 ## Nouveautés v3
 

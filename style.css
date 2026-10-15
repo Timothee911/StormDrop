@@ -87,6 +87,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 
 #centerMsg { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); text-align: center; font-family: var(--font-display); font-size: 40px; color: #fff; text-shadow: 0 4px 0 rgba(0,0,0,.4); opacity: 0; transition: opacity .4s; white-space: nowrap; }
 #centerMsg small { display: block; font-family: var(--font-body); font-size: 20px; font-weight: 700; font-style: italic; color: #e6e1ff; }
+#disguiseTag { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 999px; background: rgba(10,14,30,.7); border: 1px solid rgba(255,210,63,.6); font-family: var(--font-display); font-size: 16px; letter-spacing: 1px; color: #ffd23f; text-shadow: 0 1px 2px rgba(0,0,0,.8); box-shadow: 0 0 14px rgba(255,210,63,.2); }
+#disguiseTag::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #ffd23f; box-shadow: 0 0 8px #ffd23f; animation: disPulse 1.2s ease-in-out infinite; }
+#disguiseTag.on { display: flex; }
+@keyframes disPulse { 50% { opacity: .4; } }
 #prompt { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); background: var(--c-panel); border: 1px solid var(--c-border); padding: 6px 14px; border-radius: 4px; font-size: 19px; font-weight: 700; display: none; white-space: nowrap; }
 #prompt .rar { font-weight: 800; }
 #useBar { position: absolute; left: 50%; top: 66%; transform: translateX(-50%); width: 260px; display: none; text-align: center; }
@@ -122,6 +126,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .r2 { background: linear-gradient(180deg, rgba(40,150,255,.6), rgba(20,80,180,.8)); }
 .r3 { background: linear-gradient(180deg, rgba(175,85,255,.6), rgba(100,35,180,.8)); }
 .r4 { background: linear-gradient(180deg, rgba(255,175,45,.65), rgba(190,100,10,.85)); }
+.r5 { background: linear-gradient(180deg, rgba(255,225,80,.7), rgba(212,160,0,.9)); box-shadow: inset 0 0 18px rgba(255,225,80,.35); }
 #buildbar { display: none; gap: 5px; }
 #buildbar.on { display: flex; }
 .bpiece { position: relative; width: 62px; height: 62px; border-radius: 5px; background: rgba(20,60,110,.6); border: 2px solid rgba(127,211,255,.4); display: flex; align-items: center; justify-content: center; }
@@ -293,12 +298,14 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 
 /* hotbar: dark slot, rarity shown as a bottom band + soft tint */
 .slot { border-radius: 7px; background: var(--hud-panel); border: 2px solid var(--hud-line); box-shadow: var(--hud-shadow); transition: transform .12s, border-color .12s, box-shadow .12s; }
-.slot.r0, .slot.r1, .slot.r2, .slot.r3, .slot.r4 { border-bottom-width: 4px; }
+.slot.r0, .slot.r1, .slot.r2, .slot.r3, .slot.r4, .slot.r5 { border-bottom-width: 4px; }
 .slot.r0 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(181, 185, 194, .35)); border-bottom-color: #b5b9c2; }
 .slot.r1 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(79, 208, 79, .4)); border-bottom-color: #4fd04f; }
 .slot.r2 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(54, 163, 255, .42)); border-bottom-color: #36a3ff; }
 .slot.r3 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(181, 88, 255, .45)); border-bottom-color: #b558ff; }
 .slot.r4 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(255, 174, 43, .48)); border-bottom-color: #ffae2b; }
+.slot.r5 { background: linear-gradient(180deg, var(--hud-panel) 45%, rgba(255, 225, 80, .5)); border-bottom-color: #ffd23f; box-shadow: 0 0 12px rgba(255, 210, 63, .35), var(--hud-shadow); }
+.slot.r5 .nm { color: #ffd23f; }
 .slot.sel { border-color: var(--c-accent); transform: translateY(-8px); box-shadow: 0 0 0 2px rgba(255, 210, 63, .3), 0 0 18px rgba(255, 210, 63, .45), var(--hud-shadow); }
 .slot .nm { width: 100%; font-size: 11.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .slot .cnt { top: 3px; right: 3px; min-width: 18px; padding: 0 4px; border-radius: 9px; background: rgba(0, 0, 0, .55); font-size: 12px; line-height: 16px; text-align: center; }

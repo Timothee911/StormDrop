@@ -47,7 +47,14 @@ function rawH(x, z) {
   return h * m + (1 - m) * -6;
 }
 
+// Carte inspirée du Chapitre 2 Saison 2 : cinq POI espions (L'Agence au
+// centre, Le Requin, Le Yacht, La Grotte, La Plateforme) + lieux classiques.
 export const POIS = [
+  { name: "L'Agence", key: 'agency', spy: true, x: 0, z: 0, r: 30, style: 'agency' },
+  { name: 'Le Requin', key: 'shark', spy: true, x: -128, z: -108, r: 20, style: 'shark' },
+  { name: 'Le Yacht', key: 'yacht', spy: true, x: 181, z: -36, r: 12, style: 'yacht' },
+  { name: 'La Grotte', key: 'grotto', spy: true, x: 128, z: 74, r: 22, style: 'grotto' },
+  { name: 'La Plateforme', key: 'rig', spy: true, x: -156, z: 84, r: 20, style: 'rig' },
   { name: 'Bois-Joli', x: -72, z: -58, r: 24, style: 'wood' },
   { name: 'Port-Rouillé', x: 96, z: 38, r: 26, style: 'brick' },
   { name: 'Ferme Fumante', x: -42, z: 82, r: 22, style: 'wood' },
@@ -55,10 +62,9 @@ export const POIS = [
   { name: 'Oasis Sèche', x: 104, z: -58, r: 20, style: 'adobe' },
   { name: 'Plage Coquillage', x: -116, z: 72, r: 18, style: 'beach' },
   { name: 'Docks Dorés', x: -112, z: 18, r: 22, style: 'brick' },
-  { name: 'Village Vent', x: 34, z: 18, r: 28, style: 'wood' },
+  { name: 'Village Vent', x: 52, z: 44, r: 24, style: 'wood' },
   { name: 'Mont Grêle', x: 70, z: 108, r: 18, style: 'chalet' },
   { name: 'Chalets Givrés', x: 18, z: 112, r: 18, style: 'chalet' },
-  { name: 'Tours Tempête', x: -28, z: -14, r: 26, style: 'city' },
 ];
 for (const p of POIS) p.h = Math.max(2.5, rawH(p.x, p.z));
 

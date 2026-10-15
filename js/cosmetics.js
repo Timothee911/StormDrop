@@ -29,6 +29,13 @@ export const SKINS = {
   agent: { name: 'Agent Minuit', rarity: 'rare', shirt: 0x1f2440, pants: 0x1f2440, skin: 0xb07a52, hat: 0x111111, style: 'none', extra: 'shades', desc: 'Lunettes noires, même la nuit.' },
   jardin: { name: 'Jardinière', rarity: 'uncommon', shirt: 0x6fbf4a, pants: 0x7a4e2b, skin: 0xf5d3b5, hat: 0xf2e1a0, style: 'straw', desc: 'Plante des pièges.' },
   surf: { name: 'Surfeur Solaire', rarity: 'uncommon', shirt: 0x00c2c7, pants: 0xffa52d, skin: 0xc68b5e, hat: 0xffffff, style: 'none', extra: 'shades', desc: 'Toujours sur la vague.' },
+  // Agents du Chapitre 2 Saison 2
+  ombre: { name: 'Homme de Main', rarity: 'rare', shirt: 0x1a1a22, pants: 0x14141c, skin: 0xb07a52, hat: 0x111118, style: 'fedora', extra: 'shades', desc: 'L’uniforme parfait de l’ombre.' },
+  midas: { name: 'Midas', rarity: 'legendary', shirt: 0xd9a900, pants: 0x8a6a00, skin: 0xf2c6a0, hat: 0x1a1a1a, style: 'fedora', extra: 'shades', accent: 0xffc400, desc: 'Tout ce qu’il touche devient or.' },
+  brutus: { name: 'Brutus', rarity: 'epic', shirt: 0x3a4a5a, pants: 0x2a3a4a, skin: 0xd9a77c, hat: 0x222831, style: 'helmet', extra: 'visor', accent: 0x39ff88, desc: 'Le colosse de La Grotte.' },
+  skye: { name: 'Skye', rarity: 'epic', shirt: 0xff8fc7, pants: 0xffffff, skin: 0xffe3ef, hat: 0xff8fc7, style: 'ears', desc: 'Toujours accompagnée d’Ollie.' },
+  tntina: { name: 'TNTina', rarity: 'epic', shirt: 0xff5a3d, pants: 0x2b2b3a, skin: 0xf2c6a0, hat: 0xffd23f, style: 'beanie', extra: 'shades', accent: 0xff5a3d, desc: 'Explosive, littéralement.' },
+  meowscles: { name: 'Meowscles', rarity: 'epic', shirt: 0x8fa3ad, pants: 0x2b2b3a, skin: 0x9fb4c7, hat: 0x8fa3ad, style: 'ears', accent: 0x39ff88, desc: 'Muscles et moustaches.' },
 };
 export const BACKPACKS = {
   none: { name: 'Aucun', rarity: 'common' },
@@ -129,6 +136,7 @@ function buildHead(head, s) {
     const h2 = box(head, 0.09, 0.32, 0.09, 0.2, 0.66, 0, acc); h2.rotation.z = -0.4;
   }
   if (st === 'straw') { box(head, 0.8, 0.05, 0.8, 0, 0.5, 0, hat); box(head, 0.46, 0.16, 0.46, 0, 0.6, 0, hat); box(head, 0.47, 0.05, 0.47, 0, 0.55, 0, mat(0xd94848)); }
+  if (st === 'fedora') { box(head, 0.66, 0.06, 0.64, 0, 0.5, 0.01, hat); box(head, 0.46, 0.24, 0.44, 0, 0.62, 0.01, hat); box(head, 0.5, 0.05, 0.48, 0, 0.73, 0.01, mat(0x2c313c)); }
   if (s.extra === 'visor') box(head, 0.5, 0.1, 0.04, 0, 0.28, -0.25, mat(s.accent || s.hat, { emissive: s.accent || s.hat, emissiveIntensity: 1.2 }));
   if (s.extra === 'shades') box(head, 0.46, 0.09, 0.04, 0, 0.28, -0.25, mat(0x050505, { metalness: 0.8, roughness: 0.1 }));
   if (s.extra === 'mask') box(head, 0.5, 0.2, 0.04, 0, 0.12, -0.245, mat(s.shirt));
