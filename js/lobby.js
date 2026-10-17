@@ -112,11 +112,11 @@ function thumb(cat, id) {
   let camPos = [0, 1.25, -5.2], look = [0, 1.05, 0];
   if (cat === 'skin') { const m = makeCharMesh({ skin: id, backpack: 'none' }); poseIdle(m, 0.4); m.group.rotation.y = 0.35; g.add(m.group); }
   else if (cat === 'backpack') {
-    if (id === 'none') { const s = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 8, 24), mat(0xffffff)); s.position.y = 1.2; g.add(s); const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.08), mat(0xffffff)); b.position.y = 1.2; b.rotation.z = 0.8; g.add(b); }
-    else { const m = makeCharMesh({ skin: 'recrue', backpack: id }); m.group.rotation.y = Math.PI + 0.6; m.group.traverse((o) => { if (o.isMesh && o.parent !== m.torso && !['cristal'].includes(id)) { /* keep */ } }); g.add(m.group); camPos = [0, 1.6, -4.4]; look = [0, 1.35, 0]; }
-  } else if (cat === 'pickaxe') { const w = new THREE.Group(); const p = makePickaxe(id); p.rotation.x = Math.PI / 2; p.position.y = -0.25; w.add(p); w.rotation.z = 0.6; w.scale.setScalar(1.5); w.position.y = 1.05; g.add(w); camPos = [0, 1.05, -3.6]; look = [0, 1.05, 0]; }
+    if (id === 'none') { const s = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 8, 24), mat(0xffffff)); s.position.y = 1.2; g.add(s); const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.4), mat(0xffd23f)); b.position.set(0, 0.36, 0.32); g.add(b); }
+    else { const m = makeCharMesh({ skin: 'recrue', backpack: id }); m.group.rotation.y = Math.PI + 0.6; m.group.traverse((o) => { if (o.isMesh && o.parent !== m.torso && !['cristal'].includes(id)) o.castShadow = true; }); g.add(m.group); }
+  } else if (cat === 'pickaxe') { const w = new THREE.Group(); const p = makePickaxe(id); p.rotation.x = Math.PI / 2; p.position.y = -0.25; w.add(p); w.rotation.z = 0.6; w.scale.setScalar(1.5); w.position.y = 0.1; g.add(w); }
   else if (cat === 'glider') { const gl = makeGlider(id); gl.rotation.set(-0.5, 0.3, 0); gl.position.set(0, -1.6, 0); g.add(gl); camPos = [0, 2.2, -7.5]; look = [0, 0.6, 0]; }
-  else if (cat === 'emote') { const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1 }[id] || 0.2); m.group.position.y = y; m.group.rotation.y = 0.3; g.add(m.group); }
+  else if (cat === 'emote') { const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1 }[id] || 0.2); m.group.position.y = y; m.group.rotation.y = 0.35; g.add(m.group); }
   thumbScene.add(g);
   thumbCam.position.set(...camPos); thumbCam.lookAt(...look);
   thumbR.render(thumbScene, thumbCam);
@@ -156,7 +156,7 @@ const pd = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, 0.22, 48), new 
 pd.position.y = -0.11; pd.receiveShadow = true; plat.add(pd);
 const ringMat = new THREE.MeshBasicMaterial({ color: 0x8fe6ff, transparent: true, opacity: 0.9 });
 const ring = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.035, 8, 64), ringMat); ring.rotation.x = Math.PI / 2; ring.position.y = 0.0; plat.add(ring);
-const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(160,230,255,.9)'); gr.addColorStop(1, 'rgba(160,230,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); const t = new THREE.CanvasTexture(c); return t; })();
+const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
 const glow = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
 glow.rotation.x = -Math.PI / 2; glow.position.y = 0.01; plat.add(glow);
 const top = new THREE.Mesh(new THREE.CircleGeometry(1.25, 48), new THREE.MeshStandardMaterial({ color: 0x3550d0, roughness: 0.6 })); top.rotation.x = -Math.PI / 2; top.position.y = 0.002; top.receiveShadow = true; plat.add(top);
@@ -177,7 +177,7 @@ function buildChar() {
 function playEmote(id) { emoteId = id; emoteT = 0; }
 let previewMode = null; // 'pickaxe' | 'glider'
 // camera placement per tab: [charScreenX offset (world units), cam distance, look height]
-const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: -1.2, d: 11, h: 0.5 }, challenges: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
+const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: -1.2, d: 11, h: 0.5 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
 let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
@@ -203,7 +203,7 @@ function showStageItem(r) {
     if (r && r.cat === 'emote') playEmote(r.id);
     return;
   }
-  if (r.cat === 'pickaxe') { stageItem = new THREE.Group(); const pk = makePickaxe(r.id); pk.rotation.x = Math.PI / 2; pk.position.y = -0.25; const w = new THREE.Group(); w.add(pk); w.rotation.z = 0.6; stageItem.add(w); stageItem.scale.setScalar(2.2); stageItem.position.set(0, 1.2, 0); }
+  if (r.cat === 'pickaxe') { stageItem = new THREE.Group(); const pk = makePickaxe(r.id); pk.rotation.x = Math.PI / 2; pk.position.y = -0.25; const w = new THREE.Group(); w.add(pk); w.rotation.z = 0.4; stageItem.add(w); }
   if (r.cat === 'glider') { stageItem = makeGlider(r.id); stageItem.position.set(0, -1.4, 0); stageItem.scale.setScalar(0.85); }
   charM.group.visible = false; plat.add(stageItem);
 }
@@ -287,6 +287,7 @@ function setTab(t) {
   if (t === 'home') renderHome();
   if (t === 'pass') renderPass();
   if (t === 'challenges') renderChallenges();
+  if (t === 'career') renderCareer();
   if (t === 'locker') renderLocker();
   if (t === 'shop') renderShop();
 }
@@ -295,8 +296,8 @@ document.querySelectorAll('#tabs button').forEach((b) => b.onclick = () => setTa
 // HOME -----------------------------------------------------------------------
 function chalHTML(c, compact) {
   const v = Math.min(c.goal, Math.floor(S.prog[c.id])), done = S.doneCh.has(c.id);
-  if (compact) return `<div class="qc ${done ? 'done' : ''}"><div class="qc-top"><span>${c.name}</span><b>${done ? 'TERMINÉ' : fmt(c.xp) + ' XP'}</b></div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div><div class="chal-prog">${fmt(v)} / ${fmt(c.goal)}</div></div>`;
-  return `<div class="chal ${done ? 'done' : ''}"><div class="chal-main"><div class="chal-name">${c.name}</div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div><div class="chal-prog">${fmt(v)} / ${fmt(c.goal)}</div></div><div class="chal-xp">${done ? 'TERMINÉ' : '+' + fmt(c.xp) + ' XP'}</div></div>`;
+  if (compact) return `<div class="qc ${done ? 'done' : ''}"><div class="qc-top"><span>${c.name}</span><b>${done ? 'TERMINÉ' : fmt(c.xp) + ' XP'}</b></div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div></div>`;
+  return `<div class="chal ${done ? 'done' : ''}"><div class="chal-main"><div class="chal-name">${c.name}</div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div><div class="chal-pr">${done ? 'TERMINÉ' : fmt(c.xp) + ' XP'}</div></div></div>`;
 }
 function renderHome() {
   $('quickChallenges').innerHTML = DAILY.map((c) => chalHTML(c, true)).join('');
@@ -310,7 +311,7 @@ function drawModeArt() {
   g.fillStyle = 'rgba(160,90,255,.35)'; g.beginPath(); g.arc(W * 0.5, H * 0.75, 190, 0, 7); g.arc(W * 0.5, H * 0.75, 130, 0, 7, true); g.fill();
   g.fillStyle = '#e8d38a'; g.beginPath(); g.ellipse(W * 0.5, H * 0.78, 120, 42, 0, 0, 7); g.fill();
   g.fillStyle = '#5fbf4a'; g.beginPath(); g.ellipse(W * 0.5, H * 0.74, 106, 34, 0, 0, 7); g.fill();
-  g.fillStyle = '#3f9a3a'; for (let i = 0; i < 9; i++) { const x = W * 0.5 - 80 + i * 20, y = H * 0.7 + Math.sin(i) * 6; g.beginPath(); g.moveTo(x, y - 18); g.lineTo(x - 7, y); g.lineTo(x + 7, y); g.fill(); }
+  g.fillStyle = '#3f9a3a'; for (let i = 0; i < 9; i++) { const x = W * 0.5 - 80 + i * 20, y = H * 0.7 + Math.sin(i) * 6; g.beginPath(); g.moveTo(x, y - 18); g.lineTo(x - 7, y); g.lineTo(x + 7, y); g.closePath(); g.fill(); }
   g.fillStyle = '#d96a3a'; g.fillRect(W * 0.5 + 24, H * 0.62, 18, 12); g.fillStyle = '#8a3a2a'; g.beginPath(); g.moveTo(W * 0.5 + 21, H * 0.62); g.lineTo(W * 0.5 + 33, H * 0.55); g.lineTo(W * 0.5 + 45, H * 0.62); g.fill();
   // bus
   g.fillStyle = '#3fa9ff'; g.fillRect(40, 22, 46, 16); g.fillStyle = '#ffd23f'; g.fillRect(40, 18, 46, 6);
@@ -329,17 +330,17 @@ function renderPass() {
       const r = P[k]; if (!r) return rewardHTML(null);
       const unlocked = S.level >= t && (k === 'free' || S.passOwned);
       const cls = `${k === 'prem' ? 'prem' : ''} ${unlocked ? '' : 'locked'} ${passSel && passSel.t === t && passSel.k === k ? 'sel' : ''}`;
-      return rewardHTML(r, cls).replace('class="reward', `data-t="${t}" data-k="${k}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + '</div>').replace('<div class="eclats-art">', '<div class="eclats-art">');
+      return rewardHTML(r, cls).replace('class="reward', `data-t="${t}" data-k="${k}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i></div>`));
     };
-    h += `<div class="tier ${S.level === t ? 'cur' : ''}"><div class="row-tag">${t === 1 ? 'PREMIUM' : '&nbsp;'}</div>${cell('prem')}${cell('free')}<div class="row-tag">${t === 1 ? 'GRATUIT' : '&nbsp;'}</div><div class="tier-num">${t}</div></div>`;
+    h += `<div class="tier ${S.level === t ? 'cur' : ''}"><div class="row-tag">${t === 1 ? 'PREMIUM' : '&nbsp;'}</div>${cell('prem')}${cell('free')}<div class="row-tag">${t === 1 ? 'GRATUIT' : '&nbsp;'}</div></div>`;
   }
   tr.innerHTML = h;
   tr.querySelectorAll('.reward[data-t]').forEach((el) => el.onclick = () => { passSel = { t: +el.dataset.t, k: el.dataset.k }; renderPass(); });
   if (!passSel) passSel = { t: 1, k: 'prem' };
   const r = PASS[passSel.t][passSel.k];
   const pp = $('passPreview');
-  if (r.cat === 'eclats') pp.innerHTML = `<span class="pp-rar" style="background:#3fa9ff">MONNAIE</span><div class="pp-name">${r.amount} Éclats</div><div class="pp-type">Utilisables dans la boutique</div><div class="pp-tier">Palier ${passSel.t} · ${passSel.k === 'prem' ? 'Premium' : 'Gratuit'}</div>`;
-  else { const it = itemOf(r.cat, r.id), RR = RARITIES[it.rarity]; pp.innerHTML = `<span class="pp-rar" style="background:${RR.color}">${RR.name.toUpperCase()}</span><div class="pp-name">${it.name}</div><div class="pp-type">${TYPE_NAME[r.cat]}</div><div class="pp-tier">Palier ${passSel.t} · ${passSel.k === 'prem' ? 'Premium' : 'Gratuit'}</div>`; }
+  if (r.cat === 'eclats') pp.innerHTML = `<span class="pp-rar" style="background:#3fa9ff">MONNAIE</span><div class="pp-name">${r.amount} Éclats</div><div class="pp-type">Utilisables dans la boutique</div>`;
+  else { const it = itemOf(r.cat, r.id), RR = RARITIES[it.rarity]; pp.innerHTML = `<span class="pp-rar" style="background:${RR.color}">${RR.name.toUpperCase()}</span><div class="pp-name">${it.name}</div><div class="pp-type">${TYPE_NAME[r.cat]}</div>`; }
   showStageItem(r);
   const pb = $('passBuy');
   pb.classList.toggle('owned', S.passOwned);
@@ -368,8 +369,17 @@ function renderChallenges() {
   $('careerStats').innerHTML = [
     ['Parties jouées', C.matches], ['Victoires', C.wins], ['Taux de victoire', C.matches ? Math.round(C.wins / C.matches * 100) + ' %' : '—'],
     ['Éliminations', C.kills], ['Top 10', C.top10], ['Meilleur classement', C.best < 99 ? '#' + C.best : '—'], ['Dégâts infligés', fmt(C.damage)], ['Temps de jeu', m + ' min'],
-    ['Niveau', S.level],
   ].map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
+}
+
+// CAREER ---------------------------------------------------------------------
+function renderCareer() {
+  const C = S.career, m = Math.floor(C.time / 60);
+  const stats = [
+    ['Parties jouées', C.matches], ['Victoires', C.wins], ['Taux de victoire', C.matches ? Math.round(C.wins / C.matches * 100) + ' %' : '—'],
+    ['Éliminations', C.kills], ['Top 10', C.top10], ['Meilleur classement', C.best < 99 ? '#' + C.best : '—'], ['Dégâts infligés', fmt(C.damage)], ['Temps de jeu', m + ' min'], ['Niveau', S.level]
+  ];
+  const el = $('careerStats'); if (!el) return; el.innerHTML = stats.map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
 }
 
 // LOCKER ---------------------------------------------------------------------
@@ -387,7 +397,7 @@ function renderLocker() {
   $('lkCount').textContent = `${ownedIds.length} / ${ids.length} obtenus`;
   $('lkGrid').innerHTML = [...ownedIds, ...lockedIds].map((id) => {
     const k = lkCat + ':' + id, own = S.owned.has(k);
-    return `<div class="lk-item r-${rarityOf(lkCat, id)} ${S.loadout[lkCat] === id ? 'eq' : ''} ${own ? '' : 'locked'}" data-id="${id}" title="${itemOf(lkCat, id).name}"><img alt="" src="${thumb(lkCat, id)}">${S.fresh.has(k) ? '<span class="new">NOUVEAU</span>' : ''}</div>`;
+    return `<div class="lk-item r-${rarityOf(lkCat, id)} ${S.loadout[lkCat] === id ? 'eq' : ''} ${own ? '' : 'locked'}" data-id="${id}" title="${itemOf(lkCat, id).name}"><img alt="" src="${thumb(lkCat, id)}"></div>`;
   }).join('');
   $('lkGrid').querySelectorAll('.lk-item').forEach((el) => {
     el.onmouseenter = () => lockerDetail(el.dataset.id);
@@ -408,7 +418,7 @@ function renderLocker() {
 function lockerDetail(id) {
   const it = itemOf(lkCat, id), RR = RARITIES[it.rarity];
   const own = S.owned.has(lkCat + ':' + id);
-  $('lkDetail').innerHTML = `<span class="pp-rar" style="background:${RR.color};color:${it.rarity === 'common' ? '#12123a' : '#fff'}">${RR.name.toUpperCase()}</span><div class="pp-name">${it.name}</div><div class="pp-type">${CATS[lkCat].name}${own ? '' : ' · non obtenu'}</div>${it.desc ? `<div class="pp-desc">${it.desc}</div>` : ''}`;
+  $('lkDetail').innerHTML = `<span class="pp-rar" style="background:${RR.color};color:${it.rarity === 'common' ? '#12123a' : '#fff'}">${RR.name.toUpperCase()}</span><div class="pp-name">${it.name}</div>`;
 }
 
 // SHOP -----------------------------------------------------------------------
@@ -423,7 +433,7 @@ function shopToday() {
 }
 function shopCard(p) {
   const it = itemOf(p.cat, p.id), own = S.owned.has(p.cat + ':' + p.id), RR = RARITIES[it.rarity];
-  return `<div class="sitem r-${it.rarity}" style="--rc:${RR.color}" data-c="${p.cat}" data-id="${p.id}" data-p="${p.price}"><img alt="" src="${thumb(p.cat, p.id)}">${own ? '<span class="si-owned">POSSÉDÉ</span>' : ''}${p.featured ? '<span class="si-bundle">NOUVEAU</span>' : ''}<span class="si-rar">${RR.name.toUpperCase()}</span><div class="si-bottom"><div class="si-name">${it.name}</div><div class="si-price"><i class="coin"></i>${fmt(p.price)} <span class="muted" style="font-size:14px">· ${TYPE_NAME[p.cat]}</span></div></div></div>`;
+  return `<div class="sitem r-${it.rarity}" style="--rc:${RR.color}" data-c="${p.cat}" data-id="${p.id}" data-p="${p.price}"><img alt="" src="${thumb(p.cat, p.id)}">${own ? '<span class="si-owned">POSSÉDÉ</span>' : ''}</div>`;
 }
 function renderShop() {
   const { featured, daily } = shopToday();
@@ -464,7 +474,7 @@ $('settingsBtn').onclick = () => {
   $('setName').value = S.name; $('setDiff').value = S.diff; $('settingsModal').classList.remove('hidden');
   settingsForm($('setForm'), S.settings, (st) => { S.sens = st.sens; setVolumes(st.volume, st.music); });
 };
-$('setSave').onclick = () => { S.name = ($('setName').value.trim() || 'Tim').slice(0, 16); S.diff = $('setDiff').value; S.sens = S.settings.sens; saveSettings(S.settings); $('settingsModal').classList.add('hidden'); updateTopbar(); renderParty(); };
+$('setSave').onclick = () => { S.name = ($('setName').value.trim() || 'Tim').slice(0, 16); S.diff = $('setDiff').value; S.sens = S.settings.sens; saveSettings(S.settings); $('settingsModal').classList.add('hidden'); updateTopbar(); };
 setVolumes(S.settings.volume, S.settings.music); S.sens = S.settings.sens;
 
 // ---------------------------------------------------------------------------
@@ -484,7 +494,7 @@ function renderParty() {
   let html = '';
   for (let i = 0; i < 3; i++) {
     const m = mates[i];
-    if (m) html += `<div class="slot member ${pos[i]}"><div class="sl-fig ${m.friend ? 'fr' : 'ai'}"></div><b>${m.name}</b><em>${m.friend ? 'AMI · PRÊT' : 'COÉQUIPIER IA'}</em>${m.friend ? `<button data-k="${i}" class="sl-kick">Retirer</button>` : ''}</div>`;
+    if (m) html += `<div class="slot member ${pos[i]}"><div class="sl-fig ${m.friend ? 'fr' : 'ai'}"></div><b>${m.name}</b><em>${m.friend ? 'AMI · PRÊT' : 'COÉQUIPIER IA'}</em></div>`;
     else html += `<div class="slot invite ${pos[i]}" data-inv="1"><span>+</span><em>Inviter</em></div>`;
   }
   $('party').innerHTML = html;
@@ -496,8 +506,8 @@ function renderParty() {
 }
 function renderFriends() {
   const stL = { online: 'En ligne', game: 'En partie', off: 'Hors ligne' };
-  $('partyList').innerHTML = `<div class="fr-sub">GROUPE (${1 + S.party.length}/${Math.max(partySize(), 1 + S.party.length)})</div><div class="fr-row me"><i class="dot online"></i><b>${S.name}</b><span>Chef de groupe</span></div>` + S.party.map((n) => `<div class="fr-row"><i class="dot online"></i><b>${n}</b><span>Dans le groupe</span></div>`).join('');
-  $('friendsList').innerHTML = FRIENDS.map((f) => { const inP = S.party.includes(f.name); return `<div class="fr-row"><i class="dot ${f.st}"></i><b>${f.name}</b><span>Niv. ${f.lvl} · ${stL[f.st]}</span>${f.st === 'online' ? `<button class="buy-btn sm" data-n="${f.name}" ${inP ? 'disabled' : ''}>${inP ? 'DANS LE GROUPE' : 'INVITER'}</button>` : ''}</div>`; }).join('');
+  $('partyList').innerHTML = `<div class="fr-sub">GROUPE (${1 + S.party.length}/${Math.max(partySize(), 1 + S.party.length)})</div><div class="fr-row me"><i class="dot online"></i><b>${S.name}</b></div>`;
+  $('friendsList').innerHTML = FRIENDS.map((f) => { const inP = S.party.includes(f.name); return `<div class="fr-row"><i class="dot ${f.st}"></i><b>${f.name}</b><span>Niv. ${f.lvl} · ${stL[f.st]}</span>${inP ? '' : `<button data-n="${f.name}">INVITER</button>`}</div>`; }).join('');
   $('friendsList').querySelectorAll('button[data-n]').forEach((b) => b.onclick = () => {
     if (S.party.length >= 3) { toast('Le groupe est complet'); return; }
     S.party.push(b.dataset.n);
@@ -542,7 +552,7 @@ const TIPS = [
   'Un indicateur rouge autour du viseur montre d’où viennent les tirs.',
 ];
 let mmTimer = 0, inMatch = false;
-function bindPlay() { $('playBtn').onclick = () => { if (inMatch) return; inMatch = true; if (lockMod && lockMod.onPlay) lockMod.onPlay(); $('playBtn').querySelector('span').textContent = 'ANNULER'; $('matchmaking').classList.remove('hidden'); let t = 0; $('mmTime').textContent = '0:00'; mmTimer = setInterval(() => { t++; $('mmTime').textContent = `0:${String(t).padStart(2, '0')}`; if (t >= 3) { clearInterval(mmTimer); launchMatch(); } }, 700); $('playBtn').onclick = cancelMM2; }; }
+function bindPlay() { $('playBtn').onclick = () => { if (inMatch) return; inMatch = true; if (lockMod && lockMod.onPlay) lockMod.onPlay(); $('playBtn').querySelector('span').textContent = 'ANNULE'; $('matchmaking').classList.remove('hidden'); let t = 0; $('mmTime').textContent = '0:00'; mmTimer = setInterval(() => { t++; const mm = Math.floor(t / 60), ss = t % 60; $('mmTime').textContent = mm + ':' + String(ss).padStart(2, '0'); }, 1000); setTimeout(() => { if (inMatch) launchMatch(); }, 900); }; }
 function cancelMM2() { clearInterval(mmTimer); inMatch = false; $('matchmaking').classList.add('hidden'); $('playBtn').querySelector('span').textContent = 'JOUER'; bindPlay(); }
 bindPlay();
 
@@ -587,7 +597,7 @@ function applyResult(d) {
   const placement = d.placement || 30;
   const C = S.career;
   C.matches++; if (d.won) C.wins++; C.kills += d.kills || 0; if (placement <= 10) C.top10++; C.damage += st.damage || 0; C.time += d.time || 0; C.best = Math.min(C.best, placement);
-  const inc = { chests: st.chests || 0, kills: d.kills || 0, harvested: st.harvested || 0, damage: st.damage || 0, builds: st.builds || 0, top10: placement <= 10 ? 1 : 0, wins: d.won ? 1 : 0, supply: st.supply || 0, headshots: st.headshots || 0, minutes: (d.time || 0) / 60 };
+  const inc = { chests: st.chests || 0, kills: d.kills || 0, harvested: st.harvested || 0, damage: st.damage || 0, builds: st.builds || 0, top10: placement <= 10 ? 1 : 0, wins: d.won ? 1 : 0, supply: st.supply || 0, headshots: st.headshots || 0, minutes: Math.floor((d.time || 0) / 60) };
   const lines = Object.entries(d.xpLog || {}).map(([k, v]) => [k, v]);
   let chXP = 0; const doneNow = [];
   for (const c of [...DAILY, ...WEEKLY]) {
@@ -608,7 +618,7 @@ function showResult(d, sm) {
   $('rsPlace').textContent = '#' + pl; $('rsPlace').classList.toggle('lose', !d.won);
   $('rsTitle').textContent = d.won ? 'VICTOIRE ROYALE' : pl <= 10 ? `TOP ${pl} — BIEN JOUÉ` : 'ÉLIMINÉ';
   const m = Math.floor((d.time || 0) / 60), s = (d.time || 0) % 60, st = d.stats || {};
-  $('rsStats').innerHTML = [['Éliminations', d.kills || 0], ['Temps survécu', `${m}:${String(s).padStart(2, '0')}`], ['Dégâts infligés', fmt(st.damage || 0)], ['Coffres ouverts', st.chests || 0], ['Matériaux récoltés', fmt(st.harvested || 0)], ['Constructions', st.builds || 0], ['Tirs à la tête', st.headshots || 0]].map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
+  $('rsStats').innerHTML = [['Éliminations', d.kills || 0], ['Temps survécu', `${m}:${String(s).padStart(2, '0')}`], ['Dégâts infligés', fmt(st.damage || 0)], ['Coffres ouverts', st.chests || 0]].map(([a,b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
   $('rsXpList').innerHTML = sm.lines.map(([k, v], i) => `<div style="animation-delay:${i * 0.08}s"><span>${k}</span><b>+${fmt(v)}</b></div>`).join('');
   $('rsXpTotal').textContent = '+' + fmt(sm.total) + ' XP';
   // animated level bar
@@ -638,7 +648,7 @@ $('shopTimer').textContent = untilMidnight(); $('dailyReset').textContent = unti
 buildChar(); updateTopbar(); renderHome();
 requestAnimationFrame(loop);
 // pre-render thumbnails in the background so tabs open instantly
-(() => { const q = []; for (const c in CATS) for (const id in CATS[c].items) q.push([c, id]); const tick = () => { for (let i = 0; i < 3 && q.length; i++) { const [c, id] = q.shift(); thumb(c, id); } if (q.length) setTimeout(tick, 30); }; setTimeout(tick, 600); })();
+(() => { const q = []; for (const c in CATS) for (const id in CATS[c].items) q.push([c, id]); const tick = () => { for (let i = 0; i < 3 && q.length; i++) { const [c, id] = q.shift(); thumb(c, id); } if (q.length) setTimeout(tick, 30); }; tick(); })();
 window.__lobby = { S, setTab, addXP, applyResult, showResult, launchMatch };
 
 // ---------------------------------------------------------------------------
