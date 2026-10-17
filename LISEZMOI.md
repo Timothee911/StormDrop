@@ -1,4 +1,4 @@
-# STORMDROP — Battle Royale (v4)
+# STORMDROP — Battle Royale (v5)
 
 Le jeu est une appli web installable (PWA) : ouvre l'adresse en ligne, puis clique sur INSTALLER dans le lobby
 (ou sur l'icône d'installation de la barre d'adresse de Chrome / Edge). Après la première ouverture il fonctionne hors ligne.
@@ -37,6 +37,16 @@ Les touches sont définies par position physique : le jeu affiche automatiquemen
 - Voitures, bateaux, trampolines, cheminées d'air.
 - 30, 50 ou 100 joueurs, modes Solo, Duo, Escouade avec coéquipiers IA.
 - Lobby avec groupe, amis, boutique du jour, passe de combat, défis, casier, paramètres.
+
+## Nouveautés v5 — Fidélité Chapitre 2 Saison 2
+
+- **L'Agence** : tour recalée aux couleurs GHOST (calcaire, listels or, toits bleu nuit), drapeaux bleus sur la tour, emblème doré sur la façade.
+- **Le Requin** : manoir blanc moderne à toits plats en porte-à-faux, baies vitrées, piscine sur la terrasse, phare rouge et blanc, hélipad sur pilotis, rochers en tête de requin et aileron au large.
+- **Le Yacht** : coque à bande dorée et hublots, mât radar blanc et or, hélipad poupe cerclé de jaune avec marquage H, garde-corps dorés.
+- **La Grotte** : anneau rocheux ouvert en ciel (style caverne à puits de lumière), porte blindée dorée gardée par des veilleuses rouges, cuves à carburant, conteneurs et tour de contrôle à fenêtres cyan.
+- **La Plateforme** : plateforme pétrolière gris-bleu à bandes jaunes de flottaison, grue rouge avec flèche et contrepoids, hélipad jaune en porte-à-faux, passerelle treillis vers la station satellite (salle de contrôle).
+- **Passe de combat Top Secret** : les agents de la saison en récompenses (Brutus, TNTina, Meowscles, Skye, Homme de main, Midas au palier 100... enfin 30).
+- **Skye** : silhouette distincte (bonnet rose, cheveux bruns) au lieu du clone du Lapin.
 
 ## Nouveautés v4 — Saison Espions (inspirée du Chapitre 2 Saison 2)
 

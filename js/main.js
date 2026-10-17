@@ -552,7 +552,7 @@ const STYLE_COLS = {
   brick: { walls: [0xc9705a, 0xb85f4a, 0xd8d0c8, 0xbfe0f5], roofs: ROOF_COLS, mat: 'stone', hp: 260 },
   wood: { walls: WALL_COLS, roofs: ROOF_COLS, mat: 'wood', hp: 170 },
   city: { walls: [0xe8e1d0, 0x9fb4c7, 0xc98b6b], roofs: [0x4a4f5a], mat: 'stone', hp: 280, frame: 0x2f3540 },
-  agency: { walls: [0x1b1e26, 0x22262f, 0x2a2f3a], roofs: [0xffc400], mat: 'metal', hp: 340, frame: 0xffc400, trim: 0xffc400 },
+  agency: { walls: [0xe8e6de, 0xdedcd4, 0xd2cfc6], roofs: [0x3a4a5c], mat: 'metal', hp: 340, frame: 0xffc400, trim: 0xffc400 },
   bunker: { walls: [0x707684, 0x5d6370, 0x6a7180], roofs: [0x454b56], mat: 'stone', hp: 360, frame: 0x3a4150, trim: 0x8a929e },
 };
 STYLE_COLS.adobe.frame = 0x6e4a2c; STYLE_COLS.adobe.trim = 0xf0d9b5;
@@ -2532,7 +2532,7 @@ function buildPhoneBooth(p, at) {
   col.indestructible = true;
   booths.push({ x: bx, y: by, z: bz, mesh: g, col });
 }
-const AGENCY_PAL = { wall: 0x1b1e26, trim: 0xffc400, accent: 0xffc400 };
+const AGENCY_PAL = { wall: 0xe0ded6, trim: 0xffc400, accent: 0xffc400 };
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
     buildTower(p.x, p.z, p.h, 18, 18, 5, 0, AGENCY_PAL);
@@ -2553,15 +2553,89 @@ function buildSpyPOI(p) {
     { const H = curHouse; curHouse = null; finishHouse(H); }
     buildHouse(p.x - 18, p.z + 16, p.h, 10, 9, 1, 'agency');
     buildHouse(p.x + 9, p.z + 19, p.h, 9, 8, 2, 'agency');
+    // drapeaux GHOST bleus sur la tour + emblème doré sur la façade
+    curHouse = { boxes: [], deco: [], mesh: null };
+    for (const [fx, fz] of [[-8.4, -8.4], [8.4, -8.4], [-8.4, 8.4], [8.4, 8.4]]) {
+      hdeco(BOX, 0x8d929a, p.x + fx, p.h + 22, p.z + fz, 0.22, 4, 0.22);
+      hdeco(BOX, 0x1f3a8a, p.x + fx + 1.1, p.h + 23.4, p.z + fz, 2.2, 1.4, 0.08);
+      hdeco(BOX, 0xffffff, p.x + fx + 1.1, p.h + 23.4, p.z + fz + 0.05, 0.7, 0.7, 0.02);
+    }
+    hdeco(CYL_GEO, 0xf2efe6, p.x, p.h + 13, p.z + 9.25, 3.2, 0.25, 3.2, Math.PI / 2, 0, 0, null, 'YXZ');
+    hdeco(CYL_GEO, 0xffc400, p.x, p.h + 13, p.z + 9.3, 2.2, 0.25, 2.2, Math.PI / 2, 0, 0, null, 'YXZ');
+    hdeco(BOX, 0x1f3a8a, p.x, p.h + 13, p.z + 9.35, 1.1, 1.1, 0.06);
+    { const H = curHouse; curHouse = null; finishHouse(H); }
   } else if (p.key === 'shark') {
-    buildHouse(p.x - 8, p.z - 6, p.h, 11, 9, 1, 'beach');
-    buildHouse(p.x + 8, p.z + 7, p.h, 9, 8, 3, 'beach');
-    // mâchoires de requin à l'entrée, sur le bord du POI
+    // manoir moderne blanc à toits plats (la Sky Villa) : rez creux + terrasse
+    curHouse = { boxes: [], deco: [], mesh: null };
+    const M = 0xf4f1ea, GL = 0x2c3a4a, DK = 0x3a3f47;
+    const mz = p.z - 12; // hors de la zone d'apparition du boss (centre du POI)
+    const wallM = matC(M, { roughness: 0.5 });
+    // rez-de-chaussée : murs creux avec porte au sud et baies vitrées
+    makeStructBox(p.x, p.h, mz + 5, 15, 4.2, 0.4, wallM, { hp: 380, mat: 'metal' }); // nord (arrière)
+    makeStructBox(p.x - 4.5, p.h, mz - 5, 6, 4.2, 0.4, wallM, { hp: 380, mat: 'metal' });
+    makeStructBox(p.x + 4.5, p.h, mz - 5, 6, 4.2, 0.4, wallM, { hp: 380, mat: 'metal' });
+    makeStructBox(p.x - 7.5, p.h, mz, 0.4, 4.2, 10, wallM, { hp: 380, mat: 'metal' }); // ouest
+    makeStructBox(p.x + 7.5, p.h, mz, 0.4, 4.2, 10, wallM, { hp: 380, mat: 'metal' }); // est
+    hdeco(BOX, GL, p.x - 4.5, p.h + 1.4, mz - 5.3, 5, 2.6, 0.1); // baies vitrées nord
+    hdeco(BOX, GL, p.x + 4.5, p.h + 1.4, mz - 5.3, 5, 2.6, 0.1);
+    hdeco(BOX, GL, p.x - 7.8, p.h + 1.4, mz, 0.1, 2.6, 8);
+    hdeco(BOX, GL, p.x + 7.8, p.h + 1.4, mz, 0.1, 2.6, 8);
+    hdeco(BOX, 0xffc400, p.x, p.h + 4.45, mz + 5, 15, 0.16, 0.16); // listel or du bandeau
+    // terrasse : dalle praticable au-dessus du rez (toit-terrasse)
+    makeStructBox(p.x, p.h + 4.2, mz, 15.6, 0.4, 10.6, matC(DK), { indestructible: true });
+    // escalier extérieur le long de la façade sud : 7 marches + palier haut vers la terrasse
+    // (placé au-delà du débord de la dalle pour ne pas bloquer la tête du joueur)
+    for (let s = 0; s < 7; s++) makeStructBox(p.x - 6.5 + s * 1.2, p.h + s * 0.55, mz + 6.5, 1.25, 0.55, 2.2, matC(M, { roughness: 0.5 }), { indestructible: true });
+    makeStructBox(p.x + 2.1, p.h + 7 * 0.55, mz + 6.5, 2.2, 0.55, 2.2, matC(M, { roughness: 0.5 }), { indestructible: true }); // palier (après la marche 6)
+    // auvent sur la terrasse : piliers or + dalle sombre
+    for (const [px2, pz2] of [[-5, -3], [1, -3], [-5, 3], [1, 3]]) makeStructBox(p.x + px2, p.h + 4.6, mz + pz2, 0.35, 3, 0.35, matC(0xffc400, { metalness: 0.6 }), { indestructible: true });
+    makeStructBox(p.x - 2, p.h + 7.6, mz, 8.6, 0.35, 8.6, matC(DK), { indestructible: true });
+    hdeco(BOX, GL, p.x - 2, p.h + 8.2, mz + 4.2, 7, 1.6, 0.1);
+    // piscine sur la terrasse
+    hdeco(BOX, 0xffffff, p.x - 3.5, p.h + 4.62, mz - 1.5, 5, 0.3, 3.5);
+    hdeco(BOX, 0x9fe0e8, p.x - 3.5, p.h + 4.84, mz - 1.5, 4.5, 0.22, 3);
+    // garde-corps or sur la terrasse
+    for (let i = 0; i < 8; i++) {
+      hdeco(BOX, 0xffc400, p.x - 7.5 + i * 2.15, p.h + 4.9, mz + 5.15, 0.12, 0.8, 0.12);
+      hdeco(BOX, 0xffc400, p.x - 7.5 + i * 2.15, p.h + 4.9, mz - 5.15, 0.12, 0.8, 0.12);
+    }
+    // coffres et butin : un dans le rez, un sur la terrasse
+    spawnChest(p.x - 3, p.h + 0.5, mz + 1);
+    spawnChest(p.x + 4, p.h + 4.7, mz - 2);
+    lootSpots.push({ x: p.x + 2, y: p.h + 0.6, z: mz + 2 });
+    lootSpots.push({ x: p.x - 2, y: p.h + 4.6, z: mz + 1.5 });
+    { const H = curHouse; curHouse = null; finishHouse(H); }
+    // rocher en tête de requin béante à l'entrée du POI
     curHouse = { boxes: [], deco: [], mesh: null };
     const gx = p.x, gz = p.z + p.r * 0.9;
-    for (const sgn of [-1, 1]) hdeco(PRISM_GEO, 0xf4f8ff, gx + sgn * 3.6, p.h, gz, 2.4, 5, 2.4, 0, sgn * -0.4, 0, null, 'YXZ');
-    hdeco(BOX, 0x8fa3ad, gx - 5, p.h, gz - 1.8, 1.2, 5.4, 1.2, 0, 0, 0.18);
-    hdeco(BOX, 0x8fa3ad, gx + 5, p.h, gz - 1.8, 1.2, 5.4, 1.2, 0, 0, -0.18);
+    for (const sgn of [-1, 1]) hdeco(PRISM_GEO, 0x6b7380, gx + sgn * 3.6, p.h, gz, 2.4, 5, 2.4, 0, sgn * -0.4, 0, null, 'YXZ');
+    hdeco(BOX, 0x59606c, gx - 5, p.h, gz - 1.8, 1.2, 5.4, 1.2, 0, 0, 0.18);
+    hdeco(BOX, 0x59606c, gx + 5, p.h, gz - 1.8, 1.2, 5.4, 1.2, 0, 0, -0.18);
+    hdeco(BOX, 0x59606c, gx, p.h + 4.6, gz - 2.6, 9, 2.2, 4, 0, 0, 0);
+    hdeco(BOX, 0xf4f8ff, gx - 3.4, p.h + 2.2, gz + 0.4, 2.6, 2.2, 1.6, 0, 0, 0.15);
+    hdeco(BOX, 0xf4f8ff, gx + 3.4, p.h + 2.2, gz + 0.4, 2.6, 2.2, 1.6, 0, 0, -0.15);
+    // rochers gris autour de l'île
+    for (const [rx, rz, rs] of [[-14, -12, 3], [13, -14, 2.4], [16, 8, 2.8], [-16, 13, 2.2]]) {
+      hdeco(BOX, 0x59606c, p.x + rx, p.h - 0.6, p.z + rz, rs, rs * 1.1, rs, 0.1, 0.4, 0.2);
+    }
+    // phare rouge et blanc
+    {
+      const lx = p.x - 13, lz = p.z - 9;
+      makeStructBox(lx, p.h, lz, 2.6, 1, 2.6, matC(0x8d929a, { roughness: 0.6 }), { indestructible: true });
+      for (let s = 0; s < 5; s++) hdeco(CYL_GEO, s % 2 ? 0xd2483a : 0xf4f1ea, lx, p.h + 1 + s * 1.5, lz, 1.7 - s * 0.08, 1.5, 1.7 - s * 0.08);
+      hdeco(CYL_GEO, 0x2c3a4a, lx, p.h + 8.8, lz, 1.4, 1.1, 1.4);
+      hdeco(BOX, 0xffd23f, lx, p.h + 9.4, lz, 0.9, 0.9, 0.9);
+      hdeco(CYL_GEO, 0x3a3f47, lx, p.h + 10.3, lz, 0.2, 1.6, 0.2);
+    }
+    // hélipad en porte-à-faux au-dessus de l'eau
+    {
+      const hx = p.x + 15, hz = p.z + 2;
+      makeStructBox(hx, p.h - 0.4, hz, 6, 0.5, 6, matC(0x3a3f47), { indestructible: true });
+      hdeco(CYL_GEO, 0x1f2430, hx, p.h + 0.2, hz, 2.2, 0.5, 2.2);
+    hdeco(BOX, 0xffd23f, hx - 0.75, p.h + 0.5, hz, 0.45, 0.06, 1.7);
+    hdeco(BOX, 0xffd23f, hx + 0.75, p.h + 0.5, hz, 0.45, 0.06, 1.7);
+    hdeco(BOX, 0xffd23f, hx, p.h + 0.5, hz, 1.5, 0.06, 0.45);
+    }
     { const H = curHouse; curHouse = null; finishHouse(H); }
     // aileron dans l'eau au large
     const fa = Math.atan2(p.z, p.x);
@@ -2579,9 +2653,29 @@ function buildSpyPOI(p) {
     makeStructBox(p.x + 6, y + 1.4, p.z, 8, 3.2, 6, matC(0xffffff, { metalness: 0.2 }), { hp: 350, mat: 'metal' });
     hdeco(BOX, 0xffc400, p.x, y + 1.44, p.z - 5.1, 29, 0.18, 0.18);
     hdeco(BOX, 0xffc400, p.x, y + 1.44, p.z + 5.1, 29, 0.18, 0.18);
+    // bande dorée sur la coque + hublots
+    hdeco(BOX, 0xffc400, p.x, y + 0.1, p.z - 4.6, 28, 0.3, 0.12);
+    hdeco(BOX, 0xffc400, p.x, y + 0.1, p.z + 4.6, 28, 0.3, 0.12);
+    for (let i = 0; i < 8; i++) hdeco(BOX, 0x9fd8ff, p.x - 12 + i * 3.4, y + 0.1, p.z - 4.75, 0.6, 0.6, 0.06);
+    // mât radar blanc et or avec barres transversales et antenne
+    hdeco(BOX, 0xf4f1ea, p.x + 11, y + 5.2, p.z - 1.5, 0.4, 5.5, 0.4);
+    hdeco(BOX, 0xffc400, p.x + 11, y + 7.2, p.z - 1.5, 3, 0.22, 0.22);
+    hdeco(BOX, 0xffc400, p.x + 11, y + 8.2, p.z - 1.5, 2.2, 0.22, 0.22);
+    hdeco(CYL_GEO, 0xf4f1ea, p.x + 11, y + 8.6, p.z - 1.5, 0.8, 0.3, 0.8);
+    // superstructure : bande vitrée charbon + listel or
+    hdeco(BOX, 0x2c3a4a, p.x + 6, y + 3.2, p.z + 3.05, 7.6, 1.4, 0.08);
+    hdeco(BOX, 0xffc400, p.x + 6, y + 4.65, p.z, 8.2, 0.16, 6.2);
+    // hélipad poupe : cercle jaune + marquage H
     hdeco(CYL_GEO, 0x2c313c, p.x + 13, y + 1.44, p.z, 6, 0.1, 6);
-    hdeco(BOX, 0xffc400, p.x + 13, y + 1.52, p.z, 2.2, 0.05, 0.6);
-    hdeco(BOX, 0xffc400, p.x + 13, y + 1.52, p.z, 0.6, 0.05, 2.2);
+    hdeco(CYL_GEO, 0xf1c40f, p.x + 13, y + 1.5, p.z, 4.6, 0.08, 4.6);
+    hdeco(BOX, 0x22262f, p.x + 13 - 0.75, y + 1.55, p.z, 0.4, 0.06, 1.9);
+    hdeco(BOX, 0x22262f, p.x + 13 + 0.75, y + 1.55, p.z, 0.4, 0.06, 1.9);
+    hdeco(BOX, 0x22262f, p.x + 13, y + 1.55, p.z, 1.5, 0.06, 0.4);
+    // garde-corps dorés le long du pont
+    for (let i = 0; i < 12; i++) {
+      hdeco(BOX, 0xffc400, p.x - 13.5 + i * 2.45, y + 1.8, p.z - 4.95, 0.1, 0.8, 0.1);
+      hdeco(BOX, 0xffc400, p.x - 13.5 + i * 2.45, y + 1.8, p.z + 4.95, 0.1, 0.8, 0.1);
+    }
     const H = curHouse; curHouse = null; finishHouse(H);
     spawnChest(p.x - 4, y + 1.5, p.z - 2);
     spawnChest(p.x + 1, y + 1.5, p.z + 2);
@@ -2592,27 +2686,97 @@ function buildSpyPOI(p) {
     buildHouse(p.x, p.z, p.h, 14, 12, 1, 'bunker');
     buildHouse(p.x - 13, p.z + 8, p.h, 10, 9, 2, 'bunker');
     buildHouse(p.x + 12, p.z - 9, p.h, 10, 8, 0, 'bunker');
-    // muret de périmètre béton avec deux brèches
+    // anneau rocheux : dôme ouvert en ciel (puits de lumière) avec deux entrées
     curHouse = { boxes: [], deco: [], mesh: null };
-    const R = p.r * 0.8;
-    const wall = (cx2, cz2, w, d) => makeStructBox(cx2, Math.max(terrainH(cx2, cz2), 2.4), cz2, w, 3.2, d, matC(0x5d6370), { hp: 400, mat: 'stone' });
-    wall(p.x - R * 0.55, p.z - R, R * 0.9, 1); wall(p.x + R * 0.55, p.z - R, R * 0.9, 1);
-    wall(p.x - R * 0.55, p.z + R, R * 0.9, 1); wall(p.x + R * 0.55, p.z + R, R * 0.9, 1);
-    wall(p.x - R, p.z - R * 0.5, 1, R); wall(p.x - R, p.z + R * 0.5, 1, R);
-    wall(p.x + R, p.z - R * 0.5, 1, R); wall(p.x + R, p.z + R * 0.5, 1, R);
+    const RR = p.r * 1.05;
+    const rock = (cx2, cz2, w, h2, d2) => makeStructBox(cx2, Math.max(terrainH(cx2, cz2), 2.4) - 0.7, cz2, w, h2, d2, matC(0x59606c, { roughness: 0.95 }), { indestructible: true });
+    rock(p.x - RR * 0.55, p.z - RR, RR * 0.9, 5.4, 2.4); rock(p.x + RR * 0.55, p.z - RR, RR * 0.9, 6.6, 2.4);
+    rock(p.x - RR * 0.55, p.z + RR, RR * 0.9, 6.2, 2.4); rock(p.x + RR * 0.55, p.z + RR, RR * 0.9, 5, 2.4);
+    rock(p.x - RR, p.z - RR * 0.5, 2.4, 4.6, RR); rock(p.x - RR, p.z + RR * 0.5, 2.4, 5.8, RR);
+    rock(p.x + RR, p.z - RR * 0.5, 2.4, 6.4, RR); rock(p.x + RR, p.z + RR * 0.5, 2.4, 4.8, RR);
+    // moellons irréguliers par-dessus l'anneau
+    for (const [rx, rz, rs, ry2] of [[-RR * 0.5, -RR - 0.6, 3, 0.3], [RR * 0.6, -RR - 0.5, 2.4, -0.2], [-RR * 0.4, RR + 0.4, 2.6, 0.5], [RR * 0.5, RR + 0.5, 3.2, 0.1], [-RR + 0.4, -RR * 0.3, 2.6, 0.4], [-RR - 0.4, RR * 0.4, 2.2, -0.3], [RR + 0.4, -RR * 0.4, 2.8, 0.2], [RR - 0.3, RR * 0.5, 2.4, -0.4]]) {
+      hdeco(BOX, 0x6b7380, p.x + rx, p.h + 4.2, p.z + rz, rs, rs * 0.9, rs * 1.4, 0.15, ry2, 0.25);
+    }
+    // porte blindée à l'entrée sud : chambranle béton + vantail or, veilleuses rouges
+    {
+      const dx = p.x, dz = p.z + RR;
+      makeStructBox(dx - 4.4, p.h, dz, 1.6, 6, 2.6, matC(0x707684, { roughness: 0.8 }), { indestructible: true });
+      makeStructBox(dx + 4.4, p.h, dz, 1.6, 6, 2.6, matC(0x707684, { roughness: 0.8 }), { indestructible: true });
+      makeStructBox(dx, p.h + 6, dz, 10.4, 1.2, 2.8, matC(0x5d6370, { roughness: 0.8 }), { indestructible: true });
+      makeStructBox(dx, p.h, dz, 7.6, 5.2, 1, matC(0xffc400, { metalness: 0.75, roughness: 0.25 }), { hp: 900, mat: 'metal' });
+      hdeco(BOX, 0x39ff88, dx, p.h + 5.7, dz - 0.6, 4, 0.25, 0.15);
+      hdeco(BOX, 0xff2e4d, dx - 4.2, p.h + 4.6, dz - 1.5, 0.4, 0.4, 0.4);
+      hdeco(BOX, 0xff2e4d, dx + 4.2, p.h + 4.6, dz - 1.5, 0.4, 0.4, 0.4);
+    }
+    // cuves à carburant, conteneurs et tour de contrôle
+    hdeco(CYL_GEO, 0xe8e6df, p.x - 9, p.h + 1.5, p.z - 8, 2, 3, 2);
+    hdeco(CYL_GEO, 0xd2483a, p.x - 9, p.h + 2.6, p.z - 8, 2.1, 0.3, 2.1);
+    hdeco(CYL_GEO, 0xe8e6df, p.x - 6.5, p.h + 1.5, p.z - 9.5, 1.6, 3, 1.6);
+    const CC2 = [0xc0392b, 0x2980b9, 0x27ae60];
+    for (let k = 0; k < 3; k++) makeStructBox(p.x + 5 + k * 3.4, p.h, p.z - 7, 3, 2.6, 2.4, matC(CC2[k], { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+    makeStructBox(p.x + 10, p.h, p.z + 7, 1.6, 5.2, 1.6, matC(0x707684, { roughness: 0.7 }), { indestructible: true });
+    makeStructBox(p.x + 10, p.h + 5.2, p.z + 7, 4.4, 2.6, 4, matC(0x5d6370, { roughness: 0.6, metalness: 0.2 }), { hp: 500, mat: 'stone' });
+    hdeco(BOX, 0x39ff88, p.x + 10, p.h + 6.4, p.z + 5.05, 3.8, 1, 0.08);
+    // veilleuses cyan sur l'anneau
+    for (const [lx2, lz2] of [[-RR * 0.5, -RR + 1.5], [RR * 0.5, -RR + 1.5], [-RR * 0.5, RR - 1.5], [RR * 0.5, RR - 1.5]]) hdeco(BOX, 0x39ff88, p.x + lx2, p.h + 4.6, p.z + lz2, 0.35, 0.35, 0.35);
     { const H = curHouse; curHouse = null; finishHouse(H); }
   } else if (p.key === 'rig') {
+    // Plateforme pétrolière : coque gris-bleu à bandes jaunes, grues rouges,
+    // hélipad jaune en porte-à-faux, passerelle vers la station satellite.
     const y = Math.max(terrainH(p.x, p.z), 2.4);
     const py = y + 11;
     curHouse = { boxes: [], deco: [], mesh: null };
-    for (const [lx, lz] of [[-9, -7], [9, -7], [-9, 7], [9, 7]]) makeStructBox(p.x + lx, y - 1, p.z + lz, 2.2, 13, 2.2, matC(0x6b7380, { metalness: 0.4 }), { indestructible: true });
-    makeStructBox(p.x, py, p.z, 26, 1.2, 20, matC(0x5d6470, { metalness: 0.4 }), { indestructible: true });
+    // pattes télescopiques avec bande de flottaison jaune
+    for (const [lx, lz] of [[-9, -7], [9, -7], [-9, 7], [9, 7]]) {
+      makeStructBox(p.x + lx, y - 1, p.z + lz, 2.2, 13, 2.2, matC(0x46586a, { metalness: 0.4 }), { indestructible: true });
+      hdeco(BOX, 0xf1c40f, p.x + lx, y + 1.5, p.z + lz, 2.5, 0.7, 2.5);
+    }
+    makeStructBox(p.x, py, p.z, 26, 1.2, 20, matC(0x3d4c5c, { metalness: 0.4 }), { indestructible: true });
+    // jupe de coque sous le pont + hublots dorés
+    const skirt = (sx2, sz2, w2, d2) => makeStructBox(p.x + sx2, py - 2.1, p.z + sz2, w2, 2.1, d2, matC(0x46586a, { metalness: 0.4 }), { indestructible: true });
+    skirt(0, -10.6, 26, 1.2); skirt(0, 10.6, 26, 1.2); skirt(-13.6, 0, 1.2, 20); skirt(13.6, 0, 1.2, 20);
+    for (let i = 0; i < 9; i++) {
+      hdeco(BOX, 0xffd23f, p.x - 10 + i * 2.5, py - 1.05, p.z - 11.3, 0.55, 0.55, 0.15);
+      hdeco(BOX, 0xffd23f, p.x - 10 + i * 2.5, py - 1.05, p.z + 11.3, 0.55, 0.55, 0.15);
+    }
+    // conteneurs industriels (le coffre-fort garde sa place)
     const CC = [0xc0392b, 0x2980b9, 0xf1c40f, 0x27ae60, 0xecf0f1];
-    for (let k = 0; k < 5; k++) { if (k === 1) continue; // laisse la place au coffre-fort
+    for (let k = 0; k < 5; k++) { if (k === 1) continue;
       makeStructBox(p.x - 8 + (k % 3) * 8, py + 1.2, p.z - 5 + Math.floor(k / 3) * 8, 6.5, 2.8, 2.8, matC(CC[k], { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
     }
-    hdeco(BOX, 0x8fa3ad, p.x + 10, py + 1.2, p.z + 6, 1.2, 16, 1.2);
-    hdeco(BOX, 0x8fa3ad, p.x + 10, py + 17, p.z + 6, 6, 0.8, 1.2);
+    // conduites jaunes le long du pont + évents
+    hdeco(BOX, 0xf1c40f, p.x, py + 1.35, p.z + 9.6, 25, 0.35, 0.35);
+    hdeco(BOX, 0xf1c40f, p.x, py + 1.75, p.z + 9.6, 25, 0.35, 0.35);
+    hdeco(BOX, 0xf1c40f, p.x + 12.6, py + 1.35, p.z, 0.35, 0.35, 19);
+    for (const [vx, vz] of [[-11, 7], [-11, 9.5]]) {
+      hdeco(CYL_GEO, 0x8fa3ad, p.x + vx, py + 3.2, p.z + vz, 0.7, 3.6, 0.7);
+      hdeco(CYL_GEO, 0xf1c40f, p.x + vx, py + 5.2, p.z + vz, 0.85, 0.5, 0.85);
+    }
+    // grue rouge : mât plein + flèche + contrepoids + câble
+    {
+      const cx = p.x + 10, cz = p.z + 5, base = py + 1.2;
+      makeStructBox(cx, base, cz, 1.3, 17, 1.3, matC(0xb03a2e, { metalness: 0.3, roughness: 0.5 }), { indestructible: true });
+      hdeco(BOX, 0xb03a2e, cx - 5.5, base + 16.2, cz, 12, 0.7, 0.9, 0, 0, 0.1);
+      hdeco(BOX, 0xb03a2e, cx + 2.2, base + 15.4, cz, 2.4, 1.4, 1.6);
+      hdeco(BOX, 0x22262f, cx - 10.6, base + 9, cz, 0.12, 12, 0.12);
+      hdeco(BOX, 0x3a3f47, cx - 10.6, base + 2.6, cz, 0.7, 0.5, 0.7);
+    }
+    // hélipad jaune en porte-à-faux à l'ouest, marquage H
+    makeStructBox(p.x - 19, py + 0.4, p.z - 4, 7, 0.8, 7, matC(0xf1c40f, { metalness: 0.2, roughness: 0.6 }), { indestructible: true });
+    hdeco(BOX, 0x22262f, p.x - 19 - 0.9, py + 1.25, p.z - 4, 0.55, 0.1, 2.6);
+    hdeco(BOX, 0x22262f, p.x - 19 + 0.9, py + 1.25, p.z - 4, 0.55, 0.1, 2.6);
+    hdeco(BOX, 0x22262f, p.x - 19, py + 1.25, p.z - 4, 1.8, 0.1, 0.55);
+    hdeco(BOX, 0x8fa3ad, p.x - 17, py - 1.2, p.z - 4, 5.5, 0.5, 0.5, 0, 0, 0.5);
+    hdeco(BOX, 0x8fa3ad, p.x - 17, py - 1.2, p.z - 4, 5.5, 0.5, 0.5, 0, 0, -0.5);
+    // passerelle treillis vers la station satellite (salle de contrôle)
+    makeStructBox(p.x + 17, py + 0.4, p.z + 7, 9, 0.8, 2.6, matC(0xf1c40f, { metalness: 0.2, roughness: 0.6 }), { indestructible: true });
+    makeStructBox(p.x + 24, y - 1, p.z + 7, 2, 13, 2, matC(0x46586a, { metalness: 0.4 }), { indestructible: true });
+    makeStructBox(p.x + 24, py + 0.2, p.z + 7, 7, 1, 7, matC(0x9fb4c7, { metalness: 0.2, roughness: 0.5 }), { indestructible: true });
+    makeStructBox(p.x + 24, py + 1.2, p.z + 7, 4.6, 3, 3.6, matC(0xbcd8e8, { metalness: 0.1, roughness: 0.4 }), { indestructible: true });
+    hdeco(BOX, 0x2c5f8a, p.x + 24, py + 2.5, p.z + 5.15, 4.2, 0.8, 0.1);
+    hdeco(CYL_GEO, 0xf1c40f, p.x + 24, py + 5.6, p.z + 7, 0.25, 3, 0.25);
+    for (const [fx, fz] of [[-2.6, -1], [2.6, 1]]) hdeco(BOX, 0xf1c40f, p.x + 17 + fx, py + 1.7, p.z + 7 + fz, 0.15, 1.3, 0.15);
     { const H = curHouse; curHouse = null; finishHouse(H); }
     spawnChest(p.x - 5, py + 1.3, p.z + 6);
     spawnChest(p.x + 8, py + 1.3, p.z + 6);

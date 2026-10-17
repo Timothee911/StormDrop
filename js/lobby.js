@@ -30,14 +30,14 @@ const S = {
 const R = (cat, id) => ({ cat, id });
 const E = (n) => ({ cat: 'eclats', amount: n });
 const PASS = {
-  1: { prem: R('skin', 'cyber') }, 2: { free: E(100) }, 3: { prem: R('backpack', 'cape') }, 4: { free: R('emote', 'robot') },
-  5: { prem: R('pickaxe', 'sucre') }, 6: { free: R('glider', 'nuage') }, 7: { prem: E(100) }, 8: { free: E(100) },
+  1: { prem: R('skin', 'brutus') }, 2: { free: E(100) }, 3: { prem: R('backpack', 'cape') }, 4: { free: R('emote', 'robot') },
+  5: { prem: R('pickaxe', 'sucre') }, 6: { free: R('glider', 'nuage') }, 7: { prem: E(100) }, 8: { free: E(100), prem: R('skin', 'tntina') },
   9: { prem: R('glider', 'aigle') }, 10: { free: R('skin', 'jardin') }, 11: { prem: R('emote', 'flex') }, 12: { free: R('pickaxe', 'hache') },
-  13: { prem: E(100) }, 14: { free: E(100) }, 15: { prem: R('skin', 'punk') }, 16: { free: R('backpack', 'carapace') },
+  13: { prem: E(100) }, 14: { free: E(100) }, 15: { prem: R('skin', 'meowscles') }, 16: { free: R('backpack', 'carapace') },
   17: { prem: R('backpack', 'fusee') }, 18: { free: E(100) }, 19: { prem: R('pickaxe', 'marteau') }, 20: { free: R('skin', 'surf') },
-  21: { prem: E(100) }, 22: { free: E(100) }, 23: { prem: R('glider', 'neon') }, 24: { free: E(200) },
-  25: { prem: R('skin', 'ninja') }, 26: { prem: E(300) }, 27: { prem: R('emote', 'fil') }, 28: { free: E(200), prem: R('glider', 'dragon') },
-  29: { prem: R('backpack', 'ailesdragon') }, 30: { prem: R('skin', 'dragon') },
+  21: { prem: E(100) }, 22: { free: E(100), prem: R('skin', 'skye') }, 23: { prem: R('glider', 'neon') }, 24: { free: E(200) },
+  25: { prem: R('skin', 'ombre') }, 26: { prem: E(300) }, 27: { prem: R('emote', 'fil') }, 28: { free: E(200), prem: R('glider', 'dragon') },
+  29: { prem: R('backpack', 'ailesdragon') }, 30: { prem: R('skin', 'midas') },
 };
 const PASS_ITEMS = new Set();
 for (const t in PASS) for (const k of ['free', 'prem']) { const r = PASS[t][k]; if (r && r.cat !== 'eclats') PASS_ITEMS.add(r.cat + ':' + r.id); }
@@ -549,7 +549,7 @@ bindPlay();
 function launchMatch() {
   $('matchmaking').classList.add('hidden');
   const ls = $('loadScreen'); ls.classList.remove('hidden');
-  $('lsArt').innerHTML = `<div class="ls-logo">STORM<b>DROP</b></div><div class="ls-season">SAISON 1 · LA TEMPÊTE</div>`;
+  $('lsArt').innerHTML = `<div class="ls-logo">STORM<b>DROP</b></div><div class="ls-season">SAISON 2 · TOP SECRET</div>`;
   $('lsTip').innerHTML = 'Astuce : ' + TIPS[Math.floor(Math.random() * TIPS.length)];
   let p = 0; $('lsFill').style.width = '0%';
   const iv = setInterval(() => { p = Math.min(90, p + 7 + Math.random() * 10); $('lsFill').style.width = p + '%'; }, 120);

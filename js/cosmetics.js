@@ -33,7 +33,7 @@ export const SKINS = {
   ombre: { name: 'Homme de Main', rarity: 'rare', shirt: 0x1a1a22, pants: 0x14141c, skin: 0xb07a52, hat: 0x111118, style: 'fedora', extra: 'shades', desc: 'L’uniforme parfait de l’ombre.' },
   midas: { name: 'Midas', rarity: 'legendary', shirt: 0xd9a900, pants: 0x8a6a00, skin: 0xf2c6a0, hat: 0x1a1a1a, style: 'fedora', extra: 'shades', accent: 0xffc400, desc: 'Tout ce qu’il touche devient or.' },
   brutus: { name: 'Brutus', rarity: 'epic', shirt: 0x3a4a5a, pants: 0x2a3a4a, skin: 0xd9a77c, hat: 0x222831, style: 'helmet', extra: 'visor', accent: 0x39ff88, desc: 'Le colosse de La Grotte.' },
-  skye: { name: 'Skye', rarity: 'epic', shirt: 0xff8fc7, pants: 0xffffff, skin: 0xffe3ef, hat: 0xff8fc7, style: 'ears', desc: 'Toujours accompagnée d’Ollie.' },
+  skye: { name: 'Skye', rarity: 'epic', shirt: 0xff8fc7, pants: 0xffffff, skin: 0xf2c6a0, hair: 0x6b4226, hat: 0xff8fc7, style: 'beanie', desc: 'Toujours accompagnée d’Ollie.' },
   tntina: { name: 'TNTina', rarity: 'epic', shirt: 0xff5a3d, pants: 0x2b2b3a, skin: 0xf2c6a0, hat: 0xffd23f, style: 'beanie', extra: 'shades', accent: 0xff5a3d, desc: 'Explosive, littéralement.' },
   meowscles: { name: 'Meowscles', rarity: 'epic', shirt: 0x8fa3ad, pants: 0x2b2b3a, skin: 0x9fb4c7, hat: 0x8fa3ad, style: 'ears', accent: 0x39ff88, desc: 'Muscles et moustaches.' },
 };
@@ -117,6 +117,7 @@ function buildHead(head, s) {
   }
   if (st === 'cap') { box(head, 0.52, 0.16, 0.5, 0, 0.5, 0.02, hat); box(head, 0.36, 0.06, 0.22, 0, 0.44, -0.32, hat); }
   if (st === 'beanie') { box(head, 0.54, 0.22, 0.52, 0, 0.52, 0, hat); box(head, 0.14, 0.14, 0.14, 0, 0.68, 0, mat(0xffffff)); }
+  if (s.hair) { box(head, 0.52, 0.2, 0.5, 0, 0.45, 0.02, mat(s.hair)); box(head, 0.5, 0.4, 0.14, 0, 0.28, 0.2, mat(s.hair)); }
   if (st === 'helmet') { box(head, 0.56, 0.24, 0.54, 0, 0.52, 0, mat(0x2a3a2e, { metalness: 0.3 })); box(head, 0.58, 0.06, 0.56, 0, 0.42, 0, hat); }
   if (st === 'hood') { box(head, 0.58, 0.3, 0.56, 0, 0.5, 0.04, hat); box(head, 0.1, 0.5, 0.56, -0.27, 0.27, 0.04, hat); box(head, 0.1, 0.5, 0.56, 0.27, 0.27, 0.04, hat); box(head, 0.58, 0.5, 0.1, 0, 0.27, 0.27, hat); }
   if (st === 'mohawk') { box(head, 0.12, 0.3, 0.46, 0, 0.62, 0.02, mat(s.hat, { emissive: s.hat, emissiveIntensity: 0.4 })); }

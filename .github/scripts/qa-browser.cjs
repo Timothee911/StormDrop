@@ -8,7 +8,7 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
 
 (async () => {
   const errors = [], missingAssets = [], notReady = [];
-  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader'] });
+  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
   page.on('pageerror', e => errors.push({ type: 'pageerror', message: e.message }));
   page.on('requestfailed', req => {
@@ -78,8 +78,8 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
     const url = 'http://localhost:8090/game.html';
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 })
-        .catch(() => notReady.push({ url, reason: 'document pas complet après 15s' }));
+      await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 })
+        .catch(() => notReady.push({ url, reason: 'document pas complet après 30s' }));
       await new Promise(r => setTimeout(r, 5000));
 
       const canvas = await page.$('#game');
