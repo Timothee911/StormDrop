@@ -1,6 +1,101 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-label="STORMDROP">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b3bff"/><stop offset="1" stop-color="#1b1460"/></linearGradient></defs>
-  <rect width="512" height="512" rx="112" fill="url(#g)"/>
-  <circle cx="256" cy="256" r="176" fill="none" stroke="#b65cff" stroke-width="22" stroke-dasharray="40 26" opacity=".85"/>
-  <path d="M292 72 L148 290 H246 L214 440 L370 206 H268 Z" fill="#ffd23f" stroke="#0d0a24" stroke-width="18" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1045"/>
+      <stop offset="50%" stop-color="#0f092e"/>
+      <stop offset="100%" stop-color="#070417"/>
+    </linearGradient>
+    <linearGradient id="shieldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5ff"/>
+      <stop offset="35%" stop-color="#7928ca"/>
+      <stop offset="70%" stop-color="#ff0080"/>
+      <stop offset="100%" stop-color="#ffd23f"/>
+    </linearGradient>
+    <linearGradient id="shieldFill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a1668"/>
+      <stop offset="60%" stop-color="#140a3b"/>
+      <stop offset="100%" stop-color="#0a0522"/>
+    </linearGradient>
+
+    <!-- Thunder Gradients -->
+    <linearGradient id="boltGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#fff8db"/>
+      <stop offset="25%" stop-color="#ffe14d"/>
+      <stop offset="70%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="boltFacet" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="cyanGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="vortexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.2"/>
+    </linearGradient>
+
+    <!-- Drop Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="boltGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feComponentTransfer in="blur" result="boost">
+        <feFuncA type="linear" slope="1.4"/>
+      </feComponentTransfer>
+      <feComposite in="SourceGraphic" in2="boost" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Base rounded square background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+
+  <!-- Subtle circular energy waves -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#6366f1" stroke-width="2" stroke-dasharray="16 12" opacity="0.3"/>
+  <circle cx="256" cy="256" r="185" fill="none" stroke="#00f5ff" stroke-width="3" stroke-dasharray="6 14" opacity="0.4"/>
+
+  <!-- Shield Badge Outline -->
+  <polygon points="256,42 426,118 386,374 256,464 126,374 86,118"
+           fill="none" stroke="url(#shieldBorder)" stroke-width="12" stroke-linejoin="round" filter="url(#glow)"/>
+
+  <!-- Shield Badge Inner -->
+  <polygon points="256,52 414,122 376,364 256,450 136,364 98,122"
+           fill="url(#shieldFill)"/>
+
+  <!-- Inner Storm Vortex Pattern -->
+  <path d="M160,180 Q256,120 352,180 Q280,240 180,270 Q290,320 340,360"
+        fill="none" stroke="url(#vortexGrad)" stroke-width="14" stroke-linecap="round" opacity="0.6"/>
+  <path d="M140,240 Q256,200 370,230"
+        fill="none" stroke="#a855f7" stroke-width="6" stroke-dasharray="8 12" opacity="0.5"/>
+
+  <!-- Back Glow for Lightning Bolt -->
+  <path d="M296,68 L152,274 L252,274 L212,444 L376,214 L276,214 Z"
+        fill="#ffb800" opacity="0.45" filter="url(#boltGlow)"/>
+
+  <!-- Main 3D Faceted Lightning Bolt & Drop -->
+  <!-- Dark Bevel/Shadow facet -->
+  <path d="M296,68 L152,274 L252,274 L212,444 L376,214 L276,214 Z"
+        fill="#b45309"/>
+  <!-- Bright Front Face -->
+  <path d="M290,72 L158,268 L248,268 L216,432 L368,218 L278,218 Z"
+        fill="url(#boltGrad)" stroke="#fff" stroke-width="3" stroke-linejoin="miter"/>
+  <!-- Highlight Facet (left specular shine) -->
+  <path d="M290,72 L158,268 L232,268 L284,72 Z"
+        fill="url(#boltFacet)"/>
+  <path d="M248,268 L216,432 L260,330 L290,268 Z"
+        fill="url(#boltFacet)" opacity="0.8"/>
+
+  <!-- Electric Energy Sparks & Drops -->
+  <circle cx="152" cy="190" r="5" fill="#00f5ff" filter="url(#glow)"/>
+  <circle cx="360" cy="150" r="6" fill="#ffe24a" filter="url(#glow)"/>
+  <circle cx="340" cy="330" r="7" fill="#00f5ff" filter="url(#glow)"/>
+  <circle cx="170" cy="340" r="4" fill="#a855f7" filter="url(#glow)"/>
+
+  <!-- Tiny sharp lightning spark at tip -->
+  <polygon points="212,444 206,460 216,456 218,468 226,448" fill="#fff" filter="url(#glow)"/>
 </svg>

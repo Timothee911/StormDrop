@@ -31,14 +31,37 @@
 
 <!-- Top bar -->
 <header id="topbar">
-  <div class="logo" aria-label="Stormdrop">
-    <svg viewBox="0 0 40 40" width="34" height="34" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="8" fill="#ffd23f"/><path d="M23 6 11 23h8l-3 12 13-18h-8z" fill="#2a1f7a"/></svg>
-    <span>STORM<b>DROP</b></span>
+    <div class="logo" aria-label="Stormdrop">
+    <svg class="logo-badge" viewBox="0 0 44 44" width="38" height="38" aria-hidden="true">
+      <defs>
+        <linearGradient id="lbG" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#2a1668"/>
+          <stop offset="100%" stop-color="#0a0522"/>
+        </linearGradient>
+        <linearGradient id="lbB" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#00f5ff"/>
+          <stop offset="50%" stop-color="#a855f7"/>
+          <stop offset="100%" stop-color="#ffd23f"/>
+        </linearGradient>
+        <linearGradient id="lbT" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#fff8db"/>
+          <stop offset="50%" stop-color="#ffd23f"/>
+          <stop offset="100%" stop-color="#f59e0b"/>
+        </linearGradient>
+      </defs>
+      <polygon points="22,3 38,10 34,33 22,41 10,33 6,10" fill="url(#lbG)" stroke="url(#lbB)" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M25,6 L13,23 L21,23 L18,37 L31,19 L23,19 Z" fill="url(#lbT)" stroke="#1a0b36" stroke-width="1.2" stroke-linejoin="miter"/>
+      <circle cx="31" cy="11" r="1.5" fill="#00f5ff"/>
+      <circle cx="12" cy="28" r="1.2" fill="#ffd23f"/>
+    </svg>
+    <div class="logo-title">
+      <span class="lt-storm">STORM</span><span class="lt-drop">DROP</span>
+    </div>
   </div>
   <nav id="tabs">
     <button data-tab="home" class="on">ACCUEIL</button>
     <button data-tab="pass">PASSE DE COMBAT</button>
-    <!-- onglet DÉFIS supprimé volontairement -->
+    <button data-tab="career">CARRIÈRE</button>
     <button data-tab="locker">CASIER</button>
     <button data-tab="shop">BOUTIQUE</button>
   </nav>
@@ -48,9 +71,9 @@
       <div class="lvl-badge"><span id="lvlNum">1</span></div>
       <div class="lvl-bar"><i id="lvlFill"></i></div>
     </div>
-    <button class="pill install-btn hidden" id="installBtn" title="Installer l'appli"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M11 3h2v9.6l3.3-3.3 1.4 1.4L12 16"/></svg></button>
-    <button class="pill friends-btn" id="friendsBtn" title="Amis"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm7 0a3 3 0 1 0 0-6"/></svg></button>
-    <button class="icon-btn" id="settingsBtn" aria-label="Paramètres"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1"/></svg></button>
+    <button class="pill install-btn hidden" id="installBtn" title="Installer l'appli"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M11 3h2v9.6l3.3-3.3 1.4 1.4L12 16.4l-5.7-5.7 1.4-1.4 3.3 3.3V3zm-7 14h16v4H4v-4z"/></svg></button>
+    <button class="pill friends-btn" id="friendsBtn" title="Amis"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span class="fr-count" id="friendsN">0</span></button>
+    <button class="icon-btn" id="settingsBtn" aria-label="Paramètres"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></button>
   </div>
 </header>
 
@@ -105,6 +128,25 @@
     <button class="pt-arrow l" id="ptL" aria-label="Précédent">‹</button>
     <div class="pass-track" id="passTrack"></div>
     <button class="pt-arrow r" id="ptR" aria-label="Suivant">›</button>
+  </div>
+</section>
+
+<!-- CAREER (statistiques détaillées) -->
+<section class="page" id="page-career">
+  <div class="career-wrap">
+    <div class="cr-head">
+      <div class="cr-id">
+        <div class="lvl-badge"><span id="crLvl">1</span></div>
+        <div><div class="kicker">PROFIL JOUEUR</div><h1 id="crName">Tim</h1></div>
+      </div>
+      <div class="cr-vic"><b id="crWins">0</b><span>VICTOIRES<br>ROYALES</span></div>
+    </div>
+    <h3>GÉNÉRAL</h3>
+    <div class="cr-grid" id="careerStats"></div>
+    <h3>COMBAT</h3>
+    <div class="cr-grid" id="careerCombat"></div>
+    <h3>EXPLORATION &amp; BUTIN</h3>
+    <div class="cr-grid" id="careerLoot"></div>
   </div>
 </section>
 

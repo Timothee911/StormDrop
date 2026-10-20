@@ -163,8 +163,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* ---------- Match extras ---------- */
 #loading { position: fixed; inset: 0; z-index: 60; background: radial-gradient(ellipse at 50% 40%, #3b2a9e, #0d0f3a 70%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; transition: opacity .5s; }
 #loading.done { opacity: 0; pointer-events: none; }
-.ld-logo { font-family: var(--font-display); font-size: 72px; font-style: italic; color: #fff; text-shadow: 0 6px 0 #2a2f8f; }
-.ld-logo span { color: var(--c-accent); }
+.ld-logo { font-family: var(--font-display); font-size: 72px; font-style: italic; letter-spacing: 2px; transform: skewX(-8deg); color: #fff; text-shadow: 0 4px 12px rgba(10,20,60,.8); filter: drop-shadow(0 4px 12px rgba(0,0,0,.5)); }
+.ld-logo span { color: #ffd23f; background: linear-gradient(180deg, #fff3a8 0%, #ffd23f 45%, #ff8c00 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .ld-sub { font-size: 20px; font-weight: 700; font-style: italic; color: #cfd6ff; }
 .ld-bar { width: 320px; height: 8px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; }
 .ld-bar i { display: block; height: 100%; width: 40%; background: linear-gradient(90deg, #ffe35c, #ffb21f); animation: ld 1.2s ease-in-out infinite; }

@@ -1,6 +1,8 @@
 // Terrain, noise and map data (deterministic)
-export const ISLAND_R = 175;
-export const WORLD_R = 215;
+// Une île ~2,3x plus large que la version initiale pour retrouver l'échelle
+// d'une grande carte battle royale, sans changer l'échelle des bâtiments.
+export const ISLAND_R = 400;
+export const WORLD_R = 480;
 export const CELL = 4;
 
 export function mulberry32(a) {
@@ -50,21 +52,21 @@ function rawH(x, z) {
 // Carte inspirée du Chapitre 2 Saison 2 : cinq POI espions (L'Agence au
 // centre, Le Requin, Le Yacht, La Grotte, La Plateforme) + lieux classiques.
 export const POIS = [
-  { name: "L'Agence", key: 'agency', spy: true, x: 0, z: 0, r: 30, style: 'agency' },
-  { name: 'Le Requin', key: 'shark', spy: true, x: -128, z: -108, r: 20, style: 'shark' },
-  { name: 'Le Yacht', key: 'yacht', spy: true, x: 181, z: -36, r: 12, style: 'yacht' },
-  { name: 'La Grotte', key: 'grotto', spy: true, x: 128, z: 74, r: 22, style: 'grotto' },
-  { name: 'La Plateforme', key: 'rig', spy: true, x: -156, z: 84, r: 20, style: 'rig' },
-  { name: 'Bois-Joli', x: -72, z: -58, r: 24, style: 'wood' },
-  { name: 'Port-Rouillé', x: 96, z: 38, r: 26, style: 'brick' },
-  { name: 'Ferme Fumante', x: -42, z: 82, r: 22, style: 'wood' },
-  { name: 'Colline Cobalt', x: 34, z: -92, r: 22, style: 'adobe' },
-  { name: 'Oasis Sèche', x: 104, z: -58, r: 20, style: 'adobe' },
-  { name: 'Plage Coquillage', x: -116, z: 72, r: 18, style: 'beach' },
-  { name: 'Docks Dorés', x: -112, z: 18, r: 22, style: 'brick' },
-  { name: 'Village Vent', x: 52, z: 44, r: 24, style: 'wood' },
-  { name: 'Mont Grêle', x: 70, z: 108, r: 18, style: 'chalet' },
-  { name: 'Chalets Givrés', x: 18, z: 112, r: 18, style: 'chalet' },
+  { name: "L'Agence", key: 'agency', spy: true, x: 0, z: 0, r: 42, style: 'agency' },
+  { name: 'Le Requin', key: 'shark', spy: true, x: -292, z: -246, r: 31, style: 'shark' },
+  { name: 'Le Yacht', key: 'yacht', spy: true, x: 412, z: -82, r: 24, style: 'yacht' },
+  { name: 'La Grotte', key: 'grotto', spy: true, x: 292, z: 169, r: 34, style: 'grotto' },
+  { name: 'La Plateforme', key: 'rig', spy: true, x: -356, z: 192, r: 30, style: 'rig' },
+  { name: 'Bois-Joli', x: -164, z: -132, r: 34, style: 'wood' },
+  { name: 'Port-Rouillé', x: 219, z: 87, r: 37, style: 'brick' },
+  { name: 'Ferme Fumante', x: -96, z: 187, r: 32, style: 'wood' },
+  { name: 'Colline Cobalt', x: 78, z: -210, r: 32, style: 'adobe' },
+  { name: 'Oasis Sèche', x: 237, z: -132, r: 30, style: 'adobe' },
+  { name: 'Plage Coquillage', x: -265, z: 164, r: 29, style: 'beach' },
+  { name: 'Docks Dorés', x: -256, z: 41, r: 32, style: 'brick' },
+  { name: 'Village Vent', x: 119, z: 101, r: 34, style: 'wood' },
+  { name: 'Mont Grêle', x: 160, z: 247, r: 28, style: 'chalet' },
+  { name: 'Chalets Givrés', x: 41, z: 256, r: 28, style: 'chalet' },
 ];
 for (const p of POIS) p.h = Math.max(2.5, rawH(p.x, p.z));
 

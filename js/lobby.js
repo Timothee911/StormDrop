@@ -20,7 +20,7 @@ const S = {
   loadout: { ...DEFAULT_LOADOUT },
   claimed: new Set(),
   giftDay: null,
-  career: { matches: 0, wins: 0, kills: 0, top10: 0, damage: 0, time: 0, best: 99 },
+  career: { matches: 0, wins: 0, kills: 0, top10: 0, damage: 0, time: 0, best: 99, chests: 0, supply: 0, harvested: 0, builds: 0, headshots: 0 },
   prog: {},
   doneCh: new Set(),
   last: null,
@@ -281,8 +281,8 @@ function setTab(t) {
   curTab = t; document.body.dataset.tab = t;
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('on', p.id === 'page-' + t));
-  viewT = VIEWS[t];
-  canvas.style.visibility = t === 'shop' || t === 'challenges' ? 'hidden' : 'visible';
+  viewT = VIEWS[t] || VIEWS.home;
+  canvas.style.visibility = t === 'shop' || t === 'challenges' || t === 'career' ? 'hidden' : 'visible';
   previewMode = null; resetStage(); charYaw = 0;
   if (t === 'home') renderHome();
   if (t === 'pass') renderPass();
@@ -297,7 +297,7 @@ document.querySelectorAll('#tabs button').forEach((b) => b.onclick = () => setTa
 function chalHTML(c, compact) {
   const v = Math.min(c.goal, Math.floor(S.prog[c.id])), done = S.doneCh.has(c.id);
   if (compact) return `<div class="qc ${done ? 'done' : ''}"><div class="qc-top"><span>${c.name}</span><b>${done ? 'TERMINÉ' : fmt(c.xp) + ' XP'}</b></div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div></div>`;
-  return `<div class="chal ${done ? 'done' : ''}"><div class="chal-main"><div class="chal-name">${c.name}</div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div><div class="chal-pr">${done ? 'TERMINÉ' : fmt(c.xp) + ' XP'}</div></div></div>`;
+  return `<div class="chal ${done ? 'done' : ''}"><div class="chal-main"><div class="chal-name">${c.name}</div><div class="chal-prog">${fmt(v)} / ${fmt(c.goal)}</div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div></div><div class="chal-xp">${done ? 'TERMINÉ ✓' : '+' + fmt(c.xp) + ' XP'}</div></div>`;
 }
 function renderHome() {
   $('quickChallenges').innerHTML = DAILY.map((c) => chalHTML(c, true)).join('');
@@ -361,25 +361,31 @@ $('passBuyBtn').onclick = () => {
   toast(`Passe premium débloqué · ${got.length} récompense${got.length > 1 ? 's' : ''} obtenue${got.length > 1 ? 's' : ''}`);
 };
 
-// CHALLENGES -----------------------------------------------------------------
-function renderChallenges() {
-  $('dailyList').innerHTML = DAILY.map((c) => chalHTML(c)).join('');
-  $('weeklyList').innerHTML = WEEKLY.map((c) => chalHTML(c)).join('');
-  const C = S.career, m = Math.floor(C.time / 60);
-  $('careerStats').innerHTML = [
-    ['Parties jouées', C.matches], ['Victoires', C.wins], ['Taux de victoire', C.matches ? Math.round(C.wins / C.matches * 100) + ' %' : '—'],
-    ['Éliminations', C.kills], ['Top 10', C.top10], ['Meilleur classement', C.best < 99 ? '#' + C.best : '—'], ['Dégâts infligés', fmt(C.damage)], ['Temps de jeu', m + ' min'],
-  ].map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
-}
+// CHALLENGES (accueil) --------------------------------------------------------
+function renderChallenges() { /* page défis supprimée : les 3 défis du jour restent sur l'accueil */ }
 
-// CAREER ---------------------------------------------------------------------
+// CAREER : tableau de statistiques détaillées ---------------------------------
 function renderCareer() {
-  const C = S.career, m = Math.floor(C.time / 60);
-  const stats = [
-    ['Parties jouées', C.matches], ['Victoires', C.wins], ['Taux de victoire', C.matches ? Math.round(C.wins / C.matches * 100) + ' %' : '—'],
-    ['Éliminations', C.kills], ['Top 10', C.top10], ['Meilleur classement', C.best < 99 ? '#' + C.best : '—'], ['Dégâts infligés', fmt(C.damage)], ['Temps de jeu', m + ' min'], ['Niveau', S.level]
-  ];
-  const el = $('careerStats'); if (!el) return; el.innerHTML = stats.map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
+  const C = S.career;
+  const mins = Math.floor(C.time / 60);
+  const timeTxt = mins >= 60 ? Math.floor(mins / 60) + ' h ' + String(mins % 60).padStart(2, '0') : mins + ' min';
+  const perMatch = (v) => C.matches ? (Math.round(v / C.matches * 10) / 10).toLocaleString('fr-FR') : '—';
+  const pct = (v) => C.matches ? Math.round(v / C.matches * 100) + ' %' : '—';
+  const deaths = Math.max(0, C.matches - C.wins);
+  $('crLvl').textContent = S.level; $('crName').textContent = S.name; $('crWins').textContent = C.wins;
+  const put = (id, rows) => { const el = $(id); if (el) el.innerHTML = rows.map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join(''); };
+  put('careerStats', [
+    ['Parties jouées', C.matches], ['Victoires royales', C.wins], ['Taux de victoire', pct(C.wins)],
+    ['Top 10', C.top10], ['Taux de Top 10', pct(C.top10)], ['Meilleur classement', C.best < 99 ? '#' + C.best : '—'],
+    ['Temps de jeu', timeTxt], ['Niveau du passe', S.level],
+  ]);
+  put('careerCombat', [
+    ['Éliminations', C.kills], ['Élim. par partie', perMatch(C.kills)], ['Ratio élim. / mort', deaths ? (Math.round(C.kills / deaths * 100) / 100).toLocaleString('fr-FR') : (C.kills ? '∞' : '—')],
+    ['Dégâts infligés', fmt(C.damage)], ['Dégâts par partie', perMatch(C.damage)], ['Tirs à la tête', C.headshots],
+  ]);
+  put('careerLoot', [
+    ['Coffres ouverts', C.chests], ['Largages ouverts', C.supply], ['Matériaux récoltés', fmt(C.harvested)], ['Constructions', C.builds],
+  ]);
 }
 
 // LOCKER ---------------------------------------------------------------------
@@ -433,7 +439,7 @@ function shopToday() {
 }
 function shopCard(p) {
   const it = itemOf(p.cat, p.id), own = S.owned.has(p.cat + ':' + p.id), RR = RARITIES[it.rarity];
-  return `<div class="sitem r-${it.rarity}" style="--rc:${RR.color}" data-c="${p.cat}" data-id="${p.id}" data-p="${p.price}"><img alt="" src="${thumb(p.cat, p.id)}">${own ? '<span class="si-owned">POSSÉDÉ</span>' : ''}</div>`;
+  return `<div class="sitem r-${it.rarity}" style="--rc:${RR.color}" data-c="${p.cat}" data-id="${p.id}" data-p="${p.price}"><img alt="" src="${thumb(p.cat, p.id)}">${own ? '<span class="si-owned">POSSÉDÉ</span>' : ''}<div class="si-bottom"><div class="si-name">${it.name}</div><div class="si-price"><i class="coin"></i><span>${fmt(p.price)}</span></div></div></div>`;
 }
 function renderShop() {
   const { featured, daily } = shopToday();
@@ -502,7 +508,7 @@ function renderParty() {
   $('party').querySelectorAll('.sl-kick').forEach((el) => el.onclick = (e) => { e.stopPropagation(); S.party.splice(+el.dataset.k, 1); renderParty(); renderFriends(); });
   $('modeName').textContent = MODES[S.mode].name;
   $('playersLabel').textContent = S.players;
-  $('friendsN').textContent = FRIENDS.filter((f) => f.st === 'online').length;
+  const fn = $('friendsN'); if (fn) fn.textContent = FRIENDS.filter((f) => f.st === 'online').length;
 }
 function renderFriends() {
   const stL = { online: 'En ligne', game: 'En partie', off: 'Hors ligne' };
@@ -551,9 +557,18 @@ const TIPS = [
   'Construis une rampe (<b>C</b>) pour prendre l’avantage de la hauteur.',
   'Un indicateur rouge autour du viseur montre d’où viennent les tirs.',
 ];
-let mmTimer = 0, inMatch = false;
-function bindPlay() { $('playBtn').onclick = () => { if (inMatch) return; inMatch = true; if (lockMod && lockMod.onPlay) lockMod.onPlay(); $('playBtn').querySelector('span').textContent = 'ANNULE'; $('matchmaking').classList.remove('hidden'); let t = 0; $('mmTime').textContent = '0:00'; mmTimer = setInterval(() => { t++; const mm = Math.floor(t / 60), ss = t % 60; $('mmTime').textContent = mm + ':' + String(ss).padStart(2, '0'); }, 1000); setTimeout(() => { if (inMatch) launchMatch(); }, 900); }; }
-function cancelMM2() { clearInterval(mmTimer); inMatch = false; $('matchmaking').classList.add('hidden'); $('playBtn').querySelector('span').textContent = 'JOUER'; bindPlay(); }
+let mmTimer = 0, inMatch = false, mmTimeout = 0;
+function bindPlay() {
+  $('playBtn').onclick = () => {
+    if (inMatch) { cancelMM2(); toast('Recherche annulée'); return; }
+    inMatch = true; if (lockMod && lockMod.onPlay) lockMod.onPlay();
+    $('playBtn').querySelector('span').textContent = 'ANNULE'; $('matchmaking').classList.remove('hidden');
+    let t = 0; $('mmTime').textContent = '0:00';
+    mmTimer = setInterval(() => { t++; const mm = Math.floor(t / 60), ss = t % 60; $('mmTime').textContent = mm + ':' + String(ss).padStart(2, '0'); }, 1000);
+    mmTimeout = setTimeout(() => { if (inMatch) launchMatch(); }, 900);
+  };
+}
+function cancelMM2() { clearInterval(mmTimer); clearTimeout(mmTimeout); inMatch = false; $('matchmaking').classList.add('hidden'); $('playBtn').querySelector('span').textContent = 'JOUER'; }
 bindPlay();
 
 function launchMatch() {
@@ -597,6 +612,7 @@ function applyResult(d) {
   const placement = d.placement || 30;
   const C = S.career;
   C.matches++; if (d.won) C.wins++; C.kills += d.kills || 0; if (placement <= 10) C.top10++; C.damage += st.damage || 0; C.time += d.time || 0; C.best = Math.min(C.best, placement);
+  C.chests += st.chests || 0; C.supply += st.supply || 0; C.harvested += st.harvested || 0; C.builds += st.builds || 0; C.headshots += st.headshots || 0;
   const inc = { chests: st.chests || 0, kills: d.kills || 0, harvested: st.harvested || 0, damage: st.damage || 0, builds: st.builds || 0, top10: placement <= 10 ? 1 : 0, wins: d.won ? 1 : 0, supply: st.supply || 0, headshots: st.headshots || 0, minutes: Math.floor((d.time || 0) / 60) };
   const lines = Object.entries(d.xpLog || {}).map(([k, v]) => [k, v]);
   let chXP = 0; const doneNow = [];
@@ -643,8 +659,9 @@ $('rsContinue').onclick = () => { $('resultModal').classList.add('hidden'); setT
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
-setInterval(() => { $('shopTimer').textContent = untilMidnight(); $('dailyReset').textContent = untilMidnight(); }, 1000);
-$('shopTimer').textContent = untilMidnight(); $('dailyReset').textContent = untilMidnight();
+const tickClocks = () => { const t = untilMidnight(); $('shopTimer').textContent = t; $('dailyReset').textContent = t; const d2 = $('dailyReset2'); if (d2) d2.textContent = 'Réinitialisation dans ' + t; };
+setInterval(tickClocks, 1000);
+tickClocks();
 buildChar(); updateTopbar(); renderHome();
 requestAnimationFrame(loop);
 // pre-render thumbnails in the background so tabs open instantly
