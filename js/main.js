@@ -1449,12 +1449,12 @@ let tNext = 0;
 function tracer(a, b, color = 0xfff1a8) {
   const t = tracers[tNext]; tNext = (tNext + 1) % tracers.length;
   const len = a.distanceTo(b); if (len < 0.5) return;
-  t.m.position.copy(a).lerp(b, 0.5); t.m.lookAt(b); t.m.scale.set(0.035, 0.035, len);
-  t.m.material.color.set(color); t.m.material.opacity = 0.9; t.m.visible = true; t.life = 0.07;
+  t.m.position.copy(a).lerp(b, 0.5); t.m.lookAt(b); t.m.scale.set(0.05, 0.05, len);
+  t.m.material.color.set(color); t.m.material.opacity = 0.95; t.m.visible = true; t.life = 0.12;
 }
-const flash = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+const flash = new THREE.Mesh(new THREE.OctahedronGeometry(0.34, 0), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
 flash.visible = false; scene.add(flash);
-const flashLight = new THREE.PointLight(0xffc870, 0, 8); scene.add(flashLight);
+const flashLight = new THREE.PointLight(0xffc870, 0, 10); scene.add(flashLight);
 let flashT = 0;
 
 const dmgLayer = document.getElementById('dmgNums');
@@ -2193,12 +2193,13 @@ function fire(ch, origin, dir, ads) {
   }
   if (ch.isPlayer && anyHit) { stats.damage += total; if (headHit) stats.headshots++; showHitmarker(headHit, killed, shieldHit); dmgNumber(_hp, total, headHit ? (shieldHit ? 'head shield' : 'head') : shieldHit ? 'shield' : ''); }
   sfxAt(W.sfx, muzzle, ch.isPlayer ? 0.9 : 0.8);
-  if (ch.isPlayer || ch.pos.distanceToSquared(player.pos) < 6400) { flash.position.copy(muzzle); flash.visible = true; flash.rotation.set(MR() * 3, MR() * 3, 0); flashT = 0.045; flashLight.position.copy(muzzle); flashLight.intensity = 6; }
-  if (ch.isPlayer) { const k = RR.recoil * (ads ? 0.7 : 1) * (ch.crouch ? 0.75 : 1); recoil += W.kick * k; recoilX += (MR() - 0.5) * 2 * W.kickX * k; gunKick = 1; }
+  if (ch.isPlayer || ch.pos.distanceToSquared(player.pos) < 6400) { flash.position.copy(muzzle); flash.visible = true; flash.rotation.set(MR() * 3, MR() * 3, 0); flashT = 0.07; flash.scale.setScalar(0.9 + MR() * 0.9); flashLight.position.copy(muzzle); flashLight.intensity = 10; burst(muzzle, 0xaaaaaa, 4, 1.2, 0.09, 0.15, 0.55); burst(muzzle, 0xffc84a, 3, 3, 0.05, 1, 0.45); }
+  if (ch.isPlayer) { const k = RR.recoil * (ads ? 0.7 : 1) * (ch.crouch ? 0.75 : 1); recoil += W.kick * k; recoilX += (MR() - 0.5) * 2 * W.kickX * k; }
+  ch.shotKick = 1;
   if (it.mag <= 0) startReload(ch);
   return true;
 }
-let recoil = 0, recoilX = 0, gunKick = 0;
+let recoil = 0, recoilX = 0;
 function melee(ch, origin, dir) {
   ch.cool = 1 / WEAPONS.pickaxe.rate; ch.swing = 1;
   const hit = castRay(origin, dir, ch.isPlayer ? camDistNow + 3.2 : 2.8, ch);
@@ -3756,6 +3757,8 @@ function stepSound(ch) {
 }
 function animateChar(ch, dt) {
   const P = ch.parts, m = ch.mesh;
+  // le recul de tir décroit toujours, même si le perso est invisible/loin
+  ch.shotKick = Math.max(0, (ch.shotKick || 0) - dt * 6);
   if (ch.mode === 'bus' || ch.mode === 'drive') { m.visible = false; return; }
   if (!(ch.isPlayer && scopeOn)) m.visible = ch.isPlayer || ch.camD2 < FULL_D2;
   const sh = ch.isPlayer || ch.camD2 < SHADOW_D2;
@@ -3799,11 +3802,14 @@ function animateChar(ch, dt) {
     let rel = 0, tilt = 0, low = 0, k = 0;
     if (ch.reloading > 0) { const tot = WEAPONS[it.id].reload * RAR[it.rarity].reload; const rp = 1 - ch.reloading / tot; k = Math.sin(clamp(rp, 0, 1) * Math.PI); rel = k * 0.35; tilt = k * 0.9; }
     if (ch.equipT > 0) low = (ch.equipT / (ch.equipDur || 0.3)) * 1.2;
-    const kick = ch.isPlayer ? gunKick * 0.18 : 0;
-    P.shR.rotation.set(Math.PI / 2 + aimP - rel - low + kick, 0, 0.0);
+    // recul visible à chaque tir (joueur ET bots) : le bras et l'arme partent en arrière
+    const kick = (ch.shotKick || 0) * 0.32;
+    // balancement de l'arme en marchant (comme dans la vidéo) : le canon suit le pas
+    const sway = sw * 0.15;
+    P.shR.rotation.set(Math.PI / 2 + aimP - rel - low + kick - sway, 0, 0.0);
     if (k > 0) P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - k * 1.5, 0, -0.55 + k * 0.45); // left hand goes to the belt for a new mag
-    else P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - low + kick, 0, -0.55);
-    if (ch.held) { ch.held.rotation.z = tilt; ch.held.position.z = kick * 0.6; }
+    else P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - low + kick - sway, 0, -0.55);
+    if (ch.held) { ch.held.rotation.z = tilt + sw * 0.06; ch.held.position.z = kick * 0.3; ch.held.position.y = -sway * 0.2; }
   } else if (it) {
     const u = ch.using ? Math.sin(gameT * 10) * 0.2 : 0;
     P.shR.rotation.set(1.2 + u, 0, 0); P.shL.rotation.set(1.0 - u, 0, -0.4);
@@ -3889,7 +3895,7 @@ function updateCamera(dt) {
     if (ey < 0.06) camPitch = Math.min(1.25, camPitch + dt * 1.4);
     if (ey > 0.94) camPitch = Math.max(-1.35, camPitch - dt * 1.4);
   }
-  recoil = Math.max(0, recoil - dt * (0.25 + recoil * 6)); recoilX -= recoilX * Math.min(1, dt * 6); gunKick = Math.max(0, gunKick - dt * 8);
+  recoil = Math.max(0, recoil - dt * (0.25 + recoil * 6)); recoilX -= recoilX * Math.min(1, dt * 6);
   const W = player && player.alive ? weaponOf(player) : null;
   const ads = player && player.alive && player.ads && player.mode === 'ground';
   scopeOn = ads && W.scope;

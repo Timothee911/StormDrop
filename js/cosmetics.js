@@ -27,6 +27,7 @@ export const SKINS = {
   cyber: { name: 'Renard Cyber', rarity: 'legendary', shirt: 0xff7a1a, pants: 0x1a1d2e, skin: 0xffa64d, hat: 0xff7a1a, style: 'ears', extra: 'visor', accent: 0x00f0ff, desc: 'Récompense du Passe de combat.' },
   dragon: { name: 'Dragonnier Écarlate', rarity: 'legendary', shirt: 0xb3122e, pants: 0x3a0a14, skin: 0xf2c6a0, hat: 0xffb000, style: 'horns', extra: 'scarf', accent: 0xffb000, desc: 'Palier final du Passe de combat.' },
   agent: { name: 'Agent Minuit', rarity: 'rare', shirt: 0x1f2440, pants: 0x1f2440, skin: 0xb07a52, hat: 0x111111, style: 'none', extra: 'shades', desc: 'Lunettes noires, même la nuit.' },
+  tigresse: { name: 'Tigresse', rarity: 'epic', shirt: 0xd94f2b, pants: 0x2a2f38, skin: 0xf2c6a0, hat: 0x1d2430, hair: 0x6b4a2a, style: 'capback', extra: 'tiger', desc: 'Rayures dans la jungle.' },
   jardin: { name: 'Jardinière', rarity: 'uncommon', shirt: 0x6fbf4a, pants: 0x7a4e2b, skin: 0xf5d3b5, hat: 0xf2e1a0, style: 'straw', desc: 'Plante des pièges.' },
   surf: { name: 'Surfeur Solaire', rarity: 'uncommon', shirt: 0x00c2c7, pants: 0xffa52d, skin: 0xc68b5e, hat: 0xffffff, style: 'none', extra: 'shades', desc: 'Toujours sur la vague.' },
   // Agents du Chapitre 2 Saison 2
@@ -78,7 +79,7 @@ export const CATS = {
   glider: { name: 'Planeur', items: GLIDERS },
   emote: { name: 'Emote', items: EMOTES },
 };
-export const DEFAULT_LOADOUT = { skin: 'recrue', backpack: 'sac', pickaxe: 'default', glider: 'default', emote: 'danse' };
+export const DEFAULT_LOADOUT = { skin: 'tigresse', backpack: 'sac', pickaxe: 'default', glider: 'default', emote: 'danse' };
 
 // ---------------------------------------------------------------------------
 // Model builders
@@ -151,12 +152,13 @@ function buildHead(head, s) {
   }
   // cheveux (sous les couvre-chefs ouverts)
   const hairC = s.hair || 0x2f2318;
-  if (st === 'none' || st === 'cap' || st === 'ears' || st === 'crown') {
+  if (st === 'none' || st === 'cap' || st === 'capback' || st === 'ears' || st === 'crown') {
     box(head, 0.42, 0.1, 0.41, 0, 0.44, 0.01, mat(hairC)); // dessus
     box(head, 0.42, 0.3, 0.1, 0, 0.3, 0.17, mat(hairC)); // arrière
   }
   if (s.hair) { box(head, 0.44, 0.12, 0.43, 0, 0.45, 0.01, mat(s.hair)); box(head, 0.44, 0.34, 0.12, 0, 0.28, 0.18, mat(s.hair)); }
   if (st === 'cap') { box(head, 0.46, 0.15, 0.44, 0, 0.5, 0.02, hat); box(head, 0.34, 0.05, 0.2, 0, 0.44, -0.3, hat); box(head, 0.08, 0.04, 0.08, 0, 0.58, 0.02, hat); }
+  if (st === 'capback') { box(head, 0.46, 0.15, 0.44, 0, 0.5, 0.02, hat); box(head, 0.34, 0.05, 0.2, 0, 0.44, 0.3, hat); box(head, 0.08, 0.04, 0.08, 0, 0.58, 0.02, hat); } // casquette à l'envers : visière derrière
   if (st === 'beanie') { box(head, 0.46, 0.2, 0.44, 0, 0.5, 0, hat); box(head, 0.48, 0.07, 0.46, 0, 0.41, 0, mat(s.hat, { roughness: 0.95 })); const pom = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0xffffff)); pom.position.y = 0.64; pom.castShadow = true; head.add(pom); }
   if (st === 'helmet') {
     const helm = mat(0x2a3a2e, { metalness: 0.3, roughness: 0.5 });
@@ -292,6 +294,15 @@ export function makeCharMesh(cos) {
   box(torso, 0.13, 0.1, 0.03, -0.17, 0.36, -0.2, dark); // poche poitrine G
   box(torso, 0.13, 0.1, 0.03, 0.17, 0.36, -0.2, dark); // poche poitrine D
   box(torso, 0.34, 0.07, 0.26, 0, 0.71, 0, dark); // col
+  if (s.extra === 'tiger') { // rayures de tigre sur le t-shirt
+    const stripe = mat(0x241009, { roughness: 0.7 });
+    box(torso, 0.07, 0.2, 0.02, -0.24, 0.34, -0.2, stripe);
+    box(torso, 0.07, 0.2, 0.02, 0.24, 0.34, -0.2, stripe);
+    box(torso, 0.07, 0.3, 0.02, -0.05, 0.46, -0.21, stripe);
+    box(torso, 0.07, 0.26, 0.02, 0.1, 0.5, -0.21, stripe);
+    box(torso, 0.07, 0.16, 0.02, -0.23, 0.57, -0.2, stripe);
+    box(torso, 0.07, 0.16, 0.02, 0.23, 0.57, -0.2, stripe);
+  }
   if (s.extra === 'scarf') { box(torso, 0.5, 0.13, 0.44, 0, 0.74, 0, mat(s.accent || 0xd94848)); box(torso, 0.12, 0.3, 0.06, 0.12, 0.55, 0.2, mat(s.accent || 0xd94848)); }
   box(torso, 0.16, 0.14, 0.16, 0, 0.78, 0, armored ? mat(s.shirt) : skinM); // cou
   buildBackpack(torso, cos.backpack);
