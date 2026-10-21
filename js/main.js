@@ -1764,10 +1764,11 @@ let gameT = 0;
 let camYaw = 0, camPitch = -0.2;
 const bus = { mesh: null, start: new THREE.Vector3(), end: new THREE.Vector3(), t: 0, dur: 32, active: false, pos: new THREE.Vector3(), dir: new THREE.Vector3() };
 const storm = { cx: 0, cz: 0, r: 700, nx: 0, nz: 0, nr: 700, sx: 0, sz: 0, sr: 700, phase: -1, stage: 'idle', timer: 0, dmg: 1, mesh: null };
-// Environ 10 minutes après l'atterrissage : 95 s de loot initial, puis 6
-// fermetures progressives. Le vol du bus ajoute ~32 s à la durée ressentie.
+// La zone est révélée à l'atterrissage du joueur : 60 s de loot avant la
+// première fermeture, puis 6 fermetures progressives (fin ~6-7 min après
+// l'atterrissage). La zone de départ (r=460) englobe toute l'île (côte ~400).
 const PHASES = [
-  { wait: 95, shrink: 28, r: 280, dmg: 1 },
+  { wait: 60, shrink: 28, r: 280, dmg: 1 },
   { wait: 50, shrink: 25, r: 170, dmg: 2 },
   { wait: 38, shrink: 22, r: 95, dmg: 4 },
   { wait: 30, shrink: 20, r: 48, dmg: 6 },
@@ -3819,7 +3820,10 @@ function animateChar(ch, dt) {
 function updateStorm(dt) {
   storm.mesh.material.uniforms.t.value += dt;
   if (storm.phase === -1) {
-    if (!bus.active && gameT > 5) { storm.phase = 0; startPhase(0); }
+    // La zone est révélée dès que le joueur ATTERIT : la tempête se referme
+    // 60 s après l'atterrissage (même s'il plane longtemps). Repli si le
+    // joueur est éliminé avant d'atterrir : révélation à la fin du bus.
+    if (player.mode === 'ground' || player.mode === 'drive' || (!player.alive && !bus.active)) { storm.phase = 0; startPhase(0); }
   } else if (storm.phase < PHASES.length) {
     storm.timer -= dt;
     const P = PHASES[storm.phase];
@@ -3846,7 +3850,9 @@ function startPhase(i) {
     if (terrainH(x, z) > 2 || k === 39) { storm.nx = x; storm.nz = z; break; }
   }
   storm.nr = P.r;
-  if (i === 0) { storm.cx = 0; storm.cz = 0; storm.r = 240; }
+  // la zone commence en dehors de la carte : rayon 460 > côte (~400),
+  // toute l'île est au sec au moment de la révélation
+  if (i === 0) { storm.cx = 0; storm.cz = 0; storm.r = 460; }
   showCenter('ZONE SÛRE RÉVÉLÉE', `La tempête arrive dans ${P.wait} s — regarde la carte (${keyLabel(BIND.map)})`, 3);
   sfx('warn', 0.5);
 }
@@ -4465,7 +4471,7 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes,  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); } };
+window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); } };
 
 // Auto-start the match once everything is built
 refreshLabels();
