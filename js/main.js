@@ -60,7 +60,7 @@ const PLAYER_TOTAL = [30, 50, 100].includes(+LOAD.players) ? +LOAD.players : 30;
 BOT_COUNT = PLAYER_TOTAL - 1;
 setVolumes(SET.volume, SET.music);
 const IN_FRAME = window.parent !== window;
-const DIFF = { facile: { dmg: 0.7, aim: 0.75 }, normal: { dmg: 1, aim: 1 }, difficile: { dmg: 1.4, aim: 1.4 } }[LOAD.diff || 'normal'] || { dmg: 1, aim: 1 };
+const DIFF = { facile: { dmg: 0.5, aim: 0.55, react: 1.6 }, normal: { dmg: 0.72, aim: 0.72, react: 1.35 }, difficile: { dmg: 0.95, aim: 0.9, react: 1.1 } }[LOAD.diff || 'normal'] || { dmg: 0.72, aim: 0.72, react: 1.35 };
 const stats = { chests: 0, builds: 0, damage: 0, harvested: 0, headshots: 0, supply: 0 };
 let matchXP = 0; const xpLog = {}; let xpFinal = false, wonMatch = false;
 function addXP(label, n, quiet) { n = Math.round(n); if (n <= 0) return; matchXP += n; xpLog[label] = (xpLog[label] || 0) + n; if (!quiet) xpPop(label, n); }
@@ -750,17 +750,22 @@ function gableRoof(cx, cz, topY, w, d, roofH, bodyHex, roofHex, opts = {}) {
     hbox(0x3a3a3a, x, topY + roofH + 1.1, z, 1.0, 0.18, 1.0, opts.parent);
   }
 }
-function furniture(cx, cz, y, w, d, skipCorner, accent) {
+function furniture(cx, cz, y, w, d, skipCorner, accent, avoid) {
   // a few pieces of furniture placed in free quadrants (decorative, no collision)
+  // avoid = [{x, z}] : emplacements à laisser libres (coffres, caisses de munitions)
   const spots = [[-1, -1], [1, -1], [1, 1], [-1, 1]].filter((q) => !(skipCorner && q[0] === -1 && q[1] === -1));
   const kinds = ['table', 'bed', 'sofa', 'shelf', 'rug'];
-  for (let i = 0; i < Math.min(3, spots.length); i++) {
-    const [qx, qz] = spots[i], x = cx + qx * w / 4, z = cz + qz * d / 4, k = kinds[(i + randi(0, 4)) % kinds.length];
+  let placed = 0;
+  for (let i = 0; i < spots.length && placed < 3; i++) {
+    const [qx, qz] = spots[i], x = cx + qx * w / 4, z = cz + qz * d / 4;
+    if (avoid && avoid.some((a) => Math.hypot(a.x - x, a.z - z) < 2)) continue;
+    const k = kinds[(i + randi(0, 4)) % kinds.length];
     if (k === 'table') { hbox(0x9a6a40, x, y + 0.72, z, 1.5, 0.1, 0.95); for (const [a, b] of [[-0.62, -0.38], [0.62, -0.38], [-0.62, 0.38], [0.62, 0.38]]) hbox(0x6e4a2c, x + a, y, z + b, 0.1, 0.72, 0.1); hbox(0xc0392b, x - 1.05, y, z, 0.5, 0.45, 0.5); hbox(0xc0392b, x - 1.05, y + 0.45, z - 0.22, 0.5, 0.55, 0.08); }
     else if (k === 'bed') { hbox(0x6e4a2c, x, y, z, 1.4, 0.4, 2.1); hbox(accent, x, y + 0.4, z + 0.15, 1.35, 0.16, 1.7); hbox(0xffffff, x, y + 0.4, z - 0.75, 1.0, 0.2, 0.45); hbox(0x6e4a2c, x, y, z - 1.05, 1.5, 1.0, 0.12); }
     else if (k === 'sofa') { hbox(accent, x, y, z, 2.0, 0.45, 0.85); hbox(accent, x, y + 0.45, z - 0.35, 2.0, 0.5, 0.18); hbox(accent, x - 0.95, y + 0.45, z, 0.16, 0.3, 0.85); hbox(accent, x + 0.95, y + 0.45, z, 0.16, 0.3, 0.85); }
     else if (k === 'shelf') { hbox(0x7a5232, x, y, z, 1.4, 1.8, 0.4); for (let j = 0; j < 3; j++) hbox(pick([0x3b6fd1, 0xe08a2e, 0x2f9e7a, 0xd2483a]), x + rand(-0.4, 0.4), y + 0.35 + j * 0.55, z + 0.05, 0.5, 0.28, 0.3); }
     else hbox(accent, x, y + 0.01, z, 2.4, 0.03, 1.6);
+    placed++;
   }
 }
 function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
@@ -843,11 +848,18 @@ function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
     makeStructBox((ax0 + ax1) / 2, baseY + H - 0.12, cz, ax1 - ax0, 0.24, d, slab, { hp: 240, mat, indestructible: true });
     const bx0 = cx - w / 2, bz0 = z0 + 4, bz1 = cz + d / 2;
     makeStructBox((bx0 + ax0) / 2, baseY + H - 0.12, (bz0 + bz1) / 2, ax0 - bx0, 0.24, bz1 - bz0, slab, { hp: 240, mat, indestructible: true });
-    furniture(cx, cz, baseY + H + 0.12, w, d, true, accent);
+    // coffre de l'étage placé avant le mobilier : le mobilier évite son emplacement
+    const upAvoid = [];
+    if (R() < 0.6) { const c = spawnChest(cx + w / 4 + rand(-1, 1), baseY + H + 0.12, cz - d / 4); upAvoid.push({ x: c.x, z: c.z }); }
+    furniture(cx, cz, baseY + H + 0.12, w, d, true, accent, upAvoid);
     lootSpots.push({ x: cx + w / 4, y: baseY + H + 0.15, z: cz + rand(-d / 4, d / 4) });
-    if (R() < 0.6) spawnChest(cx + w / 4 + rand(-1, 1), baseY + H + 0.12, cz - d / 4);
   }
-  furniture(cx, cz, baseY + 0.17, w, d, twoStory, accent);
+  // coffre / caisse de munitions du rez posés avant le mobilier : plus rien n'apparaît dedans
+  const avoid = [];
+  if (R() < 0.75) { const c = spawnChest(cx + rand(-w / 4, w / 4), baseY, cz + rand(-d / 4, d / 4) + (twoStory ? 1 : 0)); avoid.push({ x: c.x, z: c.z }); }
+  lootSpots.push({ x: cx + rand(0, w / 3), y: baseY + 0.2, z: cz + rand(-d / 3, d / 3) });
+  if (R() < 0.5) { const a = spawnAmmoBox(cx + rand(0, w / 3), baseY, cz + rand(-d / 3, d / 3)); ammoBoxes.push(a); avoid.push({ x: a.x, z: a.z }); }
+  furniture(cx, cz, baseY + 0.17, w, d, twoStory, accent, avoid);
   const topY = baseY + H * levels;
   // roof slab (walkable) + decorative roof
   const roofCol = makeStructBox(cx, topY, cz, w + 0.8, 0.35, d + 0.8, matC(style === 'adobe' ? 0xd8b080 : 0xe8dcc4), { hp: 220, mat });
@@ -903,10 +915,7 @@ function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
       sbox(ds, 0x6b4a2c, 0, baseY + 0.22, T / 2 + bOff - 0.25, 1.7, 0.28, 0.08, null);
     }
   }
-  // chest / loot
-  if (R() < 0.75) spawnChest(cx + rand(-w / 4, w / 4), baseY, cz + rand(-d / 4, d / 4) + (twoStory ? 1 : 0));
-  lootSpots.push({ x: cx + rand(0, w / 3), y: baseY + 0.2, z: cz + rand(-d / 3, d / 3) });
-  if (R() < 0.5) ammoBoxes.push(spawnAmmoBox(cx + rand(0, w / 3), baseY, cz + rand(-d / 3, d / 3)));
+  // chest / loot (déplacés avant furniture() : voir plus haut)
 }
 // Apartment buildings: 3 to 5 storeys, zig-zag interior ramps, rooftop access
 const TOWER_PAL = [
@@ -974,9 +983,11 @@ function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
     // loot on each storey
     const fy = f === 0 ? baseY + 0.17 : ly + 0.12;
     if (f > 0) hbox(0xa89a84, cx + w / 4, fy - 0.02, cz + d / 4, w / 2 - 1, 0.03, d / 2 - 1);
-    furniture(cx + w / 8, cz + d / 8, fy, w * 0.7, d * 0.7, true, PAL.accent);
+    // coffre posé avant le mobilier de l'étage
+    const tAvoid = [];
+    if (R() < 0.5) { const c = spawnChest(cx + w / 4 + rand(-1, 1), fy - 0.02, cz + rand(-d / 4, d / 4)); tAvoid.push({ x: c.x, z: c.z }); }
+    furniture(cx + w / 8, cz + d / 8, fy, w * 0.7, d * 0.7, true, PAL.accent, tAvoid);
     lootSpots.push({ x: cx + rand(0, w / 3), y: fy + 0.05, z: cz + rand(0, d / 3) });
-    if (R() < 0.5) spawnChest(cx + w / 4 + rand(-1, 1), fy - 0.02, cz + rand(-d / 4, d / 4));
   }
   // rooftop: parapet, water tank, AC units, antenna
   const topY = baseY + floors * H;
@@ -997,11 +1008,34 @@ function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
 
 function spawnChest(x, y, z) {
   const g = new THREE.Group();
-  const base = new THREE.Mesh(BOX, matC(0xc98a1c, { emissive: 0x6a3f00, emissiveIntensity: 0.4 })); base.scale.set(1.1, 0.6, 0.7); base.position.y = 0.3;
-  const lid = new THREE.Mesh(BOX, matC(0xffc93a, { emissive: 0x8a5a00, emissiveIntensity: 0.6, metalness: 0.4, roughness: 0.4 })); lid.scale.set(1.15, 0.25, 0.75); lid.position.y = 0.72;
+  const gold = matC(0xffc93a, { emissive: 0x8a5a00, emissiveIntensity: 0.6, metalness: 0.4, roughness: 0.4 });
+  const goldDark = matC(0xc98a1c, { emissive: 0x6a3f00, emissiveIntensity: 0.4 });
+  const bronze = matC(0x8a5a20, { metalness: 0.55, roughness: 0.45 });
+  const dark = matC(0x3a2410, { roughness: 0.6 });
+  const base = new THREE.Mesh(BOX, goldDark); base.scale.set(1.1, 0.6, 0.7); base.position.y = 0.3;
+  // couvercle : groupe (les détails suivent l'ouverture)
+  const lid = new THREE.Group(); lid.position.y = 0.72;
+  const lidTop = new THREE.Mesh(BOX, gold); lidTop.scale.set(1.15, 0.25, 0.75); lid.add(lidTop);
+  // chanfre avant + arête du couvercle
+  addBox(lid, 1.17, 0.1, 0.14, 0, -0.06, 0.33, gold);
+  // charnières arrière
+  addBox(lid, 0.14, 0.09, 0.1, -0.42, 0.1, -0.36, bronze);
+  addBox(lid, 0.14, 0.09, 0.1, 0.42, 0.1, -0.36, bronze);
+  // rivets dorés sur le couvercle
+  for (const rx of [-0.48, -0.16, 0.16, 0.48]) { addBox(lid, 0.07, 0.07, 0.07, rx, 0.13, 0.31, gold); addBox(lid, 0.07, 0.07, 0.07, rx, 0.13, -0.31, gold); }
+  // corps : sangles verticales + horizontales, coins renforcés
   const band = new THREE.Mesh(BOX, matC(0x5a3a12)); band.scale.set(0.16, 0.9, 0.78); band.position.y = 0.45;
+  addBox(g, 1.14, 0.07, 0.74, 0, 0.14, 0, bronze);
+  addBox(g, 1.14, 0.07, 0.74, 0, 0.56, 0, bronze);
+  for (const [cx2, cz2] of [[-0.55, -0.35], [0.55, -0.35], [-0.55, 0.35], [0.55, 0.35]]) addBox(g, 0.1, 0.64, 0.1, cx2, 0.3, cz2, bronze);
+  // plaque de serrure avant avec trou de clé
+  addBox(g, 0.32, 0.24, 0.06, 0, 0.55, 0.36, dark);
+  addBox(g, 0.07, 0.1, 0.05, 0, 0.57, 0.4, matC(0x120c04));
+  addBox(g, 0.16, 0.05, 0.05, 0, 0.66, 0.4, bronze);
+  // rivets sur le devant du corps
+  for (const rx of [-0.42, 0.42]) { addBox(g, 0.06, 0.06, 0.06, rx, 0.3, 0.36, gold); addBox(g, 0.06, 0.06, 0.06, rx, 0.6, 0.36, gold); }
   g.add(base, lid, band); g.position.set(x, y, z); g.rotation.y = rand(6.28);
-  base.castShadow = lid.castShadow = true;
+  g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
   const light = { intensity: 0, distance: 6, color: 0xffc240, y: 1.2, obj: g }; // drawn by the light pool
   scene.add(g);
   const c = { x, y, z, mesh: g, lid, light, opened: false };
@@ -1009,8 +1043,25 @@ function spawnChest(x, y, z) {
 }
 function spawnAmmoBox(x, y, z) {
   const g = new THREE.Group();
-  const b = new THREE.Mesh(BOX, matC(0x4f6b2f)); b.scale.set(0.9, 0.45, 0.55); b.position.y = 0.23; b.castShadow = true;
+  const olive = matC(0x4f6b2f, { roughness: 0.75 });
+  const oliveDark = matC(0x3d5524, { roughness: 0.75 });
+  const steel = matC(0x8a9098, { metalness: 0.6, roughness: 0.4 });
+  const b = new THREE.Mesh(BOX, olive); b.scale.set(0.9, 0.45, 0.55); b.position.y = 0.23; b.castShadow = true;
+  // couvercle légèrement bombé + sangle jaune
   const s = new THREE.Mesh(BOX, matC(0xd8c24a)); s.scale.set(0.92, 0.08, 0.57); s.position.y = 0.3;
+  addBox(g, 0.94, 0.06, 0.6, 0, 0.34, 0, oliveDark);
+  // coins métal renforcés
+  for (const [cx2, cz2] of [[-0.44, -0.26], [0.44, -0.26], [-0.44, 0.26], [0.44, 0.26]]) addBox(g, 0.08, 0.5, 0.08, cx2, 0.25, cz2, steel);
+  // poignées latérales
+  addBox(g, 0.06, 0.08, 0.2, -0.47, 0.28, 0, steel);
+  addBox(g, 0.06, 0.08, 0.2, 0.47, 0.28, 0, steel);
+  // munitions visibles : chargeurs et boîte de cartouches sur le dessus
+  addBox(g, 0.34, 0.1, 0.22, -0.18, 0.42, 0.05, matC(0x2b2f36, { metalness: 0.5, roughness: 0.5 }));
+  addBox(g, 0.3, 0.05, 0.16, 0.2, 0.4, -0.08, matC(0xa8834a));
+  const cyl = new THREE.Mesh(CYL_GEO, matC(0xd8b64a, { metalness: 0.5, roughness: 0.4 }));
+  cyl.scale.set(0.09, 0.3, 0.09); cyl.rotation.z = Math.PI / 2; cyl.position.set(0.05, 0.47, 0.14); g.add(cyl);
+  // marquage pochoir
+  addBox(g, 0.3, 0.22, 0.02, 0, 0.24, 0.29, matC(0xd8c24a, { roughness: 0.9 }));
   g.add(b, s); g.position.set(x, y, z); g.rotation.y = rand(6.28); scene.add(g);
   return { x, y, z, mesh: g, opened: false };
 }
@@ -1784,6 +1835,8 @@ const leaderboard = [];
       else r = 1.02 * (1 - (t - 0.55) / 0.45) ** 0.6 + 0.001; // dôme arrondi
       prof.push(new THREE.Vector2(r, y));
     }
+    // Ballon agrandi : tout le ballon est dans un groupe mis à l'échelle (base fixée au col).
+    const bg = new THREE.Group(); bg.position.y = 8.6; bg.scale.setScalar(1.5); g.add(bg);
     const white = matC(0xe9f7fb, { roughness: 0.42, metalness: 0.03 });
     const teal = matC(0x35c8dd, { roughness: 0.42, metalness: 0.03 });
     const tealDark = matC(0x1fa8c9, { roughness: 0.42, metalness: 0.03 });
@@ -1791,13 +1844,13 @@ const leaderboard = [];
     for (let i = 0; i < gores; i++) {
       const mat = i % 2 ? white : (i % 4 === 0 ? tealDark : teal);
       const gore = new THREE.Mesh(new THREE.LatheGeometry(prof, 4, i * gorePhi, gorePhi + 0.02), mat);
-      gore.position.y = 8.6; gore.castShadow = true; g.add(gore);
+      gore.castShadow = true; bg.add(gore);
     }
     // Bande turquoise près du col + sommet doré.
     const band = new THREE.Mesh(new THREE.TorusGeometry(0.88, 0.07, 8, 40), tealDark);
-    band.position.y = 8.85; band.rotation.x = Math.PI / 2; band.scale.set(1, 1, 1.25); g.add(band);
+    band.position.y = 0.25; band.rotation.x = Math.PI / 2; band.scale.set(1, 1, 1.25); bg.add(band);
     const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.35), gold);
-    cap.position.y = 10.88; cap.scale.set(0.5, 0.55, 0.5); g.add(cap);
+    cap.position.y = 2.28; cap.scale.set(0.5, 0.55, 0.5); bg.add(cap);
   }
   // Nacelle brûleur suspendue sous le ballon : cadre sombre + flamme émissive.
   {
@@ -2337,7 +2390,7 @@ function botThink(b, dt) {
         if (d < d1) { c3 = c2; d3 = d2; c2 = c1; d2 = d1; c1 = c; d1 = d; } else if (d < d2) { c3 = c2; d3 = d2; c2 = c; d2 = d; } else if (d < d3) { c3 = c; d3 = d; }
       }
       const best = c1 && canSee(b, c1) ? c1 : c2 && canSee(b, c2) ? c2 : c3 && canSee(b, c3) ? c3 : null;
-      if (best) { b.target = best; b.react = rand(0.8, 1.6); }
+      if (best) { b.target = best; b.react = rand(0.8, 1.6) * DIFF.react; }
     } else {
       b.seeing = canSee(b, b.target);
       if (!b.seeing) b.lostT += 0.45; else b.lostT = 0;
@@ -2392,7 +2445,7 @@ function botThink(b, dt) {
     // aim & shoot
     if (b.react <= 0 && W) {
       b.burst -= dt;
-      if (b.burst < -rand(1.2, 2.4)) b.burst = rand(0.5, 1.1);
+      if (b.burst < -rand(1.2, 2.4) * DIFF.react) b.burst = rand(0.5, 1.1);
       if (b.burst > 0 || W.melee) {
         _o.copy(b.pos); _o.y += 1.55;
         _v3.copy(tp); _v3.y += rand(0.9, 1.7);
@@ -3217,7 +3270,7 @@ function startGame() {
     b.team = Math.floor((i + 1) / TEAM_SIZE);
     b.mate = b.team === 0;
     b.jumpAt = rand(0.08, 0.92); b.think = rand(0.5); b.buildCd = 0; b.react = 0; b.strafe = 1; b.strafeT = 0; b.burst = 0; b.stuckT = 0; b.stuckN = 0; b.lastP = new THREE.Vector3(); b.lostT = 0;
-    b.skill = rand(0.6, 1.1) * (b.mate ? 1.1 : 1); b.heals = randi(0, 2); b.mats.wood = randi(60, 200); if (R() < 0.4) b.mats.stone = randi(30, 120);
+    b.skill = rand(0.45, 0.85) * (b.mate ? 1.1 : 1); b.heals = randi(0, 2); b.mats.wood = randi(60, 200); if (R() < 0.4) b.mats.stone = randi(30, 120);
     b.lootDelay = rand(3, 9); b.armed = false; b.deployH = rand(22, 75); b.diveK = rand(0.3, 1); b.lodAcc = 0; b.lodPhase = i % 4;
     bots.push(b);
     if (b.mate) mates.push(b);
@@ -3864,14 +3917,23 @@ function updateCamera(dt) {
   const rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
   let cd = camDistNow;
   if (state === 'playing' && player.alive && player.mode === 'ground') {
-    _camO.set(pivot.x + rx * shoulderNow, pivot.y, pivot.z + rz * shoulderNow); _camD.copy(d).negate();
+    // origine du raycast avec le même décalage d'épaule réduit que la position finale
+    // (utilise la distance lissée de la frame précédente), sinon le coin d'un mur
+    // côté épaule peut être raté et laissait la caméra le traverser.
+    const shRay = shoulderNow * Math.min(1, camColDist / 2.5);
+    _camO.set(pivot.x + rx * shRay, pivot.y, pivot.z + rz * shRay); _camD.copy(d).negate();
     raycaster.set(_camO, _camD); raycaster.far = cd + 0.3; raycaster.near = 0;
     const hs = raycaster.intersectObjects(rayTargets, false);
-    for (const h of hs) { const ud = h.object.userData; if (ud.struct && ud.struct.alive) { cd = Math.max(0.6, h.distance - 0.3); break; } }
+    // Mur collé : CH_R (0.42 m) garantit que la caméra reste devant la face du mur
+    // (le joueur ne peut pas s'approcher plus près que son rayon de collision).
+    for (const h of hs) { const ud = h.object.userData; if (ud.struct && ud.struct.alive) { cd = Math.max(0.42, h.distance - 0.3); break; } }
   }
   camColDist = cd < camColDist ? cd : lerp(camColDist, cd, Math.min(1, dt * 4));
   cd = Math.min(cd, camColDist);
-  camera.position.set(pivot.x - d.x * cd + rx * shoulderNow, pivot.y - d.y * cd, pivot.z - d.z * cd + rz * shoulderNow);
+  // caméra très proche (mur derrière le joueur) : on réduit aussi le décalage d'épaule
+  // pour que le joueur reste bien dans le cadre au lieu de sortir de l'écran.
+  const shEff = shoulderNow * Math.min(1, cd / 2.5);
+  camera.position.set(pivot.x - d.x * cd + rx * shEff, pivot.y - d.y * cd, pivot.z - d.z * cd + rz * shEff);
   const th = terrainH(camera.position.x, camera.position.z) + 0.4;
   if (camera.position.y < th) camera.position.y = th;
   camTarget.copy(camera.position).add(d);
@@ -4403,7 +4465,7 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests,  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); } };
+window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes,  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); } };
 
 // Auto-start the match once everything is built
 refreshLabels();
