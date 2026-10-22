@@ -695,7 +695,9 @@ function wallWithOpenings(s, ly, H, T, ops, hex, o) {
 // =====================================================================
 const doors = [];
 function addDoor(s, ly, op, T, hex) {
-  const dw = op.w - 0.18, dh = Math.min(op.y1 - 0.14, 2.4);
+  // la porte remplit l'ouverture (juste le jeu fonctionnel de 4 cm) : plus de trou
+  // ni au-dessus ni sur les côtés entre la porte et le mur.
+  const dw = op.w - 0.04, dh = op.y1 - 0.04;
   const hingeU = op.u - dw / 2;
   const g = new THREE.Group();
   const hinge = s.ax === 'x' ? [s.x + hingeU, s.z] : [s.x, s.z + hingeU];
@@ -722,7 +724,7 @@ function addDoor(s, ly, op, T, hex) {
   scene.add(g);
   const d = {
     group: g, panel, open: false, broken: false, angle: 0, hx: hinge[0], hz: hinge[1], ly,
-    sign: s.ax === 'x' ? -s.out : s.out, col: null,
+    ax: s.ax, dw, sign: s.ax === 'x' ? -s.out : s.out, col: null,
   };
   d.col = addCollider(s.ax === 'x'
     ? { type: 'box', minX: hinge[0] - 0.05, maxX: hinge[0] + dw + 0.05, minY: ly, maxY: ly + dh, minZ: s.z - 0.25, maxZ: s.z + 0.25 }
@@ -758,8 +760,31 @@ function updateDoors(dt) {
         if (Math.hypot(c.pos.x - d.hx, c.pos.z - d.hz) < 2.4 && Math.abs(c.pos.y - d.ly) < 3) { d.open = true; d.col.passable = true; break; }
       }
     }
-    const target = d.open ? d.sign * 1.85 : 0;
-    d.angle += (target - d.angle) * Math.min(1, dt * 9);
+    // EN COURS VERS LA PORTE : elle s'enfonce d'elle-même, pas besoin d'appuyer sur E.
+    // Distance au VANTAIL complet (segment gond -> bord opposé), pas seulement au gond :
+    // courir sur le milieu ou l'autre bord de la porte marche aussi bien.
+    if (!d.open && !matchOver) {
+      for (const c of chars) {
+        if (!c.alive || c.mode === 'bus' || c.mode === 'drive') continue;
+        if (Math.abs(c.pos.y - d.ly) > 3) continue;
+        // extrémités du vantail fermé
+        const ex = d.ax === 'x' ? d.hx + d.dw : d.hx, ez = d.ax === 'x' ? d.hz : d.hz + d.dw;
+        const ux = ex - d.hx, uz = ez - d.hz, n2 = ux * ux + uz * uz || 1;
+        const t = clamp(((c.pos.x - d.hx) * ux + (c.pos.z - d.hz) * uz) / n2, 0, 1);
+        const px = d.hx + ux * t, pz = d.hz + uz * t;
+        const dx = px - c.pos.x, dz = pz - c.pos.z, dist = Math.hypot(dx, dz);
+        if (dist > 1.0) continue;
+        if (Math.hypot(c.vel.x, c.vel.z) < 3.5) continue;              // il faut courir
+        if (c.vel.x * dx + c.vel.z * dz <= 0) continue;                // et foncer dessus
+        d.open = true; d.col.passable = true; d.pushT = 0.5;            // porte enfoncée
+        sfxAt('door', _v1.set(d.hx, d.ly + 1, d.hz), 1);
+        break;
+      }
+    }
+    // ouverture enfoncée : grand écart rapide, puis retour à l'ouverture normale
+    let target = d.open ? d.sign * 1.85 : 0, speed = 9;
+    if (d.pushT > 0) { d.pushT -= dt; target = d.sign * 2.7; speed = 22; }
+    d.angle += (target - d.angle) * Math.min(1, dt * speed);
     if (Math.abs(target - d.angle) < 0.01) d.angle = target;
     d.group.rotation.y = d.angle;
   }
@@ -779,7 +804,9 @@ function windowFrame(s, ly, op, T, frame, parent) {
 function gableRoof(cx, cz, topY, w, d, roofH, bodyHex, roofHex, opts = {}) {
   const alongZ = w <= d; // ridge direction follows the long side
   const span = (alongZ ? w : d) + 0.5, len = (alongZ ? d : w) + 0.5, hs = span / 2;
-  hdeco(PRISM_GEO, bodyHex, cx, topY, cz, alongZ ? span : len, roofH, alongZ ? len : span, 0, alongZ ? 0 : Math.PI / 2, 0, opts.parent);
+  // UN SEUL TOIT : le prisme lui-même, peint en tuiles. Plus de pentes ni de
+  // bardeaux superposés qui se mettaient à flotter au-dessus de la maison.
+  hdeco(PRISM_GEO, roofHex, cx, topY, cz, alongZ ? span : len, roofH, alongZ ? len : span, 0, alongZ ? 0 : Math.PI / 2, 0, opts.parent);
   const th = Math.atan2(roofH, hs), pl = Math.hypot(hs, roofH) + 0.55, nx = Math.sin(th) * 0.1, ny = Math.cos(th) * 0.1;
   // Physique du toit : deux pentes marchables, chacune bornée à sa moitié de toit
   // (sinon slopeH se clampe à la hauteur du faîte et le joueur flotte au-dessus de la pente).
@@ -800,33 +827,8 @@ function gableRoof(cx, cz, topY, w, d, roofH, bodyHex, roofHex, opts = {}) {
     opts.parent.subs = opts.parent.subs || [];
     opts.parent.subs.push(s1, s2);
   }
-  for (const sg of [-1, 1]) {
-    const cxl = -sg * hs / 2 - sg * nx, cyl = roofH / 2 + ny;
-    if (alongZ) hdeco(BOX, roofHex, cx + cxl, topY + cyl, cz, pl, 0.2, len + 0.7, 0, 0, sg * th, opts.parent);
-    else hdeco(BOX, roofHex, cx, topY + cyl, cz + cxl, len + 0.7, 0.2, pl, -sg * th, 0, 0, opts.parent);
-    if (opts.snow) {
-      const s2 = 0.16;
-      if (alongZ) hdeco(BOX, 0xf8fbff, cx + cxl - sg * Math.sin(th) * s2, topY + cyl + Math.cos(th) * s2, cz, pl * 0.9, 0.14, len + 0.5, 0, 0, sg * th, opts.parent);
-      else hdeco(BOX, 0xf8fbff, cx, topY + cyl + Math.cos(th) * s2, cz + cxl - sg * Math.sin(th) * s2, len + 0.5, 0.14, pl * 0.9, -sg * th, 0, 0, opts.parent);
-    }
-  }
-  // ridge cap
+  // faîte du toit + gouttières + descentes
   hbox(opts.trim ?? 0x5a3a24, cx, topY + roofH - 0.05, cz, alongZ ? 0.35 : len + 0.8, 0.28, alongZ ? len + 0.8 : 0.35, opts.parent);
-  // rangées de bardeaux : strates qui débordent légèrement, comme les toits de Fortnite
-  const rows = Math.max(2, Math.round(roofH / 0.55));
-  const shadC = opts.shingles ?? roofHex;
-  for (let r = 0; r < rows; r++) {
-    const t0 = r / rows, t1 = (r + 1) / rows; // 0 = base (eaves), 1 = ridge
-    const yy = topY + roofH * (1 - t0) + 0.02;
-    const spanR = span * (1 - t0) + 0.35;      // plus large en bas, plus étroit vers le faîtage
-    const thR = Math.atan2(roofH * (t1 - t0), spanR / 2);
-    for (const sg of [-1, 1]) {
-      const cxl = -sg * spanR / 4, cyl = roofH * (1 - (t0 + t1) / 2) + ny;
-      if (alongZ) hdeco(BOX, shadC, cx + cxl, yy + cyl, cz, spanR / 2 + 0.12, 0.12, len + 0.55, 0, 0, sg * thR, opts.parent);
-      else hdeco(BOX, shadC, cx, yy + cyl, cz + cxl, len + 0.55, 0.12, spanR / 2 + 0.12, -sg * thR, 0, 0, opts.parent);
-    }
-  }
-  // gouttières + descentes aux deux extrémités du toit
   const gutC = 0x9aa2ab;
   if (alongZ) {
     hbox(gutC, cx, topY + 0.15, cz - len / 2 - 0.05, span + 0.4, 0.24, 0.3, opts.parent);
@@ -1105,9 +1107,17 @@ function spawnChest(x, y, z) {
   const goldDark = matC(0xc98a1c, { emissive: 0x6a3f00, emissiveIntensity: 0.4 });
   const bronze = matC(0x8a5a20, { metalness: 0.55, roughness: 0.45 });
   const dark = matC(0x3a2410, { roughness: 0.6 });
-  const base = new THREE.Mesh(BOX, goldDark); base.scale.set(1.1, 0.6, 0.7); base.position.y = 0.3;
+  // CAISSON CREUX : 4 parois + fond, intérieur vraiment vide et visible
+  // (les faces intérieures des parois sont rendues : c'est un vrai volume creux).
+  addBox(g, 1.1, 0.12, 0.7, 0, 0.06, 0, goldDark);                          // fond
+  addBox(g, 1.12, 0.62, 0.08, 0, 0.43, 0.31, goldDark);                     // paroi avant
+  addBox(g, 1.12, 0.62, 0.08, 0, 0.43, -0.31, goldDark);                    // paroi arrière
+  addBox(g, 0.08, 0.62, 0.54, 0.52, 0.43, 0, goldDark);                     // paroi droite
+  addBox(g, 0.08, 0.62, 0.54, -0.52, 0.43, 0, goldDark);                    // paroi gauche
+  // fond intérieur sombre (le vide du coffre une fois vidé)
+  addBox(g, 0.94, 0.06, 0.54, 0, 0.15, 0, matC(0x241708, { roughness: 0.95 }));
   // couvercle : groupe (les détails suivent l'ouverture)
-  const lid = new THREE.Group(); lid.position.y = 0.72;
+  const lid = new THREE.Group(); lid.position.y = 0.74;
   const lidTop = new THREE.Mesh(BOX, gold); lidTop.scale.set(1.15, 0.25, 0.75); lid.add(lidTop);
   // chanfre avant + arête du couvercle
   addBox(lid, 1.17, 0.1, 0.14, 0, -0.06, 0.33, gold);
@@ -1116,10 +1126,7 @@ function spawnChest(x, y, z) {
   addBox(lid, 0.14, 0.09, 0.1, 0.42, 0.1, -0.36, bronze);
   // rivets dorés sur le couvercle
   for (const rx of [-0.48, -0.16, 0.16, 0.48]) { addBox(lid, 0.07, 0.07, 0.07, rx, 0.13, 0.31, gold); addBox(lid, 0.07, 0.07, 0.07, rx, 0.13, -0.31, gold); }
-  // corps : sangles verticales + horizontales, coins renforcés
-  const band = new THREE.Mesh(BOX, matC(0x5a3a12)); band.scale.set(0.16, 0.9, 0.78); band.position.y = 0.45;
-  addBox(g, 1.14, 0.07, 0.74, 0, 0.14, 0, bronze);
-  addBox(g, 1.14, 0.07, 0.74, 0, 0.56, 0, bronze);
+  // corps : coins renforcés extérieurs (rien ne traverse l'intérieur)
   for (const [cx2, cz2] of [[-0.55, -0.35], [0.55, -0.35], [-0.55, 0.35], [0.55, 0.35]]) addBox(g, 0.1, 0.64, 0.1, cx2, 0.3, cz2, bronze);
   // plaque de serrure avant avec trou de clé
   addBox(g, 0.32, 0.24, 0.06, 0, 0.55, 0.36, dark);
@@ -1127,7 +1134,7 @@ function spawnChest(x, y, z) {
   addBox(g, 0.16, 0.05, 0.05, 0, 0.66, 0.4, bronze);
   // rivets sur le devant du corps
   for (const rx of [-0.42, 0.42]) { addBox(g, 0.06, 0.06, 0.06, rx, 0.3, 0.36, gold); addBox(g, 0.06, 0.06, 0.06, rx, 0.6, 0.36, gold); }
-  g.add(base, lid, band); g.position.set(x, y, z); g.rotation.y = rand(6.28);
+  g.add(lid); g.position.set(x, y, z); g.rotation.y = rand(6.28);
   g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
   const light = { intensity: 0, distance: 6, color: 0xffc240, y: 1.2, obj: g }; // drawn by the light pool
   scene.add(g);
@@ -1139,24 +1146,40 @@ function spawnAmmoBox(x, y, z) {
   const olive = matC(0x4f6b2f, { roughness: 0.75 });
   const oliveDark = matC(0x3d5524, { roughness: 0.75 });
   const steel = matC(0x8a9098, { metalness: 0.6, roughness: 0.4 });
-  const b = new THREE.Mesh(BOX, olive); b.scale.set(0.9, 0.45, 0.55); b.position.y = 0.23; b.castShadow = true;
-  // couvercle légèrement bombé + sangle jaune
-  const s = new THREE.Mesh(BOX, matC(0xd8c24a)); s.scale.set(0.92, 0.08, 0.57); s.position.y = 0.3;
-  addBox(g, 0.94, 0.06, 0.6, 0, 0.34, 0, oliveDark);
+  // CAISSE CREUSE : 4 parois + fond, intérieur vide visible une fois ouverte
+  addBox(g, 0.9, 0.1, 0.55, 0, 0.05, 0, olive);                       // fond
+  addBox(g, 0.92, 0.4, 0.07, 0, 0.3, 0.24, olive);                    // paroi avant
+  addBox(g, 0.92, 0.4, 0.07, 0, 0.3, -0.24, olive);                   // paroi arrière
+  addBox(g, 0.07, 0.4, 0.41, 0.415, 0.3, 0, olive);                  // paroi droite
+  addBox(g, 0.07, 0.4, 0.41, -0.415, 0.3, 0, olive);                 // paroi gauche
+  addBox(g, 0.76, 0.08, 0.4, 0, 0.15, 0, matC(0x1a2010, { roughness: 0.95 })); // fond intérieur sombre (cavité vide)
+  // couvercle articulé à l'arrière (s'ouvre comme le coffre)
+  const lid = new THREE.Group(); lid.position.set(0, 0.5, -0.24);
+  addBox(lid, 0.94, 0.08, 0.6, 0, 0, 0.28, oliveDark);
+  addBox(lid, 0.96, 0.05, 0.14, 0, 0.065, 0.28, matC(0xd8c24a));      // sangle jaune
+  // munitions visibles sur le dessus (disparaissent quand on vide la caisse)
+  const tops = new THREE.Group(); tops.position.y = 0.5;
+  addBox(tops, 0.34, 0.1, 0.22, -0.18, 0.06, 0.05, matC(0x2b2f36, { metalness: 0.5, roughness: 0.5 }));
+  addBox(tops, 0.3, 0.05, 0.16, 0.2, 0.05, -0.08, matC(0xa8834a));
+  const cyl = new THREE.Mesh(CYL_GEO, matC(0xd8b64a, { metalness: 0.5, roughness: 0.4 }));
+  cyl.scale.set(0.09, 0.3, 0.09); cyl.rotation.z = Math.PI / 2; cyl.position.set(0.05, 0.1, 0.14); tops.add(cyl);
   // coins métal renforcés
   for (const [cx2, cz2] of [[-0.44, -0.26], [0.44, -0.26], [-0.44, 0.26], [0.44, 0.26]]) addBox(g, 0.08, 0.5, 0.08, cx2, 0.25, cz2, steel);
   // poignées latérales
   addBox(g, 0.06, 0.08, 0.2, -0.47, 0.28, 0, steel);
   addBox(g, 0.06, 0.08, 0.2, 0.47, 0.28, 0, steel);
-  // munitions visibles : chargeurs et boîte de cartouches sur le dessus
-  addBox(g, 0.34, 0.1, 0.22, -0.18, 0.42, 0.05, matC(0x2b2f36, { metalness: 0.5, roughness: 0.5 }));
-  addBox(g, 0.3, 0.05, 0.16, 0.2, 0.4, -0.08, matC(0xa8834a));
-  const cyl = new THREE.Mesh(CYL_GEO, matC(0xd8b64a, { metalness: 0.5, roughness: 0.4 }));
-  cyl.scale.set(0.09, 0.3, 0.09); cyl.rotation.z = Math.PI / 2; cyl.position.set(0.05, 0.47, 0.14); g.add(cyl);
   // marquage pochoir
   addBox(g, 0.3, 0.22, 0.02, 0, 0.24, 0.29, matC(0xd8c24a, { roughness: 0.9 }));
-  g.add(b, s); g.position.set(x, y, z); g.rotation.y = rand(6.28); scene.add(g);
-  return { x, y, z, mesh: g, opened: false };
+  g.add(lid, tops); g.position.set(x, y, z); g.rotation.y = rand(6.28); scene.add(g);
+  return { x, y, z, mesh: g, lid, tops, opened: false };
+}
+// ouvre la caisse de munitions : le couvercle bascule, l'intérieur vide reste en place
+function openAmmoBox(c) {
+  if (c.opened) return;
+  c.opened = true;
+  c.lid.rotation.x = -1.45;
+  c.tops.visible = false; // les munitions du dessus sont emportées
+  sfxAt('pickup', _v1.set(c.x, c.y + 0.3, c.z), 0.8);
 }
 
 // Cars (metal source)
@@ -1963,27 +1986,30 @@ function cableBetween(parent, x1, y1, z1, x2, y2, z2, r, mat) {
   // Feux arrière rouges visibles pendant le vol.
   for (const x of [-1.3, 1.3]) addBox(g, 0.16, 0.3, 0.08, x, 0.15, 4.66, matC(0xff2a2a, { emissive: 0xd01010, emissiveIntensity: 1.6 }));
   // Grand ballon captif légèrement ovale : même modèle que les largages, en plus grand.
+  // Placé haut : la nacelle accroche la jupe du ballon, le bus pend bien dessous.
   {
     const ballon = makeBallon(4.4);
-    ballon.position.y = 10.4; g.add(ballon);
+    ballon.position.y = 13.6; g.add(ballon);
+    // jupe (bouche) du ballon en coordonnées du groupe : 13.6 - 4.4*0.9*1.15 = ~9.05
   }
-  // Nacelle brûleur suspendue sous le ballon : cadre sombre + flamme émissive.
+  // Nacelle brûleur juste sous la bouche du ballon : cadre sombre + flamme émissive.
   {
     const dark = matC(0x2a2f38, { roughness: 0.6, metalness: 0.35 });
-    addBox(g, 1.35, 0.5, 1.35, 0, 4.5, 0, dark);
-    addBox(g, 1.0, 0.55, 1.0, 0, 4.9, 0, dark);
+    addBox(g, 1.35, 0.5, 1.35, 0, 8.35, 0, dark);
+    addBox(g, 1.0, 0.55, 1.0, 0, 8.75, 0, dark);
     const flame = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.8, 10), matC(0xffa030, { emissive: 0xff7a10, emissiveIntensity: 2.2, roughness: 0.4 }));
-    flame.position.set(0, 5.45, 0); g.add(flame);
-    // Haubans nacelle -> bouche du ballon, et cadre de fixation sur le toit du bus.
+    flame.position.set(0, 9.3, 0); g.add(flame);
+    // Haubans : bords de la nacelle -> jupe du ballon (attaches réelles sur la bouche).
     for (const [x, z] of [[-0.62, -0.62], [0.62, -0.62], [-0.62, 0.62], [0.62, 0.62]]) {
-      cableBetween(g, x * 0.7, 4.85, z * 0.7, x * 2.7, 5.7, z * 2.7, 0.03, steel);
+      cableBetween(g, x * 0.55, 8.7, z * 0.55, x * 2.5, 9.1, z * 2.5, 0.03, steel);
     }
     const frame = matC(0x6a4a28, { roughness: 0.7 });
     addBox(g, 3.2, 0.16, 6.4, 0, 1.62, 0, frame);
     for (const [x, z] of [[-1.5, -3.0], [1.5, -3.0], [-1.5, 3.0], [1.5, 3.0]]) addBox(g, 0.14, 0.14, 0.14, x, 1.75, z, steel);
-    // Quatre câbles d'acier : cadre du toit -> nacelle.
+    // Quatre longs câbles d'acier : cadre du toit -> coins de la nacelle (ancrages
+    // réellement DANS la nacelle, pas à côté).
     for (const [x, z] of [[-1.5, -3.0], [1.5, -3.0], [-1.5, 3.0], [1.5, 3.0]]) {
-      cableBetween(g, x, 1.75, z, x * 0.55, 4.45, z * 0.55, 0.045, steel);
+      cableBetween(g, x, 1.75, z, Math.sign(x) * 0.55, 8.2, Math.sign(z) * 0.55, 0.045, steel);
     }
   }
   // Emblème doré sur les flancs de la nacelle.
@@ -1992,7 +2018,7 @@ function cableBetween(parent, x1, y1, z1, x2, y2, z2, r, mat) {
   starShape.closePath();
   const starGeo = new THREE.ShapeGeometry(starShape);
   const starMat = matC(0xffdf43, { side: THREE.DoubleSide, emissive: 0x7c5300, emissiveIntensity: 0.3 });
-  for (const side of [-1, 1]) { const star = new THREE.Mesh(starGeo, starMat); star.position.set(side * 0.69, 5.55, 0); star.rotation.y = side * Math.PI / 2; g.add(star); }
+  for (const side of [-1, 1]) { const star = new THREE.Mesh(starGeo, starMat); star.position.set(side * 0.69, 8.95, 0); star.rotation.y = side * Math.PI / 2; g.add(star); }
   g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
   g.visible = false; scene.add(g); bus.mesh = g;
 }
@@ -3430,8 +3456,8 @@ function startGame() {
   const a = rand(Math.PI * 2), off = rand(-70, 70);
   const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
   const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(off);
-  bus.start.copy(dir).multiplyScalar(-WORLD_R - 20).add(perp).setY(115);
-  bus.end.copy(dir).multiplyScalar(WORLD_R + 20).add(perp).setY(115);
+  bus.start.copy(dir).multiplyScalar(-WORLD_R - 20).add(perp).setY(240);
+  bus.end.copy(dir).multiplyScalar(WORLD_R + 20).add(perp).setY(240);
   bus.dir.copy(dir); bus.t = 0; bus.active = true; bus.mesh.visible = true;
   bus.mesh.rotation.y = Math.atan2(-dir.x, -dir.z); // le pare-brise pointe dans le sens du vol
   camYaw = Math.atan2(-dir.x, -dir.z) - 0.6; camPitch = -0.35;
@@ -3556,7 +3582,7 @@ function interact() {
   else if (t.type === 'booth') setDisguise(player, !player.disguise);
   else if (t.type === 'drop') openDrop(t.c);
   else if (t.type === 'vehicle') enterVehicle(player, t.v);
-  else if (t.type === 'ammo') { t.c.opened = true; addXP('Caisse de munitions', 20); scene.remove(t.c.mesh); for (let i = 0; i < 2; i++) { const id = pick(['ar', 'smg', 'shotgun', 'sniper']); spawnLoot(ammoFor(id), t.c.x, t.c.y + 0.5, t.c.z); } sfx('pickup', 0.5); }
+  else if (t.type === 'ammo') { openAmmoBox(t.c); addXP('Caisse de munitions', 20); for (let i = 0; i < 2; i++) { const id = pick(['ar', 'smg', 'shotgun', 'sniper']); spawnLoot(ammoFor(id), t.c.x, t.c.y + 0.5, t.c.z); } }
   else pickupItem(player, t.L);
 }
 function openChest(c, by = player) {
@@ -3828,6 +3854,8 @@ function updateChar(ch, dt) {
   ch.cool -= dt; ch.bloom = Math.max(0, ch.bloom - dt * 0.08);
   if (ch.reloading > 0) { ch.reloading -= dt; if (ch.reloading <= 0) { ch.reloading = 0; finishReload(ch); } }
   if (ch.swing > 0) ch.swing = Math.max(0, ch.swing - dt * 3.5);
+  // particules vertes de soin pendant l'utilisation d'un bandage / d'une potion
+  if (ch.using && ch.alive) { ch.healFxT = (ch.healFxT || 0) - dt; if (ch.healFxT <= 0) { ch.healFxT = 0.16; burst(_v1.set(ch.pos.x, ch.pos.y + 1.15, ch.pos.z), 0x5fe35f, 2, 1.4, 0.1, 0.55, 0.9); } }
   if (!ch.isPlayer) {
     if (ch.mode === 'bus') {
       if (bus.t / bus.dur >= ch.jumpAt) jumpFromBus(ch);
@@ -3889,13 +3917,25 @@ function animateChar(ch, dt) {
   const sw = Math.sin(ch.animT) * Math.min(1, hs / 6) * 0.8;
   P.torso.rotation.set(0, 0, 0);
   if (ch.mode === 'fall') {
-    m.rotation.x = -1.1; P.hipL.rotation.x = 0.3 + Math.sin(ch.animT * 2) * 0.1; P.hipR.rotation.x = 0.3 - Math.sin(ch.animT * 2) * 0.1;
-    P.shL.rotation.set(0, 0, -1.3); P.shR.rotation.set(0, 0, 1.3);
+    // CHUTE LIBRE : corps à plat ventre, bras et jambes écartés qui flottent,
+    // plongeon plus vertical quand on fonce vers le bas.
+    const fast = Math.min(1, Math.max(0, (-ch.vel.y - 24) / 30));
+    m.rotation.x = -1.1 - fast * 0.25;
+    const flap = Math.sin(ch.animT * 2) * 0.12;
+    P.hipL.rotation.x = 0.35 + flap; P.hipR.rotation.x = 0.35 - flap;
+    P.shL.rotation.set(0, 0, -1.35 - flap * 0.5); P.shR.rotation.set(0, 0, 1.35 + flap * 0.5);
+    P.head.rotation.set(0.3, 0, 0);
     return;
   }
   if (ch.mode === 'glide') {
-    m.rotation.x = 0; P.hipL.rotation.x = 0.4; P.hipR.rotation.x = 0.2;
-    P.shL.rotation.set(0, 0, -2.75); P.shR.rotation.set(0, 0, 2.75);
+    // PARACHUTE : suspendu sous la toile, jambes ballantes, léger balancement
+    m.rotation.x = 0;
+    const swing = Math.sin(gameT * 1.3) * 0.07;
+    m.rotation.z = swing;
+    P.hipL.rotation.x = 0.45 + Math.sin(gameT * 1.8) * 0.08; P.hipR.rotation.x = 0.25 - Math.sin(gameT * 1.8) * 0.08;
+    P.shL.rotation.set(0, 0, -2.9); P.shR.rotation.set(0, 0, 2.9);
+    P.head.rotation.set(-0.25, 0, 0);
+    if (ch.parts.glider) { ch.parts.glider.rotation.z = -swing * 0.6; ch.parts.glider.rotation.x = Math.sin(gameT * 0.9) * 0.04; }
     return;
   }
   m.rotation.x = 0;
@@ -3917,20 +3957,31 @@ function animateChar(ch, dt) {
     P.shR.rotation.set(ang, 0, 0);
     P.shL.rotation.set(-sw * 0.6, 0, 0);
   } else if (it && it.kind === 'weapon') {
-    let rel = 0, tilt = 0, low = 0, k = 0;
+    let rel = 0, tilt = 0, low = 0, k = 0, eq = 0;
     if (ch.reloading > 0) { const tot = WEAPONS[it.id].reload * RAR[it.rarity].reload; const rp = 1 - ch.reloading / tot; k = Math.sin(clamp(rp, 0, 1) * Math.PI); rel = k * 0.35; tilt = k * 0.9; }
-    if (ch.equipT > 0) low = (ch.equipT / (ch.equipDur || 0.3)) * 1.2;
+    // CHANGEMENT D'ARME : l'arme descend le long de la cuisse, pivote (on la
+    // retourne en main) puis remonte en position de tir.
+    if (ch.equipT > 0) { low = (ch.equipT / (ch.equipDur || 0.3)) * 1.2; eq = Math.sin(clamp(1 - ch.equipT / (ch.equipDur || 0.3), 0, 1) * Math.PI); }
     // recul visible à chaque tir (joueur ET bots) : le bras et l'arme partent en arrière
     const kick = (ch.shotKick || 0) * 0.32;
     // balancement de l'arme en marchant (comme dans la vidéo) : le canon suit le pas
     const sway = sw * 0.15;
-    P.shR.rotation.set(Math.PI / 2 + aimP - rel - low + kick - sway, 0, 0.0);
+    P.shR.rotation.set(Math.PI / 2 + aimP - rel - low + kick - sway, 0, eq * 0.25);
     if (k > 0) P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - k * 1.5, 0, -0.55 + k * 0.45); // left hand goes to the belt for a new mag
-    else P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - low + kick - sway, 0, -0.55);
-    if (ch.held) { ch.held.rotation.z = tilt + sw * 0.06; ch.held.position.z = kick * 0.3; ch.held.position.y = -sway * 0.2; }
+    else P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - low + kick - sway, 0, -0.55 - eq * 0.2);
+    if (ch.held) { ch.held.rotation.z = tilt + sw * 0.06; ch.held.rotation.x = eq * 0.8; ch.held.position.z = kick * 0.3; ch.held.position.y = -sway * 0.2; }
   } else if (it) {
-    const u = ch.using ? Math.sin(gameT * 10) * 0.2 : 0;
-    P.shR.rotation.set(1.2 + u, 0, 0); P.shL.rotation.set(1.0 - u, 0, -0.4);
+    if (ch.using) {
+      // SOIN : l'objet remonte devant le torse, la tête s'incline dessus,
+      // petit tremblement pendant l'application + particules vertes (updateChar).
+      P.shR.rotation.set(1.85 + Math.sin(gameT * 9) * 0.06, 0, -0.3);
+      P.shL.rotation.set(1.6 - Math.sin(gameT * 9) * 0.06, 0, 0.3);
+      P.head.rotation.set(0.3, 0, 0);
+      if (ch.held) { ch.held.rotation.z = Math.sin(gameT * 8) * 0.08; }
+    } else {
+      const u = Math.sin(gameT * 10) * 0.2;
+      P.shR.rotation.set(1.2 + u, 0, 0); P.shL.rotation.set(1.0 - u, 0, -0.4);
+    }
   } else { P.shR.rotation.set(-sw * 0.6, 0, 0); P.shL.rotation.set(sw * 0.6, 0, 0); }
   if (buildMode && ch.isPlayer) { P.shR.rotation.set(1.0, 0, 0); P.shL.rotation.set(1.0, 0, -0.3); }
   if (ch.crouch && ch.slideT > 0) { m.position.y -= 0.55; P.hipL.rotation.x = 1.25; P.hipR.rotation.x = 0.9; P.torso.rotation.x = -0.45; }
@@ -4508,9 +4559,19 @@ function updateDayNight(dt) {
 // =====================================================================
 const clock = new THREE.Clock();
 let frameN = 0;
-const FULL_D = LOWQ ? 55 : HIGHQ ? 95 : 75, FULL_D2 = FULL_D * FULL_D, SHADOW_D2 = (HIGHQ ? 60 : 40) ** 2, LOD_D2 = 110 * 110, IMP_D2 = (260 * SET.viewDist) ** 2;
-// Far characters are drawn as one instanced mesh (one draw call for all of them)
-const impGeo = mergeGeometries([new THREE.CapsuleGeometry(0.42, 1.0, 2, 6).translate(0, 0.95, 0), new THREE.SphereGeometry(0.36, 6, 4).translate(0, 2.0, 0)]);
+// Persos visibles de loin : maillage complet jusqu'à ~105 m (au lieu de 75)
+const FULL_D = LOWQ ? 70 : HIGHQ ? 130 : 105, FULL_D2 = FULL_D * FULL_D, SHADOW_D2 = (HIGHQ ? 60 : 40) ** 2, LOD_D2 = 110 * 110, IMP_D2 = (650 * SET.viewDist) ** 2;
+// Silhouettes lointaines : formes humanoïdes à la vraie taille du perso (~1,8 m :
+// jambes, torse, bras, tête) dans un seul mesh instancié (un draw call).
+// Visibles jusqu'à 650 m : même à la lunette du sniper (portée 600), on voit les persos.
+const impGeo = mergeGeometries([
+  new THREE.BoxGeometry(0.16, 0.85, 0.16).translate(-0.13, 0.425, 0),
+  new THREE.BoxGeometry(0.16, 0.85, 0.16).translate(0.13, 0.425, 0),
+  new THREE.BoxGeometry(0.52, 0.62, 0.3).translate(0, 1.16, 0),
+  new THREE.BoxGeometry(0.14, 0.55, 0.14).translate(-0.35, 1.12, 0),
+  new THREE.BoxGeometry(0.14, 0.55, 0.14).translate(0.35, 1.12, 0),
+  new THREE.SphereGeometry(0.19, 6, 5).translate(0, 1.66, 0),
+]);
 const impIM = new THREE.InstancedMesh(impGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), 128);
 impIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); impIM.frustumCulled = false; impIM.count = 0; scene.add(impIM);
 const IMP_COLS = [0xff6a3d, 0x3fa9ff, 0xffd23f, 0x5fe35f, 0xc27bff, 0xff4d8a, 0x40e0d0, 0xffffff];
@@ -4518,7 +4579,7 @@ function updateImpostors() {
   let n = 0;
   for (const c of chars) {
     if (c.isPlayer || !c.alive || c.mode === 'bus' || c.mode === 'drive' || c.camD2 < FULL_D2 || c.camD2 > IMP_D2 || n >= 128) continue;
-    dummy.position.copy(c.pos); dummy.rotation.set(c.mode === 'fall' ? -1.1 : 0, c.yaw, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+    dummy.position.copy(c.pos); dummy.rotation.set(c.mode === 'fall' ? -1.1 : 0, c.yaw, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); // silhouette humanoïde à taille réelle
     impIM.setMatrixAt(n, dummy.matrix);
     if (c.impC === undefined) c.impC = IMP_COLS[chars.indexOf(c) % IMP_COLS.length];
     impIM.setColorAt(n, _c.set(c.team === 0 ? 0x5fe3ff : c.impC));

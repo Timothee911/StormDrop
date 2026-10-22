@@ -261,6 +261,37 @@ export function makeGlider(id = 'default') {
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
+// Parachute de descente : toile en demi-sphère à rayures + suspentes vers
+// les épaules. Utilise les couleurs du planeur choisi (cosmétique conservée).
+export function makeParachute(id = 'default') {
+  const G = GLIDERS[id] || GLIDERS.default;
+  const g = new THREE.Group();
+  const segs = 8;
+  for (let i = 0; i < segs; i++) {
+    const gore = new THREE.Mesh(
+      new THREE.SphereGeometry(2.3, 3, 8, i / segs * Math.PI * 2, Math.PI * 2 / segs, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: i % 2 ? G.c2 : G.c1, side: THREE.DoubleSide, roughness: 0.8 })
+    );
+    gore.position.y = 5.2; g.add(gore);
+  }
+  // bonnet central + cordon de suspension
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.5, 8), mat(0x222831)); cap.position.y = 5.35; g.add(cap);
+  const line = (x1, y1, z1, x2, y2, z2) => {
+    const a = new THREE.Vector3(x1, y1, z1), b = new THREE.Vector3(x2, y2, z2), d = b.clone().sub(a);
+    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, d.length(), 4), mat(0x222831));
+    l.position.copy(a).addScaledVector(d, 0.5); l.lookAt(b); l.rotateX(Math.PI / 2); g.add(l);
+  };
+  // 8 suspentes du bord de la toile vers le harnais au-dessus de la tête
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2;
+    line(Math.cos(a) * 2.25, 5.25, Math.sin(a) * 2.25, 0, 2.05, 0);
+  }
+  // deux sangles vers les épaules
+  line(0, 2.05, 0, 0.42, 1.55, 0);
+  line(0, 2.05, 0, -0.42, 1.55, 0);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
 export function makeCharMesh(cos) {
   const s = SKINS[cos.skin] || SKINS.recrue;
   const g = new THREE.Group();
@@ -322,7 +353,7 @@ export function makeCharMesh(cos) {
   torso.add(shL, shR);
   const hand = new THREE.Group(); hand.position.set(0, -0.74, 0); hand.rotation.x = -Math.PI / 2; shR.add(hand);
   g.add(hipL, hipR, torso);
-  const glider = makeGlider(cos.glider); glider.visible = false; g.add(glider);
+  const glider = makeParachute(cos.glider); glider.visible = false; g.add(glider);
   g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
   return { group: g, hipL, hipR, torso, head, shL, shR, hand, glider };
 }
