@@ -2072,9 +2072,10 @@ import('./lock.js').then((m) => {
     if (was && state === 'playing' && !paused && !bigmapOpen && !settingsOpen && performance.now() - resumeT > 400) togglePause(true);
   });
 }).catch(() => {});
-function showLockHint() { const h = document.getElementById('lockHint'); if (h) h.classList.remove('hidden'); }
+function showLockHint() { if (IS_TOUCH) return; const h = document.getElementById('lockHint'); if (h) h.classList.remove('hidden'); }
 function hideLockHint() { const h = document.getElementById('lockHint'); if (h) h.classList.add('hidden'); }
 canvas.addEventListener('mousedown', (e) => {
+  if (IS_TOUCH) return; // sur téléphone, les contrôles tactiles gèrent tout
   if (state !== 'playing' || paused) return;
   if (!locked) tryLock();
   if (e.button === 0) mouse.l = true; if (e.button === 2) mouse.r = true;
@@ -2105,6 +2106,178 @@ window.addEventListener('wheel', (e) => {
   selectSlot(i);
 }, { passive: true });
 const down = (act) => !!keys[BIND[act]];
+// =====================================================================
+// VERSION TÉLÉPHONE : contrôles tactiles (joystick flottant, boutons,
+// caméra au doigt + aim assist léger comme sur Fortnite mobile).
+// =====================================================================
+const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+let touchUIRoot = null, touchResetFn = null;
+function touchInit() {
+  if (!IS_TOUCH || window.__touchDone) return;
+  window.__touchDone = true;
+  document.body.classList.add('touch');
+  // ---- DOM des contrôles ----
+  const ui = document.createElement('div');
+  ui.id = 'touchUI';
+  ui.innerHTML = `
+    <div id="joyBase"><div id="joyKnob"></div></div>
+    <div id="tFire" class="tbtn big">TIR</div>
+    <div id="tJump" class="tbtn">SAUT</div>
+    <div id="tAds" class="tbtn">VISER</div>
+    <div id="tInteract" class="tbtn">E</div>
+    <div id="tReload" class="tbtn">R</div>
+    <div id="tBuild" class="tbtn">CONS</div>
+    <div id="tCrouch" class="tbtn">ACCROUPI</div>
+    <div id="tMap" class="tbtn small">CARTE</div>
+    <div id="tPause" class="tbtn small">PAUSE</div>`;
+  document.body.appendChild(ui);
+  touchUIRoot = ui;
+  // l'aide du menu pause parle de raccourcis clavier : version tactile
+  const ch = document.querySelector('#pause .ctl-help');
+  if (ch) ch.innerHTML = '<span>TIR : tirer / placer</span><span>VISER : viser</span><span>E : interagir / véhicule</span><span>CONS : construire</span><span>CARTE : carte</span><span>Glisse à droite : caméra</span><span>Joystick à fond : sprint</span>';
+  const $t = (id) => document.getElementById(id);
+  const joyBase = $t('joyBase'), joyKnob = $t('joyKnob');
+  // ---- joystick flottant (moitié gauche de l'écran) ----
+  let joyId = null, joyCX = 0, joyCY = 0, joyX = 0, joyY = 0;
+  const JOY_R = 58;
+  function joyApply() {
+    // direction binaire sur les touches virtuelles (marche, sprint, dive du bus)
+    const k = (on, act) => { keys[BIND[act]] = on; };
+    const mag = Math.hypot(joyX, joyY);
+    const fwd = joyY < -0.32, back = joyY > 0.32, left = joyX < -0.32, right = joyX > 0.32;
+    k(fwd, 'forward'); k(back, 'back'); k(left, 'left'); k(right, 'right');
+    // joystick à fond = sprint
+    const spr = mag > 0.92;
+    keys[BIND.sprint] = spr; keys.ShiftRight = spr;
+  }
+  function joyEnd() {
+    joyId = null; joyX = joyY = 0;
+    for (const a of ['forward', 'back', 'left', 'right', 'sprint']) keys[BIND[a]] = false;
+    keys.ShiftRight = false;
+    joyBase.classList.remove('on');
+  }
+  // ---- caméra : glissement du doigt sur la zone de visée ----
+  let lookId = null, lookX = 0, lookY = 0;
+  function lookApply(dx, dy) {
+    if (state !== 'playing' || paused || bigmapOpen) return;
+    const adsOn = mouse.r && !buildMode && !editing && player && weaponOf(player) && !weaponOf(player).melee;
+    const sens = (adsOn ? 0.0018 : 0.0048) * SET.sens;
+    camYaw -= dx * sens; camPitch -= dy * sens;
+    camPitch = clamp(camPitch, -1.35, 1.25);
+  }
+  // ---- boutons ----
+  function press(code) { window.dispatchEvent(new KeyboardEvent('keydown', { code })); }
+  const hold = (el, on, off) => {
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); on(); }, { passive: false });
+    el.addEventListener('touchend', (e) => { e.preventDefault(); off && off(); }, { passive: false });
+    el.addEventListener('touchcancel', () => { off && off(); }, { passive: true });
+  };
+  hold($t('tFire'), () => { mouse.l = true; onFirePress(); }, () => { mouse.l = false; });
+  hold($t('tJump'), () => { press(BIND.jump); keys[BIND.jump] = true; }, () => { keys[BIND.jump] = false; });
+  hold($t('tAds'), () => { mouse.r = true; }, () => { mouse.r = false; });
+  hold($t('tCrouch'), () => { press(BIND.crouch); }, null);
+  $t('tInteract').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.interact); }, { passive: false });
+  $t('tReload').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.reload); }, { passive: false });
+  $t('tBuild').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.buildToggle); }, { passive: false });
+  $t('tMap').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.map); }, { passive: false });
+  $t('tPause').addEventListener('touchstart', (e) => { e.preventDefault(); press('Escape'); }, { passive: false });
+  // ---- événements tactiles globaux (document) : le calque #touchUI est
+  // pointer-events:none, on écoute partout SAUF sur les boutons et le HUD tapable ----
+  const skipTarget = (t) => t.closest && t.closest('.tbtn, #hotbar, #buildbar, #mats, #minimap, button, .panel, #bigmap, #pause, #gameSettings, #victory, #endscreen, #spectate, input, select');
+  // reset complet des commandes tactiles (pause, carte, onglet caché)
+  touchResetFn = () => {
+    joyEnd(); lookId = null;
+    mouse.l = false; keys[BIND.jump] = false; keys[BIND.sprint] = false;
+    keys.KeyW = keys.KeyS = keys.KeyA = keys.KeyD = false; keys.ShiftRight = false;
+  };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) touchReset(); });
+  // fermer la grande carte d'un simple geste sur téléphone
+  const bigmapEl = document.getElementById('bigmap');
+  if (bigmapEl) bigmapEl.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (bigmapOpen) { bigmapOpen = false; bigmapEl.classList.add('hidden'); tryLock(); }
+  }, { passive: false });
+  document.addEventListener('touchstart', (e) => {
+    if (state !== 'playing' || paused) return;
+    for (const t of e.changedTouches) {
+      if (skipTarget(t.target)) continue;
+      // moitié gauche = joystick, le reste = caméra
+      if (t.clientX < window.innerWidth * 0.45 && joyId === null) {
+        joyId = t.identifier; joyCX = t.clientX; joyCY = t.clientY;
+        joyBase.style.left = (joyCX - 70) + 'px'; joyBase.style.top = (joyCY - 70) + 'px';
+        joyBase.classList.add('on');
+      } else if (lookId === null) {
+        lookId = t.identifier; lookX = t.clientX; lookY = t.clientY;
+      }
+    }
+    if (!skipTarget(e.target)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyId) {
+        let dx = t.clientX - joyCX, dy = t.clientY - joyCY;
+        const d = Math.hypot(dx, dy);
+        if (d > JOY_R) { dx *= JOY_R / d; dy *= JOY_R / d; }
+        joyX = dx / JOY_R; joyY = dy / JOY_R;
+        joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+        joyApply();
+      } else if (t.identifier === lookId) {
+        lookApply(t.clientX - lookX, t.clientY - lookY);
+        lookX = t.clientX; lookY = t.clientY;
+      }
+    }
+    if (e.touches.length && !skipTarget(e.target)) e.preventDefault();
+  }, { passive: false });
+  const endT = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyId) { joyEnd(); joyKnob.style.transform = ''; }
+      if (t.identifier === lookId) lookId = null;
+    }
+  };
+  document.addEventListener('touchend', endT);
+  document.addEventListener('touchcancel', endT);
+  // ---- hotbar / buildbar / mats tapables (utile aussi à la souris) ----
+  document.getElementById('hotbar').addEventListener('pointerdown', (e) => {
+    const s = e.target.closest('.slot'); if (!s || state !== 'playing' || paused) return;
+    const i = [...document.getElementById('hotbar').children].indexOf(s);
+    if (i >= 0) { cancelEdit(); selectSlot(i); }
+  });
+  document.getElementById('buildbar').addEventListener('pointerdown', (e) => {
+    const p = e.target.closest('.bpiece'); if (!p || state !== 'playing' || paused) return;
+    cancelEdit(); buildPiece = p.dataset.p; setBuildMode(true);
+  });
+  document.getElementById('mats').addEventListener('pointerdown', (e) => {
+    const m = e.target.closest('.mat'); if (!m || state !== 'playing' || paused) return;
+    player.matSel = m.dataset.mat; updateHUDStatic(); sfx('click', 0.5);
+  });
+  // l'audio démarre au premier toucher (comme au premier clic clavier)
+  document.addEventListener('touchstart', () => initAudio(), { once: true });
+}
+touchInit();
+// Aim assist tactile : quand on tire sur téléphone, la caméra est doucement
+// guidée vers l'ennemi le plus proche du réticule (comme Fortnite mobile).
+function touchAimAssist(dt) {
+  if (!IS_TOUCH || !mouse.l || buildMode || editing || !player || !player.alive || player.using) return;
+  const W = weaponOf(player);
+  if (!W || W.melee) return;
+  const d = _aimD; camera.getWorldDirection(d);
+  let best = null, bestCos = Math.cos(0.17); // ~10° autour du réticule
+  for (const c of chars) {
+    if (c.isPlayer || !c.alive || c.mode === 'bus' || c.mode === 'drive') continue;
+    if (c.team !== undefined && player.team !== undefined && c.team === player.team) continue;
+    const dx = c.pos.x - camera.position.x, dy = c.pos.y + 1.15 - camera.position.y, dz = c.pos.z - camera.position.z;
+    const dist = Math.hypot(dx, dy, dz);
+    if (dist < 2 || dist > 280) continue;
+    const cos = (dx * d.x + dy * d.y + dz * d.z) / dist;
+    if (cos > bestCos) { bestCos = cos; best = { dx, dy, dz }; }
+  }
+  if (!best) return;
+  const yawT = Math.atan2(-best.dx, -best.dz);
+  const pitchT = Math.atan2(best.dy, Math.hypot(best.dx, best.dz));
+  const k = Math.min(1, dt * 4.5);
+  camYaw = lerpAngle(camYaw, yawT, k);
+  camPitch = clamp(lerp(camPitch, pitchT, k), -1.35, 1.25);
+}
 function onAction(code) {
   const is = (a) => BIND[a] === code;
   if (state !== 'playing') return;
@@ -2709,7 +2882,7 @@ function jumpFromBus(ch) {
   ch.pos.copy(bus.pos).add(_v1.set(0, -3, 0));
   ch.vel.copy(bus.dir).multiplyScalar(12); ch.vel.y = -4;
   if (ch.isPlayer) { mates.forEach((m, i) => { if (m.mode === 'bus') m.jumpAt = Math.min(bus.t / bus.dur + 0.008 * (i + 1), 0.99); });
-    sfx('whoosh', 0.6); stopMusic(); document.getElementById('busHint').style.display = 'none'; showCenter('', `Plonge en regardant vers le bas · <kbd>${keyLabel(BIND.back)}</kbd> pour freiner · <kbd>${keyLabel(BIND.jump)}</kbd> ouvre le planeur`, 4); }
+    sfx('whoosh', 0.6); stopMusic(); document.getElementById('busHint').style.display = 'none'; showCenter('', IS_TOUCH ? 'Regarde vers le bas pour plonger · SAUT ouvre le parachute' : `Plonge en regardant vers le bas · <kbd>${keyLabel(BIND.back)}</kbd> pour freiner · <kbd>${keyLabel(BIND.jump)}</kbd> ouvre le planeur`, 4); }
 }
 function deployGlider(ch) {
   if (ch.mode !== 'fall') return;
@@ -3473,7 +3646,7 @@ function startGame() {
     b.dropTarget = TEAM_SIZE > 1 ? randomLandPoint(plan.tgt.x, plan.tgt.z, 8) : plan.tgt;
   }
   document.getElementById('busHint').style.display = 'block';
-  document.getElementById('busHint').innerHTML = `Appuie sur <kbd>${keyLabel(BIND.jump)}</kbd> pour sauter du bus · <kbd>${keyLabel(BIND.map)}</kbd> carte`;
+  document.getElementById('busHint').innerHTML = IS_TOUCH ? 'Appuie sur <b>SAUT</b> pour sauter du bus' : `Appuie sur <kbd>${keyLabel(BIND.jump)}</kbd> pour sauter du bus · <kbd>${keyLabel(BIND.map)}</kbd> carte`;
   showCenter('LE BUS DÉCOLLE', 'Choisis ton point d\'atterrissage', 3);
   const modeName = { 1: 'Solo', 2: 'Duo', 4: 'Escouade' }[TEAM_SIZE];
   setTimeout(() => showCenter(`${modeName.toUpperCase()} · ${PLAYER_TOTAL} JOUEURS`, 'Personne n\'a d\'arme : fonce vers le butin', 2.6), 3200);
@@ -3755,6 +3928,7 @@ function updatePlayer(dt) {
   if (!p.alive) return;
   if (state !== 'playing' && state !== 'victory') { p.vel.x *= 0.8; p.vel.z *= 0.8; p.vel.y -= GRAV * dt; physics(p, dt); if (p.emoting) p.emoting.t += dt; return; }
   p.yaw = camYaw; p.pitch = camPitch;
+  if (IS_TOUCH) touchAimAssist(dt);
   const fwd = _fwd.set(-Math.sin(camYaw), 0, -Math.cos(camYaw));
   const right = _right.set(Math.cos(camYaw), 0, -Math.sin(camYaw));
   const wish = _wish.set(0, 0, 0);
@@ -4634,6 +4808,12 @@ function step(dt) {
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05);
+  // sur téléphone, les contrôles tactiles disparaissent devant les menus + reset des commandes
+  if (touchUIRoot) {
+    const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen;
+    if (!show && !touchUIRoot.classList.contains('hidden') && touchResetFn) touchResetFn();
+    touchUIRoot.classList.toggle('hidden', !show);
+  }
   step(dt);
   updateCamera(dt);
   if (state !== 'menu') {

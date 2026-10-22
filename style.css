@@ -322,3 +322,57 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 @media (max-width: 900px) {
   #bars { width: 250px; } #ammoInfo { font-size: 32px; } #poiBanner { font-size: 32px; }
 }
+
+/* ---------- Version téléphone : contrôles tactiles ---------- */
+body.touch #game { touch-action: none; }
+#touchUI { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+.tbtn { position: absolute; pointer-events: auto; touch-action: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(16, 20, 48, .55); border: 2px solid rgba(255, 255, 255, .35); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 12px; letter-spacing: .4px; text-transform: uppercase; width: 62px; height: 62px; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.tbtn:active { background: rgba(255, 226, 74, .45); border-color: #ffe24a; }
+.tbtn.big { width: 92px; height: 92px; font-size: 16px; background: rgba(255, 90, 60, .45); border-color: rgba(255, 150, 100, .85); }
+.tbtn.small { width: 54px; height: 54px; font-size: 10px; }
+#tFire { right: calc(16px + env(safe-area-inset-right)); bottom: 170px; }
+#tAds { right: calc(122px + env(safe-area-inset-right)); bottom: 128px; }
+#tJump { right: calc(122px + env(safe-area-inset-right)); bottom: 208px; }
+#tInteract { right: calc(30px + env(safe-area-inset-right)); bottom: 256px; }
+#tReload { right: calc(122px + env(safe-area-inset-right)); bottom: 288px; }
+#tBuild { right: calc(30px + env(safe-area-inset-right)); bottom: 336px; }
+#tCrouch { right: calc(122px + env(safe-area-inset-right)); bottom: 368px; }
+#tMap { right: calc(14px + env(safe-area-inset-right)); top: 304px; }
+#tPause { right: calc(78px + env(safe-area-inset-right)); top: 304px; }
+#joyBase { position: absolute; left: 20px; bottom: 250px; width: 140px; height: 140px; border-radius: 50%; background: rgba(16, 20, 48, .35); border: 2px solid rgba(255, 255, 255, .3); pointer-events: none; opacity: .55; transition: opacity .15s; }
+#joyBase.on { opacity: 1; }
+#joyKnob { position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 50%; background: rgba(255, 255, 255, .5); border: 2px solid rgba(255, 255, 255, .7); }
+/* HUD plus compact sur téléphone */
+body.touch #minimap { width: 118px; height: 118px; }
+body.touch .slot { width: 52px; height: 52px; }
+body.touch #perf { display: none; }
+body.touch #ammoInfo { font-size: 28px; }
+@media (max-width: 560px) {
+  body.touch .slot { width: 44px; height: 44px; }
+  body.touch #bars { width: 190px; }
+}
+/* téléphone en paysage : boutons en grappe compacte à droite, hors du HUD */
+@media (max-height: 540px) and (pointer: coarse) {
+  .tbtn { width: 50px; height: 50px; font-size: 8px; letter-spacing: 0; }
+  .tbtn.big { width: 74px; height: 74px; font-size: 12px; }
+  .tbtn.small { width: 44px; height: 44px; font-size: 8px; }
+  #tFire { right: 16px; bottom: 40px; }
+  #tAds { right: 100px; bottom: 74px; }
+  #tJump { right: 168px; bottom: 74px; }
+  #tBuild { right: 236px; bottom: 74px; }
+  #tInteract { right: 100px; bottom: 12px; }
+  #tReload { right: 168px; bottom: 12px; }
+  #tCrouch { right: auto; left: 150px; bottom: 180px; }
+  #tMap { right: auto; left: 14px; top: 14px; }
+  #tPause { right: auto; left: 68px; top: 14px; }
+  #joyBase { width: 110px; height: 110px; bottom: 190px; }
+  #joyKnob { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
+  body.touch #minimap { width: 84px; height: 84px; }
+  body.touch #bars { width: 140px; }
+  body.touch #bottomleft { bottom: 74px; }
+  body.touch #mats { bottom: 148px; }
+  body.touch #bottomright { right: 18px; bottom: 118px; }
+}
+
+/* sur téléphone, la hotbar / barre de construction / matériaux deviennent tapables */
+body.touch #hotbar, body.touch #buildbar, body.touch #mats { pointer-events: auto; }
