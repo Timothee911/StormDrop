@@ -97,7 +97,7 @@ renderer.toneMappingExposure = 1.1;
 const scene = new THREE.Scene();
 const FOG_COL = new THREE.Color(0xbfe6ff);
 scene.fog = new THREE.Fog(FOG_COL, 140 * SET.viewDist, 520 * SET.viewDist);
-const camera = new THREE.PerspectiveCamera(SET.fov, window.innerWidth / window.innerHeight, 0.1, 1500);
+const camera = new THREE.PerspectiveCamera(SET.fov, window.innerWidth / window.innerHeight, 0.1, 2600);
 // cartoon outlines (post-process, one extra full-screen pass)
 function syncLin() { const l = outline.linear ? 1 : 0; if (skyMat) skyMat.uniforms.lin.value = l; if (storm.mesh) storm.mesh.material.uniforms.lin.value = l; }
 const outline = createOutline(renderer, { enabled: !!SET.outline, width: SET.outlineW || 1, fadeNear: 70 * SET.viewDist, fadeFar: 260 * SET.viewDist, samples: LOWQ ? 0 : HIGHQ ? 4 : 2, canvasAA: !SET.outline });
@@ -689,6 +689,81 @@ function wallWithOpenings(s, ly, H, T, ops, hex, o) {
   mk(cur, a1, 0, H);
   return ops;
 }
+// =====================================================================
+// Portes réelles : elles se ferment, bloquent le passage et s'ouvrent avec E
+// (les bots les ouvrent tout seuls en s'en approchant). Cassables comme les murs.
+// =====================================================================
+const doors = [];
+function addDoor(s, ly, op, T, hex) {
+  const dw = op.w - 0.18, dh = Math.min(op.y1 - 0.14, 2.4);
+  const hingeU = op.u - dw / 2;
+  const g = new THREE.Group();
+  const hinge = s.ax === 'x' ? [s.x + hingeU, s.z] : [s.x, s.z + hingeU];
+  g.position.set(hinge[0], ly, hinge[1]);
+  const wood = matC(hex, { roughness: 0.68 });
+  const groove = matC(new THREE.Color(hex).multiplyScalar(0.7).getHex(), { roughness: 0.78 });
+  const panel = new THREE.Mesh(BOX, wood);
+  if (s.ax === 'x') { panel.scale.set(dw, dh, 0.12); panel.position.set(dw / 2, dh / 2, 0); }
+  else { panel.scale.set(0.12, dh, dw); panel.position.set(0, dh / 2, dw / 2); }
+  panel.castShadow = true; panel.receiveShadow = true;
+  g.add(panel);
+  // panneaux en creux + poignée dorée des deux côtés
+  for (let pn = 0; pn < 2; pn++) for (const f of [-1, 1]) {
+    const gg = new THREE.Mesh(BOX, groove);
+    const gy = 0.32 + pn * (dh * 0.52), gh = dh * 0.3, gw = dw - 0.46;
+    if (s.ax === 'x') { gg.scale.set(gw, gh, 0.03); gg.position.set(dw / 2, gy + gh / 2, f * 0.075); }
+    else { gg.scale.set(0.03, gh, gw); gg.position.set(f * 0.075, gy + gh / 2, dw / 2); }
+    g.add(gg);
+  }
+  const handle = new THREE.Mesh(BOX, matC(0xffc928, { metalness: 0.4, roughness: 0.4 }));
+  if (s.ax === 'x') { handle.scale.set(0.06, 0.3, 0.24); handle.position.set(dw - 0.17, 1.05, 0); }
+  else { handle.scale.set(0.24, 0.3, 0.06); handle.position.set(0, 1.05, dw - 0.17); }
+  g.add(handle);
+  scene.add(g);
+  const d = {
+    group: g, panel, open: false, broken: false, angle: 0, hx: hinge[0], hz: hinge[1], ly,
+    sign: s.ax === 'x' ? -s.out : s.out, col: null,
+  };
+  d.col = addCollider(s.ax === 'x'
+    ? { type: 'box', minX: hinge[0] - 0.05, maxX: hinge[0] + dw + 0.05, minY: ly, maxY: ly + dh, minZ: s.z - 0.25, maxZ: s.z + 0.25 }
+    : { type: 'box', minX: s.x - 0.25, maxX: s.x + 0.25, minY: ly, maxY: ly + dh, minZ: hinge[1] - 0.05, maxZ: hinge[1] + dw + 0.05 });
+  d.col.hp = d.col.maxHp = 140; d.col.mat = 'wood'; d.col.mesh = g; d.col.door = d;
+  panel.userData.struct = d.col;
+  addTarget(panel);
+  doors.push(d);
+  return d;
+}
+function destroyDoor(d) {
+  if (matchOver) return; // après le top 1, plus rien ne bouge ni ne se casse
+  d.broken = true; d.open = true;
+  removeCollider(d.col);
+  scene.remove(d.group);
+  removeTarget(d.panel);
+  burst(_v1.set(d.hx, d.ly + 1.2, d.hz), 0x8a5a30, 14, 6, 0.3, 1, 0.9);
+  sfxAt('break', _v1.set(d.hx, d.ly + 1.2, d.hz), 0.7);
+}
+function toggleDoor(d) {
+  if (d.broken || matchOver) return; // après le top 1, les portes restent telles quelles
+  d.open = !d.open;
+  d.col.passable = d.open; // ouverte : on passe à travers, fermée : elle bloque
+  sfx('door', 0.6);
+}
+function updateDoors(dt) {
+  for (const d of doors) {
+    if (d.broken) continue;
+    // un bot vivant à proximité ouvre la porte tout seul
+    if (!d.open) {
+      for (const c of chars) {
+        if (c.isPlayer || !c.alive) continue;
+        if (Math.hypot(c.pos.x - d.hx, c.pos.z - d.hz) < 2.4 && Math.abs(c.pos.y - d.ly) < 3) { d.open = true; d.col.passable = true; break; }
+      }
+    }
+    const target = d.open ? d.sign * 1.85 : 0;
+    d.angle += (target - d.angle) * Math.min(1, dt * 9);
+    if (Math.abs(target - d.angle) < 0.01) d.angle = target;
+    d.group.rotation.y = d.angle;
+  }
+}
 function windowFrame(s, ly, op, T, frame, parent) {
   const fw = 0.14, y0 = ly + op.y0, h = op.y1 - op.y0, dn = T + 0.12;
   sbox(s, frame, op.u, y0 - 0.12, 0, op.w + 0.36, 0.16, dn + 0.1, parent); // sill
@@ -706,6 +781,25 @@ function gableRoof(cx, cz, topY, w, d, roofH, bodyHex, roofHex, opts = {}) {
   const span = (alongZ ? w : d) + 0.5, len = (alongZ ? d : w) + 0.5, hs = span / 2;
   hdeco(PRISM_GEO, bodyHex, cx, topY, cz, alongZ ? span : len, roofH, alongZ ? len : span, 0, alongZ ? 0 : Math.PI / 2, 0, opts.parent);
   const th = Math.atan2(roofH, hs), pl = Math.hypot(hs, roofH) + 0.55, nx = Math.sin(th) * 0.1, ny = Math.cos(th) * 0.1;
+  // Physique du toit : deux pentes marchables, chacune bornée à sa moitié de toit
+  // (sinon slopeH se clampe à la hauteur du faîte et le joueur flotte au-dessus de la pente).
+  if (opts.parent && opts.parent.alive) {
+    const axis = alongZ ? 'x' : 'z';
+    const y0 = topY + 0.05, y1 = topY + roofH - 0.1;
+    const mk = (e0, e1, b) => addCollider(Object.assign({ type: 'slope', axis, e0, e1, y0, y1, minY: topY, maxY: topY + roofH }, b));
+    let s1, s2;
+    if (alongZ) {
+      const zB = { minZ: cz - len / 2 - 0.3, maxZ: cz + len / 2 + 0.3 };
+      s1 = mk(cx - hs, cx, Object.assign({ minX: cx - hs - 0.3, maxX: cx + 0.3 }, zB));
+      s2 = mk(cx + hs, cx, Object.assign({ minX: cx - 0.3, maxX: cx + hs + 0.3 }, zB));
+    } else {
+      const xB = { minX: cx - len / 2 - 0.3, maxX: cx + len / 2 + 0.3 };
+      s1 = mk(cz - hs, cz, Object.assign({ minZ: cz - hs - 0.3, maxZ: cz + 0.3 }, xB));
+      s2 = mk(cz + hs, cz, Object.assign({ minZ: cz - 0.3, maxZ: cz + hs + 0.3 }, xB));
+    }
+    opts.parent.subs = opts.parent.subs || [];
+    opts.parent.subs.push(s1, s2);
+  }
   for (const sg of [-1, 1]) {
     const cxl = -sg * hs / 2 - sg * nx, cyl = roofH / 2 + ny;
     if (alongZ) hdeco(BOX, roofHex, cx + cxl, topY + cyl, cz, pl, 0.2, len + 0.7, 0, 0, sg * th, opts.parent);
@@ -806,11 +900,9 @@ function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
             for (let f = 0; f < 4; f++) sbox(s, pick([0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff]), op.u - op.w / 2 + 0.25 + f * (op.w - 0.5) / 3, ly + op.y0 - 0.2, T / 2 + 0.25, 0.22, 0.22, 0.22, par);
           }
         } else {
-          // porte : panneau à rainures + poignée + numéro, comme les maisons Fortnite
+          // porte réelle : elle s'ouvre avec E et bloque le passage fermée
           const doorC = style === 'adobe' ? 0x6e4a2c : style === 'chalet' ? 0x4a2e1a : accent;
-          sbox(s, doorC, 0, ly + op.y0 + (op.y1 - op.y0) / 2, 0, op.w - 0.12, op.y1 - op.y0 - 0.08, 0.07, par);
-          for (let pn = 0; pn < 2; pn++) sbox(s, doorC, 0, ly + op.y0 + 0.4 + pn * (op.y1 - op.y0) * 0.5, 0.045, op.w - 0.5, (op.y1 - op.y0) * 0.34, 0.03, par);
-          sbox(s, 0xd8b64a, op.w / 2 - 0.28, ly + 1.45, 0.06, 0.07, 0.28, 0.07, par); // poignée
+          addDoor(s, ly, op, T, doorC);
           sbox(s, frame, 0, ly + op.y1, 0, op.w + 0.4, 0.2, T + 0.14, par);
           sbox(s, frame, -op.w / 2 - 0.08, ly, 0, 0.16, op.y1, T + 0.14, null);
           sbox(s, frame, op.w / 2 + 0.08, ly, 0, 0.16, op.y1, T + 0.14, null);
@@ -949,6 +1041,7 @@ function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
         const par = op.sill || op.lintel;
         if (op.kind === 'door') {
           sbox(s, frame, op.u, ly + op.y1, 0, op.w + 0.4, 0.2, T + 0.14, par);
+          addDoor(s, ly, op, T, 0x6e4a2c); // vraie porte qui s'ouvre avec E
           const c1 = PAL.accent;
           for (let k = 0; k < 5; k++) sbox(s, k % 2 ? 0xffffff : c1, op.u - op.w / 2 - 0.4 + k * (op.w + 0.8) / 4.6, ly + 3.05, T / 2 + 0.75, (op.w + 0.8) / 5, 0.12, 1.5, par);
         } else {
@@ -1321,6 +1414,10 @@ function rampH(c, x, z) {
   else if (c.d === 2) t = (z - z0) / CELL; else t = (x - x0) / CELL;
   return c.y + clamp(t, 0, 1) * CELL;
 }
+function slopeH(c, x, z) {
+  const t = clamp(((c.axis === 'x' ? x : z) - c.e0) / (c.e1 - c.e0), 0, 1);
+  return c.y0 + t * (c.y1 - c.y0);
+}
 function coneH(c, x, z) {
   const half = CELL / 2;
   const lx = Math.abs(x - (c.cx * CELL + half)) / half, lz = Math.abs(z - (c.cz * CELL + half)) / half;
@@ -1336,7 +1433,7 @@ function physics(ch, dt) {
   queryCols(ch.pos.x, ch.pos.z, 2.5, tmpCols);
   ch.blocked = false;
   for (const c of tmpCols) {
-    if (c.type !== 'box') continue;
+    if (c.type !== 'box' || c.passable) continue;
     if (oldY + CH_H <= c.minY || oldY + STEP >= c.maxY) continue;
     const px = clamp(ch.pos.x, c.minX, c.maxX), pz = clamp(ch.pos.z, c.minZ, c.maxZ);
     const dx = ch.pos.x - px, dz = ch.pos.z - pz, d2 = dx * dx + dz * dz;
@@ -1364,6 +1461,11 @@ function physics(ch, dt) {
       if (c.type === 'cone' && (c.editMask & (1 << (ch.pos.z < c.cz * CELL + CELL / 2 ? (ch.pos.x < c.cx * CELL + CELL / 2 ? 0 : 1) : (ch.pos.x >= c.cx * CELL + CELL / 2 ? 2 : 3))))) continue;
       if (h <= oldY + STEP + 0.35 && h > ground) { ground = h; onTerrain = false; gcol = c; }
       else if (c.type === 'cone' && ch.vel.y > 0 && oldY + CH_H <= c.minY + 0.15 && ch.pos.y + CH_H > c.minY) { ch.pos.y = c.minY - CH_H; ch.vel.y = 0; }
+    } else if (c.type === 'slope') {
+      // toit à deux pentants : plan incliné marchable
+      if (ch.pos.x < c.minX || ch.pos.x > c.maxX || ch.pos.z < c.minZ || ch.pos.z > c.maxZ) continue;
+      const h = slopeH(c, ch.pos.x, ch.pos.z);
+      if (h <= oldY + STEP + 0.35 && h > ground) { ground = h; onTerrain = false; gcol = c; }
     }
   }
   const wasGrounded = ch.grounded;
@@ -1579,6 +1681,7 @@ function damageStruct(col, amount, attacker) {
 }
 function destroyStruct(col) {
   if (!col.alive) return;
+  if (col.door) { destroyDoor(col.door); return; } // porte cassée : elle tombe et ne bloque plus
   if (editing && editing.col === col) cancelEdit();
   if (col.subs) { for (const sc of col.subs) removeCollider(sc); col.alive = false; } else removeCollider(col);
   if (col.house) rebuildHouse(col.house, col.chunk);
@@ -1778,6 +1881,41 @@ const PHASES = [
 let elimBy = null, placement = 0;
 const leaderboard = [];
 
+// Ballon captif réutilisable : grand, légèrement ovale (pas trop), segments blanc/bleu.
+// Le largage l'utilise en taille normale, le bus de combat en version plus grande.
+function makeBallon(r) {
+  const g = new THREE.Group();
+  const white = matC(0xf2f6fa, { roughness: 0.45, metalness: 0.03, emissive: 0xb9c4d4, emissiveIntensity: 0.4 });
+  const blue = matC(0x2f7fd8, { roughness: 0.45, metalness: 0.03, emissive: 0x1c4d8a, emissiveIntensity: 0.4 });
+  const blueDark = matC(0x1d5fb0, { roughness: 0.45, metalness: 0.03, emissive: 0x113560, emissiveIntensity: 0.4 });
+  const gold = matC(0xffc928, { roughness: 0.38, metalness: 0.35 });
+  const dark = matC(0x3a4250, { roughness: 0.6, metalness: 0.3 });
+  const segs = 10;
+  for (let i = 0; i < segs; i++) {
+    const seg = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 18, i / segs * Math.PI * 2, Math.PI * 2 / segs), i % 2 ? (i % 4 === 1 ? blueDark : blue) : white);
+    g.add(seg);
+  }
+  // bande dorée à l'équateur + bonnet rouge + jupe sombre à la bouche
+  const band = new THREE.Mesh(new THREE.TorusGeometry(r * 0.995, r * 0.035, 8, 48), gold);
+  band.rotation.x = Math.PI / 2; g.add(band);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(r * 0.36, 16, 10), matC(0xe23b3b, { roughness: 0.5 }));
+  cap.position.y = r * 1.01; cap.scale.set(1, 0.5, 1); g.add(cap);
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.5, r * 0.6, r * 0.16, 20), dark);
+  skirt.position.y = -r * 0.9; g.add(skirt);
+  g.scale.y = 1.15; // un peu ovale, mais pas trop
+  return g;
+}
+// câble d'acier entre deux points (utilisé par le bus de combat)
+function cableBetween(parent, x1, y1, z1, x2, y2, z2, r, mat) {
+  const a = _v1.set(x1, y1, z1), b = _v2.set(x2, y2, z2);
+  const len = a.distanceTo(b);
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 6), mat);
+  c.position.copy(a).add(b).multiplyScalar(0.5);
+  c.lookAt(b); c.rotateX(Math.PI / 2);
+  parent.add(c);
+  return c;
+}
+
 // Bus de combat : autocar stylisé, ballon captif, haubans et équipements de largage.
 {
   const g = new THREE.Group();
@@ -1824,54 +1962,28 @@ const leaderboard = [];
   for (const x of [-1.2, 1.2]) addBox(g, 0.08, 0.75, 0.08, x, -0.9, 4.35, steel);
   // Feux arrière rouges visibles pendant le vol.
   for (const x of [-1.3, 1.3]) addBox(g, 0.16, 0.3, 0.08, x, 0.15, 4.66, matC(0xff2a2a, { emissive: 0xd01010, emissiveIntensity: 1.6 }));
-  // Montgolfière segmentée : bandes verticales alternées blanc / turquoise, en forme de goutte.
+  // Grand ballon captif légèrement ovale : même modèle que les largages, en plus grand.
   {
-    const prof = [];
-    for (let i = 0; i <= 16; i++) {
-      const t = i / 16; // 0 = col bas, 1 = sommet
-      const y = t * 2.3;
-      let r;
-      if (t < 0.18) r = 0.34 + (t / 0.18) * 0.26;          // col puis évasement
-      else if (t < 0.55) r = 0.6 + Math.sin((t - 0.18) / 0.37 * Math.PI * 0.5) * 0.42; // panse
-      else r = 1.02 * (1 - (t - 0.55) / 0.45) ** 0.6 + 0.001; // dôme arrondi
-      prof.push(new THREE.Vector2(r, y));
-    }
-    // Ballon agrandi : tout le ballon est dans un groupe mis à l'échelle (base fixée au col).
-    const bg = new THREE.Group(); bg.position.y = 8.6; bg.scale.setScalar(1.5); g.add(bg);
-    const white = matC(0xe9f7fb, { roughness: 0.42, metalness: 0.03 });
-    const teal = matC(0x35c8dd, { roughness: 0.42, metalness: 0.03 });
-    const tealDark = matC(0x1fa8c9, { roughness: 0.42, metalness: 0.03 });
-    const gores = 14, gorePhi = Math.PI * 2 / gores;
-    for (let i = 0; i < gores; i++) {
-      const mat = i % 2 ? white : (i % 4 === 0 ? tealDark : teal);
-      const gore = new THREE.Mesh(new THREE.LatheGeometry(prof, 4, i * gorePhi, gorePhi + 0.02), mat);
-      gore.castShadow = true; bg.add(gore);
-    }
-    // Bande turquoise près du col + sommet doré.
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.88, 0.07, 8, 40), tealDark);
-    band.position.y = 0.25; band.rotation.x = Math.PI / 2; band.scale.set(1, 1, 1.25); bg.add(band);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.35), gold);
-    cap.position.y = 2.28; cap.scale.set(0.5, 0.55, 0.5); bg.add(cap);
+    const ballon = makeBallon(4.4);
+    ballon.position.y = 10.4; g.add(ballon);
   }
   // Nacelle brûleur suspendue sous le ballon : cadre sombre + flamme émissive.
   {
     const dark = matC(0x2a2f38, { roughness: 0.6, metalness: 0.35 });
-    addBox(g, 1.35, 0.5, 1.35, 0, 5.55, 0, dark);
-    addBox(g, 1.0, 0.55, 1.0, 0, 6.05, 0, dark);
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 10), matC(0xffa030, { emissive: 0xff7a10, emissiveIntensity: 2.2, roughness: 0.4 }));
-    flame.position.set(0, 5.1, 0); flame.rotation.x = Math.PI; g.add(flame);
-    // Haubans nacelle -> ballon, et cadre de fixation sur le toit du bus.
+    addBox(g, 1.35, 0.5, 1.35, 0, 4.5, 0, dark);
+    addBox(g, 1.0, 0.55, 1.0, 0, 4.9, 0, dark);
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.8, 10), matC(0xffa030, { emissive: 0xff7a10, emissiveIntensity: 2.2, roughness: 0.4 }));
+    flame.position.set(0, 5.45, 0); g.add(flame);
+    // Haubans nacelle -> bouche du ballon, et cadre de fixation sur le toit du bus.
     for (const [x, z] of [[-0.62, -0.62], [0.62, -0.62], [-0.62, 0.62], [0.62, 0.62]]) {
-      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.5, 6), steel);
-      c.position.set(x * 0.7, 6.9, z * 0.7); c.lookAt(0, 8.3, 0); c.rotateX(Math.PI / 2); g.add(c);
+      cableBetween(g, x * 0.7, 4.85, z * 0.7, x * 2.7, 5.7, z * 2.7, 0.03, steel);
     }
     const frame = matC(0x6a4a28, { roughness: 0.7 });
     addBox(g, 3.2, 0.16, 6.4, 0, 1.62, 0, frame);
     for (const [x, z] of [[-1.5, -3.0], [1.5, -3.0], [-1.5, 3.0], [1.5, 3.0]]) addBox(g, 0.14, 0.14, 0.14, x, 1.75, z, steel);
     // Quatre câbles d'acier : cadre du toit -> nacelle.
     for (const [x, z] of [[-1.5, -3.0], [1.5, -3.0], [-1.5, 3.0], [1.5, 3.0]]) {
-      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 3.6, 6), steel);
-      c.position.set(x * 0.65, 3.7, z * 0.65); c.lookAt(x, 5.9, z); c.rotateX(Math.PI / 2); g.add(c);
+      cableBetween(g, x, 1.75, z, x * 0.55, 4.45, z * 0.55, 0.045, steel);
     }
   }
   // Emblème doré sur les flancs de la nacelle.
@@ -2054,6 +2166,7 @@ document.getElementById('gsClose').onclick = () => { settingsOpen = false; $('ga
 function refreshBindLabels() { document.querySelectorAll('kbd[data-a]').forEach((k) => { k.textContent = keyLabel(BIND[k.dataset.a]); }); }
 document.getElementById('againBtn').onclick = () => sendResult('replay');
 document.getElementById('lobbyBtn').onclick = () => sendResult('lobby');
+document.getElementById('victoryQuit').onclick = () => endGame(true);
 function sendResult(action) {
   finalizeXP();
   const res = { type: 'stormdrop-result', action, won: wonMatch, placement: wonMatch ? 1 : (placement || chars.filter((c) => c.alive && !c.hench).length), kills: player ? player.kills : 0, time: Math.round(gameT), xp: Math.round(matchXP), xpLog, stats };
@@ -3320,7 +3433,7 @@ function startGame() {
   bus.start.copy(dir).multiplyScalar(-WORLD_R - 20).add(perp).setY(115);
   bus.end.copy(dir).multiplyScalar(WORLD_R + 20).add(perp).setY(115);
   bus.dir.copy(dir); bus.t = 0; bus.active = true; bus.mesh.visible = true;
-  bus.mesh.rotation.y = Math.atan2(-dir.x, -dir.z) + Math.PI;
+  bus.mesh.rotation.y = Math.atan2(-dir.x, -dir.z); // le pare-brise pointe dans le sens du vol
   camYaw = Math.atan2(-dir.x, -dir.z) - 0.6; camPitch = -0.35;
   for (const b of bots) {
     if (b.mate) { b.jumpAt = 2; continue; } // mates follow the player
@@ -3359,24 +3472,27 @@ function updateTeamHUD() {
 window.addEventListener('pointerdown', () => initAudio());
 window.addEventListener('keydown', () => initAudio());
 
+let matchOver = false; // vrai dès qu'un top 1 est décidé : la zone s'arrête, plus rien ne bouge sauf le perso
 function startVictory() {
   if (state !== 'playing' || !player.alive) return;
-  state = 'victory'; victoryT = 0; wonMatch = true;
+  state = 'victory'; wonMatch = true; matchOver = true;
   mouse.l = mouse.r = false; setBuildModeOff(); player.using = null;
-  player.emoting = { id: LOAD.emote || 'danse', t: 0 }; player.vel.x = player.vel.z = 0;
   if (player.mode !== 'ground') { player.mode = 'ground'; player.parts.glider.visible = false; }
   finalizeXP();
-  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
   document.getElementById('bigmap').classList.add('hidden');
   document.getElementById('victory').classList.remove('hidden');
+  setTimeout(() => { document.getElementById('victoryQuit').classList.remove('hidden'); }, 6000);
+  setTimeout(() => { document.getElementById('victory').classList.add('hidden'); }, 8000);
   startConfetti();
   sfx('victory', 0.9); playMusic('victory');
-  setTimeout(() => endGame(true), 7500);
 }
 let victoryT = -1;
 function endGame(won) {
   if (state === 'over') return;
+  matchOver = true; // la partie est finie : le monde se fige
   state = 'over';
+  document.getElementById('victoryQuit').classList.add('hidden');
   document.getElementById('victory').classList.add('hidden');
   document.getElementById('spectate').style.display = 'none';
   document.getElementById('endXp').textContent = `+${Math.round(matchXP)} XP gagnés cette partie`;
@@ -3427,6 +3543,7 @@ function nearestInteract() {
   for (const c of ammoBoxes) { if (c.opened) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd) { bd = d; best = { type: 'ammo', c }; } }
   for (const v of vaults) { if (v.open) continue; const d = Math.hypot(v.x - player.pos.x, (v.z + 3.6) - player.pos.z) + Math.abs(v.y - player.pos.y) * 0.5; if (d < 3.2 && d < bd) { bd = d; best = { type: 'vault', v }; } }
   for (const b of booths) { const d = Math.hypot(b.x - player.pos.x, b.z - player.pos.z) + Math.abs(b.y - player.pos.y) * 0.5; if (d < 2.8 && d < bd) { bd = d; best = { type: 'booth', b }; } }
+  for (const dr of doors) { if (dr.broken || matchOver) continue; const d = Math.hypot(dr.hx - player.pos.x, dr.hz - player.pos.z) + Math.abs(dr.ly - player.pos.y) * 0.5; if (d < 2.4 && d < bd) { bd = d; best = { type: 'door', dr }; } }
   if (!best) for (const v of vehicles) { if (v.driver) continue; const d = Math.hypot(v.pos.x - player.pos.x, v.pos.z - player.pos.z) + Math.abs(v.pos.y - player.pos.y) * 0.3; if (d < 3.6) { best = { type: 'vehicle', v }; break; } }
   return best;
 }
@@ -3434,6 +3551,7 @@ function interact() {
   if (!player.alive || player.mode !== 'ground') return;
   const t = nearestInteract(); if (!t) return;
   if (t.type === 'chest') openChest(t.c);
+  else if (t.type === 'door') toggleDoor(t.dr);
   else if (t.type === 'vault') openVault(t.v);
   else if (t.type === 'booth') setDisguise(player, !player.disguise);
   else if (t.type === 'drop') openDrop(t.c);
@@ -3609,7 +3727,7 @@ const _wish = new THREE.Vector3(), _fwd = new THREE.Vector3(), _right = new THRE
 function updatePlayer(dt) {
   const p = player;
   if (!p.alive) return;
-  if (state !== 'playing') { p.vel.x *= 0.8; p.vel.z *= 0.8; p.vel.y -= GRAV * dt; physics(p, dt); if (p.emoting) p.emoting.t += dt; return; }
+  if (state !== 'playing' && state !== 'victory') { p.vel.x *= 0.8; p.vel.z *= 0.8; p.vel.y -= GRAV * dt; physics(p, dt); if (p.emoting) p.emoting.t += dt; return; }
   p.yaw = camYaw; p.pitch = camPitch;
   const fwd = _fwd.set(-Math.sin(camYaw), 0, -Math.cos(camYaw));
   const right = _right.set(Math.cos(camYaw), 0, -Math.sin(camYaw));
@@ -3732,7 +3850,7 @@ function updateChar(ch, dt) {
   updateMovers(ch, dt);
   // storm damage
   if (storm.phase >= 0 && ch.mode !== 'bus') {
-    const out = Math.hypot(ch.pos.x - storm.cx, ch.pos.z - storm.cz) > storm.r;
+    const out = !matchOver && Math.hypot(ch.pos.x - storm.cx, ch.pos.z - storm.cz) > storm.r;
     ch.inStorm = out;
     if (out) { ch.stormTick -= dt; if (ch.stormTick <= 0) { ch.stormTick = 1; ch.hp -= storm.dmg; if (ch.isPlayer) { sfx('storm', 0.5); hurtFlash = 0.3; } if (ch.hp <= 0) kill(ch, null, 'tempête'); } }
     else ch.stormTick = 0.5;
@@ -3785,7 +3903,7 @@ function animateChar(ch, dt) {
   if (ch.emoting) {
     const y = poseEmote(P, ch.emoting.id, ch.emoting.t);
     m.position.y += y;
-    if (ch.isPlayer) m.rotation.y = state === 'victory' ? ch.emoteYaw ?? (ch.emoteYaw = camYaw + Math.PI) : camYaw + Math.PI;
+    if (ch.isPlayer) m.rotation.y = state === 'victory' && ch.emoting ? (ch.emoteYaw ?? (ch.emoteYaw = camYaw + Math.PI)) : camYaw + Math.PI;
     return;
   }
   P.head.rotation.set(0, 0, 0);
@@ -3902,13 +4020,7 @@ function updateCamera(dt) {
   const BF = SET.fov;
   let dist = 4.3, sh = 1.0, fov = BF, up = 1.75;
   let pivot;
-  if (state === 'victory') {
-    victoryT += dt;
-    const base = (player.emoteYaw ?? camYaw + Math.PI) + Math.PI;
-    camYaw = lerpAngle(camYaw, base + Math.sin(victoryT * 0.35) * 0.7, Math.min(1, dt * 2));
-    camPitch = lerp(camPitch, -0.12, Math.min(1, dt * 2));
-    pivot = _v3.copy(player.pos).add(_v1.set(0, 1.75, 0)); dist = lerp(11, 4.6, Math.min(1, victoryT / 3.5)); sh = 0; fov = 55;
-  } else if (!player.alive && spectateTarget && spectateTarget.alive && state === 'playing') {
+  if (!player.alive && spectateTarget && spectateTarget.alive && state === 'playing') {
     pivot = _v3.copy(spectateTarget.pos).add(_v1.set(0, 1.6, 0));
     camYaw = lerpAngle(camYaw, spectateTarget.yaw, Math.min(1, dt * 3)); camPitch = lerp(camPitch, -0.15, dt * 3); dist = 5; sh = 0.6;
     const sp = document.getElementById('spectate'); sp.style.display = 'block'; sp.textContent = `Spectateur : ${spectateTarget.name}`;
@@ -4050,7 +4162,7 @@ function updateHUD(dt) {
   const pr = $('prompt');
   if (player.alive && player.mode === 'ground') {
     const t = nearestInteract();
-    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (player.keycards && player.keycards[t.v.poi.key] ? 'Ouvrir le coffre-fort' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
+    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (player.keycards && player.keycards[t.v.poi.key] ? 'Ouvrir le coffre-fort' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
     else pr.style.display = 'none';
   } else if (player.alive && player.mode === 'drive') { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> Descendre · ${Math.round(Math.abs(player.vehicle.speed) * 3.6)} km/h`; }
   else pr.style.display = 'none';
@@ -4224,12 +4336,9 @@ function spawnSupplyDrop() {
   addBox(crate, 1.56, 0.18, 1.56, 0, 0.1, 0, matC(0xffd23f, { metalness: 0.4, roughness: 0.4 }));
   addBox(crate, 0.2, 1.24, 1.56, 0, 0.6, 0, matC(0xffd23f));
   g.add(crate);
-  const balloon = new THREE.Group(); balloon.position.y = 5.2; g.add(balloon);
-  for (let k = 0; k < 8; k++) {
-    const w = new THREE.Mesh(new THREE.SphereGeometry(2.6, 4, 6, k * Math.PI / 4, Math.PI / 4, 0, Math.PI / 2.2), matC(k % 2 ? 0xffffff : 0x3fa9ff, { side: THREE.DoubleSide, roughness: 0.7 }));
-    w.scale.set(1, 0.55, 1); w.castShadow = true; balloon.add(w);
-  }
-  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const l = addBox(g, 0.03, 4.4, 0.03, x * 1.0, 3.4, z * 1.0, matC(0x333333)); l.rotation.set(z * 0.28, 0, -x * 0.28); }
+  // Grand ballon ovale (même modèle que le bus de combat, en plus petit) qui porte la caisse.
+  const balloon = makeBallon(2.9); balloon.position.y = 5.2; g.add(balloon);
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cableBetween(g, x * 0.75, 1.24, z * 0.75, x * 2.0, 2.0, z * 2.0, 0.03, matC(0x333333));
   const light = { intensity: 2, distance: 10, color: 0x3fa9ff, y: 2, obj: g };
   g.position.set(p.x, 125, p.z); scene.add(g);
   const beam = new THREE.Mesh(beamDropGeo, beamDropMat); beam.position.set(p.x, terrainH(p.x, p.z), p.z); scene.add(beam);
@@ -4267,7 +4376,7 @@ function updateDrops(dt) {
     } else if (d.balloon.visible) {
       // canopy collapses and drifts away
       d.cT = (d.cT || 0) + dt;
-      d.balloon.position.y = Math.max(1.2, 5.2 - d.cT * 3); d.balloon.position.x += dt * 1.5; d.balloon.scale.y = Math.max(0.05, 1 - d.cT * 0.8);
+      d.balloon.position.y = Math.max(2.0, 5.2 - d.cT * 3); d.balloon.position.x += dt * 1.5; d.balloon.scale.y = Math.max(0.06, 1.15 * (1 - d.cT * 0.8));
       if (d.cT > 1.6) d.balloon.visible = false;
     }
     d.light.intensity = 1.5 + Math.sin(gameT * 5) * 0.8;
@@ -4420,12 +4529,22 @@ function updateImpostors() {
 let fpsAcc = 0, fpsN = 0;
 function step(dt) {
   if (state === 'menu' || paused) return;
-  if (state === 'victory' && victoryT < 1.2) dt *= 0.35;
-  gameT += dt; waterT.value += dt; windT.value += dt;
+  gameT += dt;
+  if (matchOver) {
+    // Un top 1 est décidé : la zone et le monde entier sont figés, seul le perso bouge encore.
+    // (les portes aussi sont gelées : plus rien ne bouge)
+    updatePlayer(dt);
+    updateMarker(dt);
+    frameN++;
+    for (const c of chars) if (c.isPlayer) updateChar(c, dt);
+    return;
+  }
+  waterT.value += dt; windT.value += dt;
   updateBus(dt);
   updateStorm(dt);
   if (player.mode === 'bus' && bus.active) { player.pos.copy(bus.pos); }
   updatePlayer(dt);
+  updateDoors(dt);
   frameN++;
   for (const c of chars) {
     const cp = camera.position, dx = c.pos.x - cp.x, dz = c.pos.z - cp.z;
@@ -4477,7 +4596,7 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); } };
+window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; } };
 
 // Auto-start the match once everything is built
 refreshLabels();

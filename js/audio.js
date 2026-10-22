@@ -64,6 +64,7 @@ export function sfx(name, vol = 1, pan = 0) {
     case 'reload': tone(o, t, 0.05, 'square', 600, 400, 0.12); tone(o, t + 0.35, 0.05, 'square', 800, 500, 0.14); break;
     case 'pickup': tone(o, t, 0.16, 'sine', 420, 980, 0.3); break;
     case 'chest': [523, 659, 784, 1046].forEach((f, i) => tone(o, t + i * 0.07, 0.25, 'triangle', f, f, 0.25)); break;
+    case 'door': tone(o, t, 0.22, 'sawtooth', 90, 170, 0.1); noise(o, t + 0.16, 0.1, 'lowpass', 900, 1.2, 0.01, 0.25); break;
     case 'hurt': noise(o, t, 0.2, 'lowpass', 600, 0.8, 0.005, 0.6); break;
     case 'elim': [392, 523, 659].forEach((f, i) => tone(o, t + i * 0.05, 0.4, 'triangle', f, f, 0.22)); break;
     case 'jump': tone(o, t, 0.12, 'sine', 240, 420, 0.12); break;
