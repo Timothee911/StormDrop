@@ -289,6 +289,14 @@ export function makeParachute(id = 'default') {
   // deux sangles vers les épaules
   line(0, 2.05, 0, 0.42, 1.55, 0);
   line(0, 2.05, 0, -0.42, 1.55, 0);
+  // poignées de commande : deux risers qui partent du harnais vers l'extérieur,
+  // exactement là où les mains du personnage viennent s'accrocher (±1 m, à
+  // hauteur des épaules levées) — voir animateChar, mode 'glide'.
+  for (const sgn of [1, -1]) {
+    line(0, 2.05, 0, sgn * 1.0, 2.0, 0);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.34, 8), mat(0x2a303c));
+    grip.rotation.z = Math.PI / 2; grip.position.set(sgn * 1.0, 2.0, 0); grip.castShadow = true; grip.userData.grip = sgn; g.add(grip);
+  }
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }

@@ -1627,6 +1627,11 @@ function makeConeGeometry(mask = 0) {
     const tri = vertices[i];
     const positions = [...tri[0], ...tri[2], ...tri[1]]; // winding vers l'extérieur pour normals et lumière
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    // UV du toit : la texture se projette sur la pente à la même échelle que sur
+    // une face de mur (1 case = texture entière) — même couleur, même grain que
+    // les murs, au lieu d'un aplat sans UV.
+    const slope = Math.hypot(CELL / 2, 1.6) / CELL;
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0.5, slope, 1, 0], 2));
     geo.computeVertexNormals(); parts.push(geo);
   }
   if (!parts.length) return new THREE.BufferGeometry();
@@ -3942,7 +3947,7 @@ function updatePlayer(dt) {
   if (p.mode === 'drive') { driveVehicle(p, dt); return; }
   if (p.mode === 'fall' || p.mode === 'glide') {
     airControl(p, wish, dt); physics(p, dt);
-    if (p.grounded) { p.mode = 'ground'; p.parts.glider.visible = false; p.vel.y = 0; sfx('land', 0.6); const poi = inPOI(p.pos.x, p.pos.z, 10); showCenter(poi ? poi.name.toUpperCase() : '', 'Fouille les maisons et les coffres', 2.2); }
+    if (p.grounded) { p.mode = 'ground'; p.parts.glider.visible = false; p.landT = 0.5; p.cool = Math.max(p.cool, 0.3); p.vel.y = 0; sfx('land', 0.6); const poi = inPOI(p.pos.x, p.pos.z, 10); showCenter(poi ? poi.name.toUpperCase() : '', 'Fouille les maisons et les coffres', 2.2); }
     return;
   }
   const W = weaponOf(p);
@@ -4040,7 +4045,7 @@ function updateChar(ch, dt) {
       const wish = _v1.set(d > 2 ? dx / d : 0, 0, d > 2 ? dz / d : 0);
       ch.yaw = Math.atan2(-dx, -dz);
       airControl(ch, wish, dt); physics(ch, dt);
-      if (ch.grounded) { ch.mode = 'ground'; ch.parts.glider.visible = false; ch.wp = randomLandPoint(ch.pos.x, ch.pos.z, 25); }
+      if (ch.grounded) { ch.mode = 'ground'; ch.parts.glider.visible = false; ch.landT = 0.5; ch.cool = Math.max(ch.cool || 0, 0.3); ch.wp = randomLandPoint(ch.pos.x, ch.pos.z, 25); }
     } else {
       if (!ch.hench) botLoot(ch, dt);
       if (ch.hench) henchThink(ch, dt); else botThink(ch, dt);
@@ -4079,6 +4084,8 @@ function animateChar(ch, dt) {
   const P = ch.parts, m = ch.mesh;
   // le recul de tir décroit toujours, même si le perso est invisible/loin
   ch.shotKick = Math.max(0, (ch.shotKick || 0) - dt * 6);
+  // temps de dégagement d'arme des bots (celui du joueur est géré dans updatePlayerPhysics)
+  if (!ch.isPlayer && ch.equipT > 0) ch.equipT = Math.max(0, ch.equipT - dt);
   if (ch.mode === 'bus' || ch.mode === 'drive') { m.visible = false; return; }
   if (!(ch.isPlayer && scopeOn)) m.visible = ch.isPlayer || ch.camD2 < FULL_D2;
   const sh = ch.isPlayer || ch.camD2 < SHADOW_D2;
@@ -4090,26 +4097,57 @@ function animateChar(ch, dt) {
   ch.animT += dt * (4 + hs * 1.3);
   const sw = Math.sin(ch.animT) * Math.min(1, hs / 6) * 0.8;
   P.torso.rotation.set(0, 0, 0);
+  // remet les hanches à zéro chaque frame : la pose chute libre écarte les
+  // jambes (rotation.z) et elle ne doit pas fuiter sur les autres animations
+  P.hipL.rotation.z = 0; P.hipR.rotation.z = 0;
   if (ch.mode === 'fall') {
     // CHUTE LIBRE : corps à plat ventre, bras et jambes écartés qui flottent,
-    // plongeon plus vertical quand on fonce vers le bas.
+    // plongeon plus vertical quand on fonce vers le bas. Mains vides : la pioche
+    // reste au sac pendant tout le saut, elle ne sort qu'après la réception.
+    P.hand.visible = false;
     const fast = Math.min(1, Math.max(0, (-ch.vel.y - 24) / 30));
     m.rotation.x = -1.1 - fast * 0.25;
+    m.rotation.z = Math.sin(ch.animT * 0.6) * 0.08; // léger roulis au vent
     const flap = Math.sin(ch.animT * 2) * 0.12;
     P.hipL.rotation.x = 0.35 + flap; P.hipR.rotation.x = 0.35 - flap;
-    P.shL.rotation.set(0, 0, -1.35 - flap * 0.5); P.shR.rotation.set(0, 0, 1.35 + flap * 0.5);
+    P.hipL.rotation.z = -0.22 - flap * 0.4; P.hipR.rotation.z = 0.22 + flap * 0.4; // jambes écartées
+    P.shL.rotation.set(-0.25, 0, -1.35 - flap * 0.5); P.shR.rotation.set(-0.25, 0, 1.35 + flap * 0.5); // bras en arrière, façon saut en parachute
     P.head.rotation.set(0.3, 0, 0);
     return;
   }
   if (ch.mode === 'glide') {
-    // PARACHUTE : suspendu sous la toile, jambes ballantes, léger balancement
+    // PARACHUTE : suspendu sous la toile, jambes ballantes, léger balancement.
+    // Les mains sont accrochées aux poignées des sangles : les bras suivent les
+    // poignées (fixées à ±1 m du centre) même quand la toile balance.
+    P.hand.visible = false;
     m.rotation.x = 0;
     const swing = Math.sin(gameT * 1.3) * 0.07;
     m.rotation.z = swing;
     P.hipL.rotation.x = 0.45 + Math.sin(gameT * 1.8) * 0.08; P.hipR.rotation.x = 0.25 - Math.sin(gameT * 1.8) * 0.08;
-    P.shL.rotation.set(0, 0, -2.9); P.shR.rotation.set(0, 0, 2.9);
     P.head.rotation.set(-0.25, 0, 0);
-    if (ch.parts.glider) { ch.parts.glider.rotation.z = -swing * 0.6; ch.parts.glider.rotation.x = Math.sin(gameT * 0.9) * 0.04; }
+    // la toile ne pivote PAS indépendamment du corps : les poignées restent
+    // exactement sous les mains pendant le balancement (le corps entier oscille)
+    const phi = 0;
+    for (const sgn of [1, -1]) {
+      const hx = sgn * Math.cos(phi) - 2.0 * Math.sin(phi);
+      const hy = sgn * Math.sin(phi) + 2.0 * Math.cos(phi);
+      (sgn > 0 ? P.shR : P.shL).rotation.set(0, 0, Math.atan2(hx - sgn * 0.42, -(hy - 1.54)));
+    }
+    return;
+  }
+  // RÉCEPTION : genoux pliés et bras en équilibre juste après l'atterrissage.
+  // La pioche reste au sac 0,3 s (attaques bloquées via ch.cool), puis elle
+  // remonte en douceur (animation de dégagement) — elle ne saute pas à l'écran.
+  if (ch.landT > 0) {
+    ch.landT -= dt;
+    P.hand.visible = ch.landT <= 0.2;
+    const k = Math.min(1, ch.landT / 0.5);
+    m.position.y -= 0.24 * k;
+    P.torso.rotation.x = -0.3 * k;
+    P.hipL.rotation.x = -0.75 * k; P.hipR.rotation.x = -0.75 * k;
+    P.shR.rotation.set(0.5 * k, 0, 0.9 * k); P.shL.rotation.set(0.5 * k, 0, -0.9 * k);
+    P.head.rotation.set(0, 0, 0);
+    if (ch.landT <= 0.2 && ch.item && ch.item.kind === 'weapon' && ch.equipT <= 0) ch.equipT = ch.equipDur = 0.3;
     return;
   }
   m.rotation.x = 0;
@@ -4127,7 +4165,9 @@ function animateChar(ch, dt) {
   const aimP = ch.isPlayer ? ch.pitch * 0.8 : 0;
   if (it && it.kind === 'weapon' && it.id === 'pickaxe') {
     const s = ch.swing;
-    const ang = s > 0 ? lerp(-0.3, 2.6, s * s) : 0.6 + sw * 0.3;
+    // après l'atterrissage, le bras remonte de la position basse (2.3) vers le port (0.6)
+    const eq = ch.equipT > 0 ? clamp(ch.equipT / (ch.equipDur || 0.3), 0, 1) : 0;
+    const ang = s > 0 ? lerp(-0.3, 2.6, s * s) : lerp(0.6 + sw * 0.3, 2.3, eq);
     P.shR.rotation.set(ang, 0, 0);
     P.shL.rotation.set(-sw * 0.6, 0, 0);
   } else if (it && it.kind === 'weapon') {

@@ -8,7 +8,8 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 ## Contenu
 
-- Construction sur grille (bois / pierre / métal) avec édition 3x3, tir ADS, 6 raretés d'armes dont la mythique, tempête en phases, bus de combat, planeur, véhicules, trampolines et cheminées d'air.
+- Construction sur grille (bois / pierre / métal) avec édition 3x3 (toit de la même texture que les murs), tir ADS, 6 raretés d'armes dont la mythique, tempête en phases, bus de combat, planeur, véhicules, trampolines et cheminées d'air.
+- Chute libre animée les mains vides (la pioche ne sort qu'après la réception) et mains accrochées aux poignées du parachute à l'ouverture.
 - 30 / 50 / 100 joueurs, Solo / Duo / Escouade avec coéquipiers IA, lobby complet (boutique, passe de combat, défis, casier, paramètres, touches AZERTY/QWERTY).
 
 ## Lancer en local

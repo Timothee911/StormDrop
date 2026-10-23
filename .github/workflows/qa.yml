@@ -125,6 +125,17 @@ jobs:
           pkill -f "http.server 8090" 2>/dev/null || true
           exit $STATUS
 
+      - name: Test animations (toit, chute libre, parachute)
+        id: anim
+        run: |
+          set -e
+          STATUS=0
+          nohup python3 -m http.server 8090 > /tmp/server4.log 2>&1 &
+          sleep 2
+          node .github/scripts/qa-anim.cjs || STATUS=1
+          pkill -f "http.server 8090" 2>/dev/null || true
+          exit $STATUS
+
       - name: Rapport QA
         if: always()
         run: |
@@ -139,5 +150,6 @@ jobs:
           echo "| Lobby + modules servis | ${{ steps.smoke.outcome == 'success' && 'OK' || (steps.smoke.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Test navigateur reel | ${{ steps.navigateur.outcome == 'success' && 'OK' || (steps.navigateur.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Gameplay Saison Espions | ${{ steps.saison.outcome == 'success' && 'OK' || (steps.saison.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Animations (toit, chute, parachute) | ${{ steps.anim.outcome == 'success' && 'OK' || (steps.anim.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_Non couvert : gameplay reel, multijoueur, audio en jeu, fonctionnalites avancees._" >> $GITHUB_STEP_SUMMARY

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { createOutline } from './outline.js';
 import { loadSettings, saveSettings, settingsForm } from './settings.js';
 import { initAudio, playMusic, stopMusic, setVolumes, sfx } from './audio.js';
-import { RARITIES, SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, CATS, DEFAULT_LOADOUT, makeCharMesh, makePickaxe, makeGlider, poseEmote, poseIdle, mat } from './cosmetics.js';
+import { RARITIES, SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, CATS, DEFAULT_LOADOUT, makeCharMesh, makePickaxe, makeGlider, makeParachute, poseEmote, poseIdle, mat } from './cosmetics.js';
 
 const $ = (id) => document.getElementById(id);
 const XP_PER_LEVEL = 1500;
@@ -115,7 +115,7 @@ function thumb(cat, id) {
     if (id === 'none') { const s = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 8, 24), mat(0xffffff)); s.position.y = 1.2; g.add(s); const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.4), mat(0xffd23f)); b.position.set(0, 0.36, 0.32); g.add(b); }
     else { const m = makeCharMesh({ skin: 'recrue', backpack: id }); m.group.rotation.y = Math.PI + 0.6; m.group.traverse((o) => { if (o.isMesh && o.parent !== m.torso && !['cristal'].includes(id)) o.castShadow = true; }); g.add(m.group); }
   } else if (cat === 'pickaxe') { const w = new THREE.Group(); const p = makePickaxe(id); p.rotation.x = Math.PI / 2; p.position.y = -0.25; w.add(p); w.rotation.z = 0.6; w.scale.setScalar(1.5); w.position.y = 0.1; g.add(w); }
-  else if (cat === 'glider') { const gl = makeGlider(id); gl.rotation.set(-0.5, 0.3, 0); gl.position.set(0, -1.6, 0); g.add(gl); camPos = [0, 2.2, -7.5]; look = [0, 0.6, 0]; }
+  else if (cat === 'glider') { const gl = makeParachute(id); gl.rotation.set(-0.35, 0.3, 0); gl.position.set(0, -1.9, 0); g.add(gl); camPos = [0, 3.2, -9.5]; look = [0, 1.7, 0]; }
   else if (cat === 'emote') { const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1 }[id] || 0.2); m.group.position.y = y; m.group.rotation.y = 0.35; g.add(m.group); }
   thumbScene.add(g);
   thumbCam.position.set(...camPos); thumbCam.lookAt(...look);
@@ -204,7 +204,7 @@ function showStageItem(r) {
     return;
   }
   if (r.cat === 'pickaxe') { stageItem = new THREE.Group(); const pk = makePickaxe(r.id); pk.rotation.x = Math.PI / 2; pk.position.y = -0.25; const w = new THREE.Group(); w.add(pk); w.rotation.z = 0.4; stageItem.add(w); }
-  if (r.cat === 'glider') { stageItem = makeGlider(r.id); stageItem.position.set(0, -1.4, 0); stageItem.scale.setScalar(0.85); }
+  if (r.cat === 'glider') { stageItem = makeParachute(r.id); stageItem.position.set(0, -2.0, 0); stageItem.scale.setScalar(0.8); }
   charM.group.visible = false; plat.add(stageItem);
 }
 function resetStage() { if (stageItem) { plat.remove(stageItem); stageItem = null; } buildChar(); }
