@@ -259,7 +259,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // en terrain découvert, vise la tour de l'Agence à l'horizontale
     p.pos.set(60, Math.max(G.terrainH(60, 0), 2.4) + 0.1, 0);
     p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    G.setCam(Math.PI / 2, 0);
+    // vise le sol devant : cible garantie (le terrain ne bouge pas), le test ne
+    // dépend ainsi pas des structures/bots aléatoires sur la trajectoire
+    G.setCam(Math.PI / 2, -1.0);
     window.advanceTime(80);
     // vérifie le point d'impact visé
     const o = new G.THREE.Vector3().copy(G.camera.position);
