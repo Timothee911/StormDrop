@@ -1,14 +1,23 @@
 #!/usr/bin/env node
 // QA animations STORMDROP : toit des constructions (même texture que les murs),
-// chute libre (pioche invisible, pose à plat ventre), parachute (mains accrochées
-// aux poignées) et atterrissage (réception puis retour de la pioche).
+// chute libre (tête en avant, pioche invisible), parachute (mains accrochées),
+// atterrissage (réception puis retour de la pioche) + lobby (skin de base,
+// courbe d'XP croissante, boutique avec les 5 catégories).
 // Échoue (exit 1) dès qu'une assertion est fausse ou qu'une erreur JS survient.
 const path = require('path');
 const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-(async () => {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const results = [];
+let failed = 0;
+const check = (name, cond, extra) => { results.push(`${cond ? 'PASS' : 'FAIL'} | ${name}${extra ? ' | ' + extra : ''}`); if (!cond) failed++; };
+const launch = () => puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+
+// ---------------------------------------------------------------------------
+// Jeu (game.html)
+// ---------------------------------------------------------------------------
+async function gameTests() {
+  const browser = await launch();
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
@@ -17,10 +26,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.goto('http://localhost:8090/game.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 30000 });
   await sleep(1500);
-
-  const results = [];
-  let failed = 0;
-  const check = (name, cond, extra) => { results.push(`${cond ? 'PASS' : 'FAIL'} | ${name}${extra ? ' | ' + extra : ''}`); if (!cond) failed++; };
 
   // --- 1. Toit (cône) : UVs comme les murs, matériau texturé partagé, tous matériaux ---
   const roof = await page.evaluate(() => {
@@ -57,22 +62,51 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   check('toit édité : UVs conservés après édition 3x3', !!roof.edited && roof.edited.count === roof.edited.pos && roof.edited.finite && roof.edited.sameMat, JSON.stringify(roof.edited));
 
-  // --- 2. Chute libre : pioche cachée, corps à plat ventre, membres écartés ---
+  // --- 2. Chute libre : pioche cachée, tête en avant, pieds plus hauts ---
   const fall = await page.evaluate(() => {
-    const G = window.__game, p = G.player;
+    const G = window.__game, p = G.player, V = G.THREE.Vector3;
     p.mode = 'fall'; p.grounded = false; p.alive = true;
     p.pos.set(30, 300, 30); p.vel.set(0, -10, 0);
     window.advanceTime(400);
+    const headY = +p.mesh.localToWorld(new V(0, 1.9, 0)).y.toFixed(2);
+    const feetY = +p.mesh.localToWorld(new V(0, 0.15, 0)).y.toFixed(2);
     return {
       hand: p.parts.hand.visible,
       pitch: +p.mesh.rotation.x.toFixed(2),
       armR: +p.parts.shR.rotation.z.toFixed(2),
-      legL: +p.parts.hipL.rotation.z.toFixed(2),
+      legZ: +p.parts.hipL.rotation.z.toFixed(2),
+      headY, feetY,
     };
   });
   check('chute libre : pioche invisible', fall.hand === false);
-  check('chute libre : corps à plat ventre', fall.pitch < -1, JSON.stringify(fall));
-  check('chute libre : bras et jambes écartés', fall.armR > 1 && fall.legL < -0.1, JSON.stringify(fall));
+  check('chute libre : tête en avant, pieds plus hauts', fall.pitch < -1.6 && fall.headY < fall.feetY, JSON.stringify(fall));
+  check('chute libre : bras écartés, jambes jointes', fall.armR > 0.5 && fall.armR < 1.2 && fall.legZ === 0, JSON.stringify(fall));
+
+  // --- 2b. Chute libre : le plongeon suit le regard, quel que soit le cap ---
+  // (le yaw du joueur est piloté par la caméra : on oriente avec setCam et on
+  // relit le yaw réel du personnage pour calculer la direction face à lui)
+  const yaw = await page.evaluate(() => {
+    const G = window.__game, p = G.player, V = G.THREE.Vector3;
+    const out = { dives: [] };
+    for (const yw of [0, Math.PI / 2, Math.PI]) {
+      p.mode = 'fall'; p.grounded = false;
+      G.setCam(yw, -0.4);
+      p.pos.set(30, 300, 30); p.vel.set(0, -12, 0);
+      window.advanceTime(300);
+      const head = p.mesh.localToWorld(new V(0, 1.9, 0));
+      const feet = p.mesh.localToWorld(new V(0, 0.15, 0));
+      const d = head.sub(feet); // pieds → tête
+      const facing = new V(-Math.sin(p.yaw), 0, -Math.cos(p.yaw));
+      out.dives.push(+d.dot(facing).toFixed(2)); // > 0 : la tête plonge devant
+    }
+    // plongeon rapide : plus vertical
+    p.vel.set(0, -60, 0);
+    window.advanceTime(300);
+    out.fastPitch = +p.mesh.rotation.x.toFixed(2);
+    return out;
+  });
+  check('chute libre : plongeon devant soi à tous les caps', yaw.dives.length === 3 && yaw.dives.every((d) => d > 0.2), JSON.stringify(yaw.dives));
+  check('chute libre : plongeon rapide plus vertical', yaw.fastPitch < -2.2, 'pitch=' + yaw.fastPitch);
 
   // --- 3. Parachute : mains en contact réel avec les poignées pendant tout le cycle ---
   const grip = await page.evaluate(() => {
@@ -93,7 +127,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const g = grips.find((x) => x.userData.grip === sgn);
         const sh = sgn > 0 ? p.parts.shR : p.parts.shL;
         if (!g) { d.push(-1); continue; }
-        sh.getWorldPosition(hp);
         sh.localToWorld(tmp.set(0, -0.74, 0)); // centre de la main
         g.getWorldPosition(gp);
         d.push(+tmp.distanceTo(gp).toFixed(3)); // main <-> poignée
@@ -130,9 +163,64 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('atterrissage : jambes revenues droites (pas de fuite de pose)', land.t3.legZ === 0, JSON.stringify({ t2: land.t2, t3: land.t3 }));
   check('atterrissage : bras en position de port de la pioche', land.t3.hand === true && land.t3.armR < 1.2, JSON.stringify(land.t3));
 
-  console.log(results.join('\n'));
-  if (errors.length) console.log('ERREURS JS:\n' + errors.join('\n'));
-  else console.log('Aucune erreur JS');
+  if (errors.length) console.log('ERREURS JS jeu:\n' + errors.join('\n'));
+  else console.log('Aucune erreur JS jeu');
   await browser.close();
-  if (failed || errors.length) process.exit(1);
+  return errors.length;
+}
+
+// ---------------------------------------------------------------------------
+// Lobby (index.html) : skin de base, courbe d'XP, boutique complète
+// ---------------------------------------------------------------------------
+async function lobbyTests() {
+  const browser = await launch();
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto('http://localhost:8090/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__lobby, { timeout: 30000 });
+  await sleep(1000);
+
+  const res = await page.evaluate(() => {
+    const L = window.__lobby;
+    // skin de base : la Recrue, pas la Tigresse
+    const defSkin = L.DEFAULT_LOADOUT.skin === 'recrue' && L.S.loadout.skin === 'recrue';
+    // chaque niveau demande plus d'XP que le précédent
+    const curve = L.xpNeeded(2) > L.xpNeeded(1) && L.xpNeeded(10) > L.xpNeeded(9) && L.xpNeeded(30) > L.xpNeeded(1);
+    // comportement : le coût du niveau 1 fait passer au niveau 2, mais pas du 2 au 3
+    const lv0 = L.S.level;
+    L.addXP(L.xpNeeded(1));
+    const lv1 = L.S.level, xp1 = L.S.xp;
+    L.addXP(L.xpNeeded(1)); // au niveau 2, il faut plus que ça
+    const lv2 = L.S.level;
+    const levelUp = lv0 === 1 && lv1 === 2 && lv2 === 2 && xp1 === 0;
+    // franchissement multiple : 1500 + 1950 = 3450 XP → niveau 3 pile
+    const multi = L.addXP(L.xpNeeded(2) - L.S.xp);
+    const multiOK = L.S.level === 3 && L.S.xp === 0 && multi.levels === 1;
+    // boutique : au moins un objet de chaque catégorie chaque jour
+    const shop = L.shopToday();
+    const cats = new Set([...shop.daily, ...shop.featured].map((p) => p.cat));
+    const allCats = ['skin', 'backpack', 'pickaxe', 'glider', 'emote'].every((c) => cats.has(c));
+    return { defSkin, curve, levelUp, multiOK, xpNeeded1: L.xpNeeded(1), xpNeeded2: L.xpNeeded(2), cats: [...cats].sort().join(','), allCats, dailyN: shop.daily.length };
+  });
+  check('skin de base : la Recrue', res.defSkin === true, JSON.stringify(res));
+  check('XP : chaque niveau coûte plus que le précédent', res.curve === true, `1=${res.xpNeeded1}, 2=${res.xpNeeded2}`);
+  check('XP : le coût du niveau 1 fait passer 1→2 mais pas 2→3', res.levelUp === true, JSON.stringify(res));
+  check('XP : 3450 XP d\'un coup → niveau 3 pile', res.multiOK === true, JSON.stringify(res));
+  check('boutique : tenues, sacs à dos, pioches, planeurs et emotes présents', res.allCats === true, res.cats);
+  check('boutique : 8 objets du jour', res.dailyN === 8, 'daily=' + res.dailyN);
+
+  if (errors.length) console.log('ERREURS JS lobby:\n' + errors.join('\n'));
+  else console.log('Aucune erreur JS lobby');
+  await browser.close();
+  return errors.length;
+}
+
+(async () => {
+  const e1 = await gameTests();
+  const e2 = await lobbyTests();
+  console.log(results.join('\n'));
+  if (failed || e1 || e2) process.exit(1);
 })().catch((e) => { console.error(e); process.exit(1); });

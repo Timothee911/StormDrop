@@ -4082,6 +4082,9 @@ function stepSound(ch) {
 }
 function animateChar(ch, dt) {
   const P = ch.parts, m = ch.mesh;
+  // ordre yaw→pitch→roulis : l'inclinaison de chute/planeur se fait dans le
+  // repère du personnage (plongeon devant lui), pas selon l'axe mondial X
+  m.rotation.order = 'YXZ';
   // le recul de tir décroit toujours, même si le perso est invisible/loin
   ch.shotKick = Math.max(0, (ch.shotKick || 0) - dt * 6);
   // temps de dégagement d'arme des bots (celui du joueur est géré dans updatePlayerPhysics)
@@ -4101,18 +4104,18 @@ function animateChar(ch, dt) {
   // jambes (rotation.z) et elle ne doit pas fuiter sur les autres animations
   P.hipL.rotation.z = 0; P.hipR.rotation.z = 0;
   if (ch.mode === 'fall') {
-    // CHUTE LIBRE : corps à plat ventre, bras et jambes écartés qui flottent,
+    // CHUTE LIBRE façon Fortnite : tête en avant, pieds un peu plus hauts,
     // plongeon plus vertical quand on fonce vers le bas. Mains vides : la pioche
     // reste au sac pendant tout le saut, elle ne sort qu'après la réception.
     P.hand.visible = false;
     const fast = Math.min(1, Math.max(0, (-ch.vel.y - 24) / 30));
-    m.rotation.x = -1.1 - fast * 0.25;
-    m.rotation.z = Math.sin(ch.animT * 0.6) * 0.08; // léger roulis au vent
-    const flap = Math.sin(ch.animT * 2) * 0.12;
-    P.hipL.rotation.x = 0.35 + flap; P.hipR.rotation.x = 0.35 - flap;
-    P.hipL.rotation.z = -0.22 - flap * 0.4; P.hipR.rotation.z = 0.22 + flap * 0.4; // jambes écartées
-    P.shL.rotation.set(-0.25, 0, -1.35 - flap * 0.5); P.shR.rotation.set(-0.25, 0, 1.35 + flap * 0.5); // bras en arrière, façon saut en parachute
-    P.head.rotation.set(0.3, 0, 0);
+    m.rotation.x = -1.95 - fast * 0.55;
+    m.rotation.z = Math.sin(ch.animT * 0.6) * 0.06; // léger roulis au vent
+    const flap = Math.sin(ch.animT * 2.4) * 0.1;
+    // jambes jointes qui traînent derrière, bras écartés du corps ramenés en arrière
+    P.hipL.rotation.x = 0.3 + flap * 0.3; P.hipR.rotation.x = 0.3 - flap * 0.3;
+    P.shL.rotation.set(-0.55 + flap * 0.25, 0, -0.9); P.shR.rotation.set(-0.55 - flap * 0.25, 0, 0.9);
+    P.head.rotation.set(0.55, 0, 0); // regarde dans la direction du saut
     return;
   }
   if (ch.mode === 'glide') {

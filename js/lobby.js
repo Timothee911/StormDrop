@@ -8,6 +8,9 @@ import { RARITIES, SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, CATS, DEFAULT_LO
 const $ = (id) => document.getElementById(id);
 const XP_PER_LEVEL = 1500;
 const MAX_TIER = 30;
+// Chaque niveau demande plus d'XP que le précédent (+450 par niveau) :
+// niveau 1 = 1500 XP, niveau 2 = 1950, niveau 3 = 2400…
+function xpNeeded(level) { return XP_PER_LEVEL + (Math.max(1, level) - 1) * 450; }
 
 // ---------------------------------------------------------------------------
 // Player profile (kept in memory for this page session)
@@ -261,13 +264,13 @@ function unlockTiers() {
 function addXP(n) {
   const before = S.level;
   S.xp += n;
-  while (S.xp >= XP_PER_LEVEL) { S.xp -= XP_PER_LEVEL; S.level++; }
+  while (S.xp >= xpNeeded(S.level)) { S.xp -= xpNeeded(S.level); S.level++; }
   return { levels: S.level - before, rewards: unlockTiers() };
 }
 function updateTopbar() {
   $('curVal').textContent = fmt(S.eclats);
   $('lvlNum').textContent = S.level; $('npLvl').textContent = S.level; $('npName').textContent = S.name;
-  $('lvlFill').style.width = (S.xp / XP_PER_LEVEL * 100) + '%';
+  $('lvlFill').style.width = (S.xp / xpNeeded(S.level) * 100) + '%';
   const lockerTab = document.querySelector('[data-tab=locker]');
   lockerTab.querySelector('.dot')?.remove();
   if (S.fresh.size) lockerTab.insertAdjacentHTML('beforeend', '<i class="dot"></i>');
@@ -434,8 +437,16 @@ function shopToday() {
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   const skins = pool.filter((p) => p.cat === 'skin');
   const featured = skins.slice(0, 2).map((p) => ({ ...p, featured: true }));
-  const rest = pool.filter((p) => !featured.some((f) => f.cat === p.cat && f.id === p.id)).slice(0, 8);
-  return { featured, daily: rest };
+  // la boutique propose chaque jour au moins un objet de chaque catégorie :
+  // tenues, sacs à dos, pioches, planeurs et emotes
+  const used = new Set(featured.map((f) => f.cat + ':' + f.id));
+  const daily = [];
+  for (const cat of ['skin', 'backpack', 'pickaxe', 'glider', 'emote']) {
+    const pick = pool.find((p) => p.cat === cat && !used.has(p.cat + ':' + p.id));
+    if (pick) { daily.push(pick); used.add(pick.cat + ':' + pick.id); }
+  }
+  for (const p of pool) { if (daily.length >= 8) break; if (!used.has(p.cat + ':' + p.id)) { daily.push(p); used.add(p.cat + ':' + p.id); } }
+  return { featured, daily };
 }
 function shopCard(p) {
   const it = itemOf(p.cat, p.id), own = S.owned.has(p.cat + ':' + p.id), RR = RARITIES[it.rarity];
@@ -639,14 +650,14 @@ function showResult(d, sm) {
   $('rsXpTotal').textContent = '+' + fmt(sm.total) + ' XP';
   // animated level bar
   let lvl = sm.startLevel, xp = sm.startXP, remaining = sm.total;
-  $('rsLvl').textContent = lvl; $('rsFill').style.transition = 'none'; $('rsFill').style.width = (xp / XP_PER_LEVEL * 100) + '%';
+  $('rsLvl').textContent = lvl; $('rsFill').style.transition = 'none'; $('rsFill').style.width = (xp / xpNeeded(lvl) * 100) + '%';
   const stepAnim = () => {
     if (remaining <= 0) return;
-    const need = XP_PER_LEVEL - xp, take = Math.min(need, remaining);
+    const need = xpNeeded(lvl) - xp, take = Math.min(need, remaining);
     remaining -= take; xp += take;
-    $('rsFill').style.transition = 'width .6s ease'; $('rsFill').style.width = (xp / XP_PER_LEVEL * 100) + '%';
+    $('rsFill').style.transition = 'width .6s ease'; $('rsFill').style.width = (xp / xpNeeded(lvl) * 100) + '%';
     setTimeout(() => {
-      if (xp >= XP_PER_LEVEL) { lvl++; xp = 0; $('rsLvl').textContent = lvl; $('rsFill').style.transition = 'none'; $('rsFill').style.width = '0%'; }
+      if (xp >= xpNeeded(lvl)) { lvl++; xp = 0; $('rsLvl').textContent = lvl; $('rsFill').style.transition = 'none'; $('rsFill').style.width = '0%'; }
       setTimeout(stepAnim, 60);
     }, 650);
   };
@@ -666,7 +677,7 @@ buildChar(); updateTopbar(); renderHome();
 requestAnimationFrame(loop);
 // pre-render thumbnails in the background so tabs open instantly
 (() => { const q = []; for (const c in CATS) for (const id in CATS[c].items) q.push([c, id]); const tick = () => { for (let i = 0; i < 3 && q.length; i++) { const [c, id] = q.shift(); thumb(c, id); } if (q.length) setTimeout(tick, 30); }; tick(); })();
-window.__lobby = { S, setTab, addXP, applyResult, showResult, launchMatch };
+window.__lobby = { S, setTab, addXP, applyResult, showResult, launchMatch, xpNeeded, shopToday, DEFAULT_LOADOUT };
 
 // ---------------------------------------------------------------------------
 // Installable app (PWA): offline cache + install button

@@ -79,7 +79,7 @@ export const CATS = {
   glider: { name: 'Planeur', items: GLIDERS },
   emote: { name: 'Emote', items: EMOTES },
 };
-export const DEFAULT_LOADOUT = { skin: 'tigresse', backpack: 'sac', pickaxe: 'default', glider: 'default', emote: 'danse' };
+export const DEFAULT_LOADOUT = { skin: 'recrue', backpack: 'sac', pickaxe: 'default', glider: 'default', emote: 'danse' };
 
 // ---------------------------------------------------------------------------
 // Model builders
