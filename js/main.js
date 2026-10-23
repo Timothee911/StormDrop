@@ -40,7 +40,7 @@ const CONSUM = {
 const AMMO_NAMES = { light: 'Munitions légères', medium: 'Munitions moyennes', shells: 'Cartouches', heavy: 'Munitions lourdes' };
 const MAT_HP = { wood: 150, stone: 260, metal: 380 };
 const MAT_ORDER = ['wood', 'stone', 'metal'];
-const BUILD_COST = 10;
+const BUILD_COST = 5;
 const BUILD_TIME = { wood: 1.0, stone: 2.2, metal: 3.6 }; // seconds to fully reinforce
 const START_HP = { wood: 0.33, stone: 0.25, metal: 0.18 };
 const GRAV = 30, JUMP_V = 10.2, RUN = 7.6;
@@ -56,7 +56,7 @@ const SET = loadSettings();
 if (LOAD.settings) { const b = { ...SET.binds, ...(LOAD.settings.binds || {}) }; Object.assign(SET, LOAD.settings); SET.binds = b; }
 const BIND = SET.binds;
 const TEAM_SIZE = { solo: 1, duo: 2, escouade: 4 }[LOAD.mode || 'solo'] || 1;
-const PLAYER_TOTAL = [30, 50, 100].includes(+LOAD.players) ? +LOAD.players : 30;
+const PLAYER_TOTAL = [50, 100].includes(+LOAD.players) ? +LOAD.players : 50;
 BOT_COUNT = PLAYER_TOTAL - 1;
 setVolumes(SET.volume, SET.music);
 const IN_FRAME = window.parent !== window;
@@ -856,13 +856,32 @@ function furniture(cx, cz, y, w, d, skipCorner, accent, avoid) {
     const [qx, qz] = spots[i], x = cx + qx * w / 4, z = cz + qz * d / 4;
     if (avoid && avoid.some((a) => Math.hypot(a.x - x, a.z - z) < 2)) continue;
     const k = kinds[(i + randi(0, 4)) % kinds.length];
-    if (k === 'table') { hbox(0x9a6a40, x, y + 0.72, z, 1.5, 0.1, 0.95); for (const [a, b] of [[-0.62, -0.38], [0.62, -0.38], [-0.62, 0.38], [0.62, 0.38]]) hbox(0x6e4a2c, x + a, y, z + b, 0.1, 0.72, 0.1); hbox(0xc0392b, x - 1.05, y, z, 0.5, 0.45, 0.5); hbox(0xc0392b, x - 1.05, y + 0.45, z - 0.22, 0.5, 0.55, 0.08); }
-    else if (k === 'bed') { hbox(0x6e4a2c, x, y, z, 1.4, 0.4, 2.1); hbox(accent, x, y + 0.4, z + 0.15, 1.35, 0.16, 1.7); hbox(0xffffff, x, y + 0.4, z - 0.75, 1.0, 0.2, 0.45); hbox(0x6e4a2c, x, y, z - 1.05, 1.5, 1.0, 0.12); }
-    else if (k === 'sofa') { hbox(accent, x, y, z, 2.0, 0.45, 0.85); hbox(accent, x, y + 0.45, z - 0.35, 2.0, 0.5, 0.18); hbox(accent, x - 0.95, y + 0.45, z, 0.16, 0.3, 0.85); hbox(accent, x + 0.95, y + 0.45, z, 0.16, 0.3, 0.85); }
-    else if (k === 'shelf') { hbox(0x7a5232, x, y, z, 1.4, 1.8, 0.4); for (let j = 0; j < 3; j++) hbox(pick([0x3b6fd1, 0xe08a2e, 0x2f9e7a, 0xd2483a]), x + rand(-0.4, 0.4), y + 0.35 + j * 0.55, z + 0.05, 0.5, 0.28, 0.3); }
-    else hbox(accent, x, y + 0.01, z, 2.4, 0.03, 1.6);
+    if (k === 'table') {
+      hbox(0x9a6a40, x, y + 0.72, z, 1.5, 0.1, 0.95); for (const [a, b] of [[-0.62, -0.38], [0.62, -0.38], [-0.62, 0.38], [0.62, 0.38]]) hbox(0x6e4a2c, x + a, y, z + b, 0.1, 0.72, 0.1); hbox(0xc0392b, x - 1.05, y, z, 0.5, 0.45, 0.5); hbox(0xc0392b, x - 1.05, y + 0.45, z - 0.22, 0.5, 0.55, 0.08);
+      propBox(x, y, z, 0.8, 0.55, 0.85); propBox(x - 1.05, y, z, 0.3, 0.3, 1.0); // table + chaise
+    }
+    else if (k === 'bed') { hbox(0x6e4a2c, x, y, z, 1.4, 0.4, 2.1); hbox(accent, x, y + 0.4, z + 0.15, 1.35, 0.16, 1.7); hbox(0xffffff, x, y + 0.4, z - 0.75, 1.0, 0.2, 0.45); hbox(0x6e4a2c, x, y, z - 1.05, 1.5, 1.0, 0.12); propBox(x, y, z - 0.03, 0.75, 1.08, 1.0); }
+    else if (k === 'sofa') { hbox(accent, x, y, z, 2.0, 0.45, 0.85); hbox(accent, x, y + 0.45, z - 0.35, 2.0, 0.5, 0.18); hbox(accent, x - 0.95, y + 0.45, z, 0.16, 0.3, 0.85); hbox(accent, x + 0.95, y + 0.45, z, 0.16, 0.3, 0.85); propBox(x, y, z, 1.05, 0.48, 0.95); }
+    else if (k === 'shelf') { hbox(0x7a5232, x, y, z, 1.4, 1.8, 0.4); for (let j = 0; j < 3; j++) hbox(pick([0x3b6fd1, 0xe08a2e, 0x2f9e7a, 0xd2483a]), x + rand(-0.4, 0.4), y + 0.35 + j * 0.55, z + 0.05, 0.5, 0.28, 0.3); propBox(x, y, z, 0.72, 0.22, 1.8); }
+    else hbox(accent, x, y + 0.01, z, 2.4, 0.03, 1.6); // tapis : décor plat, sans collision
     placed++;
   }
+}
+// collider de décor indestructible (mobilier, coffres, caisses, pads…)
+const propCols = [];
+function propBox(x, y, z, hx, hz, h) {
+  const c = addCollider({ type: 'box', minX: x - hx, maxX: x + hx, minZ: z - hz, maxZ: z + hz, minY: y, maxY: y + h, indestructible: true, kind: 'prop' });
+  propCols.push(c); return c;
+}
+function removePropCol(c) {
+  if (!c) return;
+  removeCollider(c);
+  const i = propCols.indexOf(c); if (i >= 0) propCols.splice(i, 1);
+}
+// AABB englobant un rectangle tourné (coffres, caisses orientés)
+function propBoxRot(x, y, z, hx, hz, h, a) {
+  const ca = Math.abs(Math.cos(a)), sa = Math.abs(Math.sin(a));
+  return propBox(x, y, z, hx * ca + hz * sa, hx * sa + hz * ca, h);
 }
 function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
   // rot: 0..3 -> door side
@@ -1135,10 +1154,12 @@ function spawnChest(x, y, z) {
   // rivets sur le devant du corps
   for (const rx of [-0.42, 0.42]) { addBox(g, 0.06, 0.06, 0.06, rx, 0.3, 0.36, gold); addBox(g, 0.06, 0.06, 0.06, rx, 0.6, 0.36, gold); }
   g.add(lid); g.position.set(x, y, z); g.rotation.y = rand(6.28);
+  // AABB tourné : le coffre (1,15 x 0,75, ~0,9 de haut avec le couvercle) bloque dans toutes les orientations
+  const col = propBoxRot(x, y, z, 0.6, 0.42, 0.9, g.rotation.y);
   g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
   const light = { intensity: 0, distance: 6, color: 0xffc240, y: 1.2, obj: g }; // drawn by the light pool
   scene.add(g);
-  const c = { x, y, z, mesh: g, lid, light, opened: false };
+  const c = { x, y, z, mesh: g, lid, light, opened: false, col };
   chests.push(c); return c;
 }
 function spawnAmmoBox(x, y, z) {
@@ -1171,7 +1192,8 @@ function spawnAmmoBox(x, y, z) {
   // marquage pochoir
   addBox(g, 0.3, 0.22, 0.02, 0, 0.24, 0.29, matC(0xd8c24a, { roughness: 0.9 }));
   g.add(lid, tops); g.position.set(x, y, z); g.rotation.y = rand(6.28); scene.add(g);
-  return { x, y, z, mesh: g, lid, tops, opened: false };
+  const col = propBoxRot(x, y, z, 0.48, 0.32, 0.6, g.rotation.y); // caisse solide (0,94 x 0,62 x 0,58)
+  return { x, y, z, mesh: g, lid, tops, opened: false, col };
 }
 // ouvre la caisse de munitions : le couvercle bascule, l'intérieur vide reste en place
 function openAmmoBox(c) {
@@ -1450,25 +1472,34 @@ function coneH(c, x, z) {
 }
 function physics(ch, dt) {
   const oldY = ch.pos.y;
-  ch.pos.x += ch.vel.x * dt; ch.pos.z += ch.vel.z * dt;
-  const rr = Math.hypot(ch.pos.x, ch.pos.z);
-  if (rr > WORLD_R) { ch.pos.x *= WORLD_R / rr; ch.pos.z *= WORLD_R / rr; }
-  queryCols(ch.pos.x, ch.pos.z, 2.5, tmpCols);
   ch.blocked = false;
-  for (const c of tmpCols) {
-    if (c.type !== 'box' || c.passable) continue;
-    if (oldY + CH_H <= c.minY || oldY + STEP >= c.maxY) continue;
-    const px = clamp(ch.pos.x, c.minX, c.maxX), pz = clamp(ch.pos.z, c.minZ, c.maxZ);
-    const dx = ch.pos.x - px, dz = ch.pos.z - pz, d2 = dx * dx + dz * dz;
-    if (d2 >= CH_R * CH_R) continue;
-    ch.blocked = true;
-    if (d2 > 1e-8) { const d = Math.sqrt(d2), k = (CH_R - d) / d; ch.pos.x += dx * k; ch.pos.z += dz * k; }
-    else {
-      const pen = [ch.pos.x - c.minX, c.maxX - ch.pos.x, ch.pos.z - c.minZ, c.maxZ - ch.pos.z];
-      const i = pen.indexOf(Math.min(...pen));
-      if (i === 0) ch.pos.x = c.minX - CH_R; else if (i === 1) ch.pos.x = c.maxX + CH_R; else if (i === 2) ch.pos.z = c.minZ - CH_R; else ch.pos.z = c.maxZ + CH_R;
+  queryCols(ch.pos.x, ch.pos.z, 2.5, tmpCols);
+  // SOUS-PAS ADAPTATIFS : à grande vitesse (grappin, trampoline, véhicules) on
+  // ne doit pas traverser un mur fin entre deux frames — le déplacement
+  // horizontal est découpé en sous-pas ~12 cm (8 max, soit ~15 cm à vitesse
+  // extrême : toujours < l'épaisseur d'un mur de 22 cm), résolus un par un.
+  const disp = Math.hypot(ch.vel.x, ch.vel.z) * dt;
+  const nSub = Math.max(1, Math.min(8, Math.ceil(disp / 0.12)));
+  for (let sub = 0; sub < nSub; sub++) {
+    ch.pos.x += ch.vel.x * dt / nSub;
+    ch.pos.z += ch.vel.z * dt / nSub;
+    for (const c of tmpCols) {
+      if (c.type !== 'box' || c.passable) continue;
+      if (oldY + CH_H <= c.minY || oldY + STEP >= c.maxY) continue;
+      const px = clamp(ch.pos.x, c.minX, c.maxX), pz = clamp(ch.pos.z, c.minZ, c.maxZ);
+      const dx = ch.pos.x - px, dz = ch.pos.z - pz, d2 = dx * dx + dz * dz;
+      if (d2 >= CH_R * CH_R) continue;
+      ch.blocked = true;
+      if (d2 > 1e-8) { const d = Math.sqrt(d2), k = (CH_R - d) / d; ch.pos.x += dx * k; ch.pos.z += dz * k; }
+      else {
+        const pen = [ch.pos.x - c.minX, c.maxX - ch.pos.x, ch.pos.z - c.minZ, c.maxZ - ch.pos.z];
+        const i = pen.indexOf(Math.min(...pen));
+        if (i === 0) ch.pos.x = c.minX - CH_R; else if (i === 1) ch.pos.x = c.maxX + CH_R; else if (i === 2) ch.pos.z = c.minZ - CH_R; else ch.pos.z = c.maxZ + CH_R;
+      }
     }
   }
+  const rr = Math.hypot(ch.pos.x, ch.pos.z);
+  if (rr > WORLD_R) { ch.pos.x *= WORLD_R / rr; ch.pos.z *= WORLD_R / rr; }
   ch.pos.y += ch.vel.y * dt;
   let ground = terrainH(ch.pos.x, ch.pos.z), onTerrain = true, gcol = null;
   const tol = 0.22;
@@ -1893,19 +1924,28 @@ let paused = false;
 let player = null;
 let gameT = 0;
 let camYaw = 0, camPitch = -0.2;
-const bus = { mesh: null, start: new THREE.Vector3(), end: new THREE.Vector3(), t: 0, dur: 32, active: false, pos: new THREE.Vector3(), dir: new THREE.Vector3() };
-const storm = { cx: 0, cz: 0, r: 700, nx: 0, nz: 0, nr: 700, sx: 0, sz: 0, sr: 700, phase: -1, stage: 'idle', timer: 0, dmg: 1, mesh: null };
-// La zone est révélée à l'atterrissage du joueur : 60 s de loot avant la
-// première fermeture, puis 6 fermetures progressives (fin ~6-7 min après
-// l'atterrissage). La zone de départ (r=460) englobe toute l'île (côte ~400).
+const bus = { mesh: null, start: new THREE.Vector3(), end: new THREE.Vector3(), t: 0, dur: 32, active: false, ended: false, pos: new THREE.Vector3(), dir: new THREE.Vector3() };
+const storm = { cx: 0, cz: 0, r: 700, nx: 0, nz: 0, nr: 700, sx: 0, sz: 0, sr: 700, phase: -1, stage: 'idle', timer: 0, dmg: 1, delay: 60, mesh: null };
+// La zone apparaît 1 min après la FIN du bus. Elle ne bouge pour la
+// PREMIÈRE fois que 2 min après son activation (wait phase 0), puis 6
+// fermetures bien plus lentes (STORM_SLOWER = durée x2,5). Les dégâts
+// sont calculés en direct selon le nombre de joueurs encore en jeu
+// (stormDamageFor) : 1, 2 à la moitié, 5 au quart, 15 à 5 survivants.
+// La zone de départ (r=460) englobe toute l'île (côte ~400).
+const STORM_SLOWER = 2.5;
 const PHASES = [
-  { wait: 60, shrink: 28, r: 280, dmg: 1 },
-  { wait: 50, shrink: 25, r: 170, dmg: 2 },
-  { wait: 38, shrink: 22, r: 95, dmg: 4 },
-  { wait: 30, shrink: 20, r: 48, dmg: 6 },
-  { wait: 22, shrink: 18, r: 18, dmg: 8 },
-  { wait: 15, shrink: 15, r: 0, dmg: 10 },
+  { wait: 120, shrink: Math.round(28 * STORM_SLOWER), r: 280 },
+  { wait: 50, shrink: Math.round(25 * STORM_SLOWER), r: 170 },
+  { wait: 38, shrink: Math.round(22 * STORM_SLOWER), r: 95 },
+  { wait: 30, shrink: Math.round(20 * STORM_SLOWER), r: 48 },
+  { wait: 22, shrink: Math.round(18 * STORM_SLOWER), r: 18 },
+  { wait: 15, shrink: Math.round(15 * STORM_SLOWER), r: 0 },
 ];
+// Dégâts de la tempête selon les joueurs encore en jeu (PNJ exclus du
+// compteur) : 5 joueurs = 15, quart = 5, moitié = 2, sinon 1.
+function stormDamageFor(alive) {
+  return alive <= 5 ? 15 : alive <= PLAYER_TOTAL / 4 ? 5 : alive <= PLAYER_TOTAL / 2 ? 2 : 1;
+}
 let elimBy = null, placement = 0;
 const leaderboard = [];
 
@@ -3067,7 +3107,9 @@ function placePad(x, z) {
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, 0.3, 16), padBase); base.position.y = 0.15; base.castShadow = true;
   const top = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.12, 16), padTop); top.position.y = 0.34;
   g.add(base, top); g.position.set(x, h, z); scene.add(g);
-  const pad = { x, z, y: h + 0.4, top }; pads.push(pad); return pad;
+  const pad = { x, z, y: h + 0.4, top }; pads.push(pad);
+  propBox(x, h, z, 1.35, 1.35, 0.4); // socle solide (marchable, 40 cm, rayon 1,35 comme le modèle)
+  return pad;
 }
 {
   const ventMat = new THREE.MeshBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -3088,6 +3130,7 @@ function placePad(x, z) {
       const grate = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.0, 0.3, 12), matC(0x6b7380, { metalness: 0.5, roughness: 0.4 })); grate.position.y = 0.1; g.add(grate);
       g.position.set(x, h, z); scene.add(g);
       vents.push({ x, z, y: h, rings });
+      propBox(x, h, z, 2.0, 2.0, 0.3); // grille solide (rayon 2 m, marchable), colonne d'air traversable
     }
   });
 }
@@ -3211,6 +3254,7 @@ function buildSpyPOI(p) {
       hdeco(CYL_GEO, 0xf4f1ea, colX, p.h + 5.5, colZ, 1.1, 11, 1.1);
       hdeco(BOX, 0xffc400, colX, p.h + 11.2, colZ, 1.5, 0.5, 1.5); // chapiteau or
       hdeco(BOX, 0x3a404c, colX, p.h + 0.25, colZ, 1.6, 0.5, 1.6); // base
+      propBox(colX, p.h, colZ, 0.8, 0.8, 11.4); // colonne solide
     }
     // Fronton d'entrée art-déco avec aigle/blason d'or
     hdeco(BOX, 0xf4f1ea, p.x, p.h + 11.8, p.z + 10.4, 16, 1.0, 2.2);
@@ -3220,10 +3264,12 @@ function buildSpyPOI(p) {
     for (const [cx2, cz2] of [[-9.4, -9.4], [9.4, -9.4], [-9.4, 9.4], [9.4, 9.4]]) {
       hdeco(BOX, 0x1a1a22, p.x + cx2, p.h + 20, p.z + cz2, 0.5, 0.4, 0.8);
       hdeco(BOX, 0xff1e42, p.x + cx2, p.h + 20, p.z + cz2 + (cz2 > 0 ? 0.42 : -0.42), 0.18, 0.18, 0.18);
+      propBox(p.x + cx2, p.h + 19.8, p.z + cz2, 0.3, 0.42, 0.4); // caméra : solide
     }
     // Dôme verrière centrale sur le toit de l'Agence (atrium de verre)
     hdeco(CYL_GEO, 0x1f2430, p.x, p.h + 20.6, p.z, 7.5, 0.6, 7.5);
     hdeco(CYL_GEO, 0x6fd0ff, p.x, p.h + 22.0, p.z, 6.4, 2.4, 6.4);
+    propBox(p.x, p.h + 20.6, p.z, 7.5, 7.5, 2.7); // dôme vitré de l'atrium : solide (20,6 -> 23,3)
     hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 7.0, 0.3, 0.3);
     hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 0.3, 0.3, 7.0);
 
@@ -3252,7 +3298,9 @@ function buildSpyPOI(p) {
     curHouse = { boxes: [], deco: [], mesh: null };
     for (const [fx, fz] of [[-8.4, -8.4], [8.4, -8.4], [-8.4, 8.4], [8.4, 8.4]]) {
       hdeco(BOX, 0x8d929a, p.x + fx, p.h + 22, p.z + fz, 0.22, 4, 0.22);
+      propBox(p.x + fx, p.h + 20, p.z + fz, 0.16, 0.16, 4.4); // mât de drapeau : solide sur sa hauteur visible seulement
       hdeco(BOX, 0x1f3a8a, p.x + fx + 1.1, p.h + 23.4, p.z + fz, 2.2, 1.4, 0.08);
+      propBox(p.x + fx + 1.1, p.h + 22.7, p.z + fz, 1.1, 0.05, 1.4); // toile de drapeau : solide
       hdeco(BOX, 0xffffff, p.x + fx + 1.1, p.h + 23.4, p.z + fz + 0.05, 0.7, 0.7, 0.02);
     }
     hdeco(CYL_GEO, 0xf2efe6, p.x, p.h + 13, p.z + 9.25, 3.2, 0.25, 3.2, Math.PI / 2, 0, 0, null, 'YXZ');
@@ -3464,9 +3512,12 @@ function buildSpyPOI(p) {
     hdeco(BOX, 0xf1c40f, p.x, py + 1.35, p.z + 9.6, 25, 0.35, 0.35);
     hdeco(BOX, 0xf1c40f, p.x, py + 1.75, p.z + 9.6, 25, 0.35, 0.35);
     hdeco(BOX, 0xf1c40f, p.x + 12.6, py + 1.35, p.z, 0.35, 0.35, 19);
+    propBox(p.x, py + 1.2, p.z + 9.6, 12.5, 0.25, 0.7); propBox(p.x, py + 1.6, p.z + 9.6, 12.5, 0.25, 0.7); // conduites-garde-corps solides
+    propBox(p.x + 12.6, py + 1.2, p.z, 0.25, 9.5, 0.7);
     for (const [vx, vz] of [[-11, 7], [-11, 9.5]]) {
       hdeco(CYL_GEO, 0x8fa3ad, p.x + vx, py + 3.2, p.z + vz, 0.7, 3.6, 0.7);
       hdeco(CYL_GEO, 0xf1c40f, p.x + vx, py + 5.2, p.z + vz, 0.85, 0.5, 0.85);
+      propBox(p.x + vx, py + 1.4, p.z + vz, 0.85, 0.85, 4.3); // cheminée de la Plateforme : solide
     }
     // grue rouge : mât plein + flèche + contrepoids + câble
     {
@@ -3474,8 +3525,12 @@ function buildSpyPOI(p) {
       makeStructBox(cx, base, cz, 1.3, 17, 1.3, matC(0xb03a2e, { metalness: 0.3, roughness: 0.5 }), { indestructible: true });
       hdeco(BOX, 0xb03a2e, cx - 5.5, base + 16.2, cz, 12, 0.7, 0.9, 0, 0, 0.1);
       hdeco(BOX, 0xb03a2e, cx + 2.2, base + 15.4, cz, 2.4, 1.4, 1.6);
+      propBox(cx - 5.5, base + 15.5, cz, 6, 0.45, 1.4); // flèche de grue inclinée : solide (portée verticale du dévers 0,1 rad)
+      propBox(cx + 2.2, base + 14.7, cz, 1.2, 0.8, 1.4); // contrepoids : solide
       hdeco(BOX, 0x22262f, cx - 10.6, base + 9, cz, 0.12, 12, 0.12);
       hdeco(BOX, 0x3a3f47, cx - 10.6, base + 2.6, cz, 0.7, 0.5, 0.7);
+      propBox(cx - 10.6, base + 3, cz, 0.1, 0.1, 12); // câble de grue : solide
+      propBox(cx - 10.6, base + 2.35, cz, 0.35, 0.35, 0.5); // crochet : solide
     }
     // hélipad jaune en porte-à-faux à l'ouest, marquage H
     makeStructBox(p.x - 19, py + 0.4, p.z - 4, 7, 0.8, 7, matC(0xf1c40f, { metalness: 0.2, roughness: 0.6 }), { indestructible: true });
@@ -3484,6 +3539,7 @@ function buildSpyPOI(p) {
     hdeco(BOX, 0x22262f, p.x - 19, py + 1.25, p.z - 4, 1.8, 0.1, 0.55);
     hdeco(BOX, 0x8fa3ad, p.x - 17, py - 1.2, p.z - 4, 5.5, 0.5, 0.5, 0, 0, 0.5);
     hdeco(BOX, 0x8fa3ad, p.x - 17, py - 1.2, p.z - 4, 5.5, 0.5, 0.5, 0, 0, -0.5);
+    propBox(p.x - 17, py - 2.5, p.z - 4, 2.75, 0.25, 2.6); // antennes en X : solides (portée verticale du dévers)
     // passerelle treillis vers la station satellite (salle de contrôle)
     makeStructBox(p.x + 17, py + 0.4, p.z + 7, 9, 0.8, 2.6, matC(0xf1c40f, { metalness: 0.2, roughness: 0.6 }), { indestructible: true });
     makeStructBox(p.x + 24, y - 1, p.z + 7, 2, 13, 2, matC(0x46586a, { metalness: 0.4 }), { indestructible: true });
@@ -3491,7 +3547,8 @@ function buildSpyPOI(p) {
     makeStructBox(p.x + 24, py + 1.2, p.z + 7, 4.6, 3, 3.6, matC(0xbcd8e8, { metalness: 0.1, roughness: 0.4 }), { indestructible: true });
     hdeco(BOX, 0x2c5f8a, p.x + 24, py + 2.5, p.z + 5.15, 4.2, 0.8, 0.1);
     hdeco(CYL_GEO, 0xf1c40f, p.x + 24, py + 5.6, p.z + 7, 0.25, 3, 0.25);
-    for (const [fx, fz] of [[-2.6, -1], [2.6, 1]]) hdeco(BOX, 0xf1c40f, p.x + 17 + fx, py + 1.7, p.z + 7 + fz, 0.15, 1.3, 0.15);
+    propBox(p.x + 24, py + 4.1, p.z + 7, 0.25, 0.25, 3); // antenne de la station : solide
+    for (const [fx, fz] of [[-2.6, -1], [2.6, 1]]) { hdeco(BOX, 0xf1c40f, p.x + 17 + fx, py + 1.7, p.z + 7 + fz, 0.15, 1.3, 0.15); propBox(p.x + 17 + fx, py + 1.05, p.z + 7 + fz, 0.1, 0.1, 1.3); } // poteaux : solides
     { const H = curHouse; curHouse = null; finishHouse(H); }
     spawnChest(p.x - 5, py + 1.3, p.z + 6);
     spawnChest(p.x + 8, py + 1.3, p.z + 6);
@@ -3636,7 +3693,7 @@ function startGame() {
   const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(off);
   bus.start.copy(dir).multiplyScalar(-WORLD_R - 20).add(perp).setY(240);
   bus.end.copy(dir).multiplyScalar(WORLD_R + 20).add(perp).setY(240);
-  bus.dir.copy(dir); bus.t = 0; bus.active = true; bus.mesh.visible = true;
+  bus.dir.copy(dir); bus.t = 0; bus.active = true; bus.ended = false; bus.mesh.visible = true;
   bus.mesh.rotation.y = Math.atan2(-dir.x, -dir.z); // le pare-brise pointe dans le sens du vol
   camYaw = Math.atan2(-dir.x, -dir.z) - 0.6; camPitch = -0.35;
   for (const b of bots) {
@@ -4212,11 +4269,18 @@ function animateChar(ch, dt) {
 function updateStorm(dt) {
   storm.mesh.material.uniforms.t.value += dt;
   if (storm.phase === -1) {
-    // La zone est révélée dès que le joueur ATTERIT : la tempête se referme
-    // 60 s après l'atterrissage (même s'il plane longtemps). Repli si le
-    // joueur est éliminé avant d'atterrir : révélation à la fin du bus.
-    if (player.mode === 'ground' || player.mode === 'drive' || (!player.alive && !bus.active)) { storm.phase = 0; startPhase(0); }
-  } else if (storm.phase < PHASES.length) {
+    // La zone apparaît 1 min après la FIN du bus (repli : à l'atterrissage
+    // si le joueur est resté dans le bus jusqu'au bout, il est de toute
+    // façon éjecté à la fin du bus — le compte à rebours démarre là).
+    if (bus.ended) {
+      storm.delay -= dt;
+      if (storm.delay <= 0) { storm.phase = 0; startPhase(0); }
+    }
+  } else {
+    // dégâts recalculés en direct selon les joueurs encore en jeu (phase
+    // finale incluse)
+    storm.dmg = stormDamageFor(chars.filter((c) => c.alive && !c.hench && !c.boss).length);
+    if (storm.phase < PHASES.length) {
     storm.timer -= dt;
     const P = PHASES[storm.phase];
     if (storm.stage === 'wait' && storm.timer <= 0) { storm.stage = 'shrink'; storm.timer = P.shrink; storm.sx = storm.cx; storm.sz = storm.cz; storm.sr = storm.r; showCenter('LA TEMPÊTE SE REFERME', '', 2.5); sfx('warn', 0.6); }
@@ -4224,6 +4288,7 @@ function updateStorm(dt) {
       const t = 1 - Math.max(0, storm.timer) / P.shrink;
       storm.cx = lerp(storm.sx, storm.nx, t); storm.cz = lerp(storm.sz, storm.nz, t); storm.r = lerp(storm.sr, storm.nr, t);
       if (storm.timer <= 0) { storm.phase++; if (storm.phase < PHASES.length) startPhase(storm.phase); }
+    }
     }
   }
   storm.mesh.visible = storm.phase >= 0;
@@ -4234,7 +4299,7 @@ function startPhase(i) {
   const P = PHASES[i];
   if (i > 0 && player && player.alive) addXP('Tempête survécue', 120);
   if (i === 1 || i === 3) setTimeout(spawnSupplyDrop, 4000);
-  storm.stage = 'wait'; storm.timer = P.wait; storm.dmg = P.dmg;
+  storm.stage = 'wait'; storm.timer = P.wait;
   const maxOff = Math.max(0, (i === 0 ? 70 : storm.r) - P.r);
   for (let k = 0; k < 40; k++) {
     const a = MR() * 6.283, d = Math.sqrt(MR()) * maxOff;
@@ -4257,7 +4322,7 @@ function updateBus(dt) {
   bus.mesh.position.y += Math.sin(bus.t * 1.5) * 0.4;
   if (t >= 1) {
     for (const c of chars) if (c.mode === 'bus' && c.alive) jumpFromBus(c);
-    bus.active = false; bus.mesh.visible = false;
+    bus.active = false; bus.ended = true; bus.mesh.visible = false;
   }
 }
 
@@ -4639,7 +4704,7 @@ function updateDrops(dt) {
       let gy = terrainH(d.x, d.z);
       queryCols(d.x, d.z, 1, tmpCols);
       for (const c of tmpCols) if (c.alive && c.type === 'box' && d.x > c.minX && d.x < c.maxX && d.z > c.minZ && d.z < c.maxZ && c.maxY > gy && c.maxY < d.y + 0.5) gy = c.maxY;
-      if (d.y <= gy) { d.y = gy; d.landed = true; d.mesh.rotation.set(0, d.mesh.rotation.y, 0); sfxAt('land', d.mesh.position, 1); burst(_v1.set(d.x, gy + 0.3, d.z), 0xd8c8a0, 16, 6, 0.25, 1, 0.8); }
+      if (d.y <= gy) { d.y = gy; d.landed = true; d.mesh.rotation.set(0, d.mesh.rotation.y, 0); sfxAt('land', d.mesh.position, 1); burst(_v1.set(d.x, gy + 0.3, d.z), 0xd8c8a0, 16, 6, 0.25, 1, 0.8); d.col = propBox(d.x, gy, d.z, 1.06, 1.06, 1.3); } // caisse 1,5 m carrée : demi-diagonale 1,06 couvre toutes les rotations
       d.mesh.position.y = d.y; d.mesh.rotation.y += dt * 0.4;
     } else if (d.balloon.visible) {
       // canopy collapses and drifts away
@@ -4658,7 +4723,8 @@ function openDrop(d) {
   const w = randWeaponItem(3); spawnLoot(w, d.x, d.y + 1, d.z); spawnLoot(ammoFor(w.id), d.x, d.y + 1, d.z); spawnLoot(ammoFor(w.id), d.x, d.y + 1, d.z);
   spawnLoot({ kind: 'consum', id: 'shieldL', count: 2 }, d.x, d.y + 1, d.z);
   spawnLoot({ kind: 'mats', mat: 'wood', amount: 100 }, d.x, d.y + 1, d.z); spawnLoot({ kind: 'mats', mat: 'stone', amount: 100 }, d.x, d.y + 1, d.z); spawnLoot({ kind: 'mats', mat: 'metal', amount: 100 }, d.x, d.y + 1, d.z);
-  setTimeout(() => scene.remove(d.mesh), 1500);
+  // la caisse aplatie reste visible 1,5 s : la collision part avec le modèle
+  setTimeout(() => { removePropCol(d.col); scene.remove(d.mesh); }, 1500);
 }
 
 // =====================================================================
@@ -4880,7 +4946,9 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; } };
+window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
+  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
+// storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built
 refreshLabels();

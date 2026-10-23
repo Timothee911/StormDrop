@@ -88,6 +88,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     G.player.pos.set(px, Math.max(G.terrainH(px, pz), 2.4) + 0.1, pz);
     G.player.vel.set(0, 0, 0); G.player.mode = 'ground'; G.player.grounded = true;
     window.advanceTime(100);
+    // nouveau : les colonnes/décos ont un collider — on dégage le joueur s'il
+    // est coincé ou éjecté (le tir exige le mode sol)
+    let unstick = 0;
+    while ((G.player.blocked || G.player.mode !== 'ground' || !G.player.grounded) && unstick++ < 30) {
+      G.player.pos.x += 1.5; G.player.vel.set(0, 0, 0); G.player.mode = 'ground'; G.player.grounded = true;
+      window.advanceTime(50);
+    }
     G.damage(h, 5, G.player, false, 'test');
     window.advanceTime(600);
     const targeted0 = G.henchmen.filter((c) => c.alive && c.target && c.target.isPlayer).length;
@@ -96,16 +103,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     window.advanceTime(600);
     const targeted1 = G.henchmen.filter((c) => c.alive && c.target && c.target.isPlayer).length;
     const tagOn = document.getElementById('disguiseTag').classList.contains('on');
-    // tir -> déguisement rompu
+    // tir -> déguisement rompu (le chargeur doit baisser : preuve du tir)
     G.player.slots[1] = { kind: 'weapon', id: 'ar', rarity: 2, mag: 30 };
     G.selectSlot(1); G.player.ammo.medium = 200;
     window.advanceTime(800);
+    const magBefore = G.player.slots[1].mag;
     G.mouse.l = true; window.advanceTime(120); G.mouse.l = false;
-    return { targeted0, targeted1, tagOn, after: { disguise: G.player.disguise, tag: document.getElementById('disguiseTag').classList.contains('on') } };
+    const magAfter = G.player.slots[1].mag;
+    return { targeted0, targeted1, tagOn, magBefore, magAfter, after: { disguise: G.player.disguise, tag: document.getElementById('disguiseTag').classList.contains('on'), blocked: G.player.blocked, mode: G.player.mode } };
   });
   check('blessé sans déguisement -> ciblé', dis.targeted0 >= 1, 'ciblés=' + dis.targeted0);
   check('déguisement -> cibles abandonnées', dis.targeted1 === 0, 'ciblés=' + dis.targeted1);
   check('tag HUD déguisement', dis.tagOn === true);
+  check('tir effectif pendant l\'essai (chargeur baissé)', dis.magBefore !== undefined && dis.magAfter < dis.magBefore, 'mag ' + dis.magBefore + ' -> ' + dis.magAfter);
   check('tir casse le déguisement', dis.after.disguise === false && dis.after.tag === false, JSON.stringify(dis.after));
 
   // --- 5. Arc Ka-Boom : dégâts de zone (tir déterministe) ---

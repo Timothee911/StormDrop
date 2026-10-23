@@ -28,6 +28,8 @@ const S = {
   doneCh: new Set(),
   last: null,
 };
+// sauvegardes anciennes : le nombre de joueurs est 50 ou 100, rien d'autre
+if (![50, 100].includes(+S.players)) S.players = 50;
 
 // Battle pass rewards: tier -> { free, prem }
 const R = (cat, id) => ({ cat, id });
@@ -538,7 +540,7 @@ $('friendsBtn').onclick = () => $('friendsPanel').classList.contains('hidden') ?
 $('friendsClose').onclick = () => $('friendsPanel').classList.add('hidden');
 function renderModePick() {
   $('mpModes').innerHTML = Object.entries(MODES).map(([k, m]) => `<button class="mp-opt ${S.mode === k ? 'on' : ''}" data-m="${k}"><b>${m.name}</b><span>${m.desc}</span></button>`).join('');
-  $('mpPlayers').innerHTML = [30, 50, 100].map((n) => `<button class="mp-opt ${S.players === n ? 'on' : ''}" data-p="${n}"><b>${n}</b></button>`).join('');
+  $('mpPlayers').innerHTML = [50, 100].map((n) => `<button class="mp-opt ${S.players === n ? 'on' : ''}" data-p="${n}"><b>${n}</b></button>`).join('');
   $('mpDiff').innerHTML = [['facile', 'Facile'], ['normal', 'Normal'], ['difficile', 'Difficile']].map(([k, n]) => `<button class="mp-opt ${S.diff === k ? 'on' : ''}" data-d="${k}"><b>${n}</b></button>`).join('');
   document.querySelectorAll('#modeModal .mp-opt').forEach((b) => b.onclick = () => {
     if (b.dataset.m) { S.mode = b.dataset.m; if (S.party.length > partySize() - 1) S.party.length = partySize() - 1; }
@@ -677,7 +679,7 @@ buildChar(); updateTopbar(); renderHome();
 requestAnimationFrame(loop);
 // pre-render thumbnails in the background so tabs open instantly
 (() => { const q = []; for (const c in CATS) for (const id in CATS[c].items) q.push([c, id]); const tick = () => { for (let i = 0; i < 3 && q.length; i++) { const [c, id] = q.shift(); thumb(c, id); } if (q.length) setTimeout(tick, 30); }; tick(); })();
-window.__lobby = { S, setTab, addXP, applyResult, showResult, launchMatch, xpNeeded, shopToday, DEFAULT_LOADOUT };
+window.__lobby = { S, setTab, addXP, applyResult, showResult, launchMatch, xpNeeded, shopToday, DEFAULT_LOADOUT, renderModePick };
 
 // ---------------------------------------------------------------------------
 // Installable app (PWA): offline cache + install button
