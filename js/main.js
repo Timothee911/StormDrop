@@ -5,7 +5,7 @@ import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.j
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
-import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote } from './cosmetics.js';
+import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
 
 // =====================================================================
 // Constants & data
@@ -4219,11 +4219,17 @@ function animateChar(ch, dt) {
   if (!m.visible) return; // far: hitboxes follow the position, the pose is not animated
   const hs = Math.hypot(ch.vel.x, ch.vel.z);
   ch.animT += dt * (4 + hs * 1.3);
-  const sw = Math.sin(ch.animT) * Math.min(1, hs / 6) * 0.8;
+  // intensité du pas (0 = immobile) et allure (0 = marche, 1 = course) lissées :
+  // départs et arrêts s'enchaînent sans à-coup
+  const gk = 1 - Math.exp(-dt * 8);
+  ch.ampS = lerp(ch.ampS || 0, ch.grounded ? Math.min(1, hs / 6) : 0, gk);
+  ch.runS = lerp(ch.runS || 0, clamp((hs - 4.5) / 4, 0, 1), gk);
+  const sw = Math.sin(ch.animT) * ch.ampS * 0.8;
   P.torso.rotation.set(0, 0, 0);
   // remet les hanches à zéro chaque frame : la pose chute libre écarte les
   // jambes (rotation.z) et elle ne doit pas fuiter sur les autres animations
   P.hipL.rotation.z = 0; P.hipR.rotation.z = 0;
+  relaxJoints(P); // coudes et genoux : chaque pose ci-dessous fixe sa propre flexion
   if (ch.mode === 'fall') {
     // CHUTE LIBRE façon Fortnite : tête en avant, pieds un peu plus hauts,
     // plongeon plus vertical quand on fonce vers le bas. Mains vides : la pioche
@@ -4235,7 +4241,9 @@ function animateChar(ch, dt) {
     const flap = Math.sin(ch.animT * 2.4) * 0.1;
     // jambes jointes qui traînent derrière, bras écartés du corps ramenés en arrière
     P.hipL.rotation.x = 0.3 + flap * 0.3; P.hipR.rotation.x = 0.3 - flap * 0.3;
+    P.kneeL.rotation.x = -0.45 - flap * 0.4; P.kneeR.rotation.x = -0.3 + flap * 0.4; // genoux souples dans le vent
     P.shL.rotation.set(-0.55 + flap * 0.25, 0, -0.9); P.shR.rotation.set(-0.55 - flap * 0.25, 0, 0.9);
+    P.elL.rotation.set(0.35, 0, 0); P.elR.rotation.set(0.35, 0, 0);
     P.head.rotation.set(0.55, 0, 0); // regarde dans la direction du saut
     return;
   }
@@ -4248,6 +4256,9 @@ function animateChar(ch, dt) {
     const swing = Math.sin(gameT * 1.3) * 0.07;
     m.rotation.z = swing;
     P.hipL.rotation.x = 0.45 + Math.sin(gameT * 1.8) * 0.08; P.hipR.rotation.x = 0.25 - Math.sin(gameT * 1.8) * 0.08;
+    // jambes ballantes : les genoux pendent sous les cuisses relevées
+    P.kneeL.rotation.x = -0.55 - Math.sin(gameT * 1.8 + 0.6) * 0.12; P.kneeR.rotation.x = -0.35 + Math.sin(gameT * 1.8 + 0.6) * 0.12;
+    P.elL.rotation.set(0, 0, 0); P.elR.rotation.set(0, 0, 0); // bras tendus vers les poignées
     P.head.rotation.set(-0.25, 0, 0);
     // la toile ne pivote PAS indépendamment du corps : les poignées restent
     // exactement sous les mains pendant le balancement (le corps entier oscille)
@@ -4255,7 +4266,7 @@ function animateChar(ch, dt) {
     for (const sgn of [1, -1]) {
       const hx = sgn * Math.cos(phi) - 2.0 * Math.sin(phi);
       const hy = sgn * Math.sin(phi) + 2.0 * Math.cos(phi);
-      (sgn > 0 ? P.shR : P.shL).rotation.set(0, 0, Math.atan2(hx - sgn * 0.42, -(hy - 1.54)));
+      (sgn > 0 ? P.shR : P.shL).rotation.set(0, 0, Math.atan2(hx - sgn * 0.385, -(hy - 1.54)));
     }
     return;
   }
@@ -4266,10 +4277,13 @@ function animateChar(ch, dt) {
     ch.landT -= dt;
     P.hand.visible = ch.landT <= 0.2;
     const k = Math.min(1, ch.landT / 0.5);
+    // cuisses vers l'avant, genoux fléchis : les pieds restent au sol (0,24 m d'amorti)
     m.position.y -= 0.24 * k;
     P.torso.rotation.x = -0.3 * k;
-    P.hipL.rotation.x = -0.75 * k; P.hipR.rotation.x = -0.75 * k;
+    P.hipL.rotation.x = 0.85 * k; P.hipR.rotation.x = 0.85 * k;
+    P.kneeL.rotation.x = -1.5 * k; P.kneeR.rotation.x = -1.5 * k;
     P.shR.rotation.set(0.5 * k, 0, 0.9 * k); P.shL.rotation.set(0.5 * k, 0, -0.9 * k);
+    P.elR.rotation.set(0.5 * k, 0, 0); P.elL.rotation.set(0.5 * k, 0, 0);
     P.head.rotation.set(0, 0, 0);
     if (ch.landT <= 0.2 && ch.item && ch.item.kind === 'weapon' && ch.equipT <= 0) ch.equipT = ch.equipDur = 0.3;
     return;
@@ -4283,8 +4297,34 @@ function animateChar(ch, dt) {
     return;
   }
   P.head.rotation.set(0, 0, 0);
-  if (!ch.grounded) { P.hipL.rotation.x = -0.5; P.hipR.rotation.x = 0.3; }
-  else { P.hipL.rotation.x = sw; P.hipR.rotation.x = -sw; }
+  const amp = ch.ampS, run = ch.runS, ph = ch.animT, sp = Math.sin(ph);
+  // bras : balancent à l'opposé des jambes (jambe gauche devant = bras droit devant),
+  // avec un léger retard de phase ; les coudes pompent en course
+  const ap = Math.sin(ph - 0.3), armA = lerp(0.5, 0.95, run) * amp;
+  const elBase = 0.22 + lerp(0.12, 1.2, run) * amp, armOut = 0.07 + 0.06 * run;
+  let lean = 0;
+  if (!ch.grounded) { // saut : une jambe repliée devant, l'autre tendue derrière
+    P.hipL.rotation.x = 0.6; P.kneeL.rotation.x = -1.2; P.hipR.rotation.x = -0.25; P.kneeR.rotation.x = -0.5;
+    P.torso.rotation.x = -0.08;
+  } else {
+    // JAMBES : foulée plus ample en course, cuisses légèrement portées vers l'avant ;
+    // le genou se plie fort quand la jambe repasse devant (talon sous la fesse en sprint)
+    // et reste fléchi en appui pour amortir
+    const hipA = lerp(0.5, 0.78, run) * amp, fwd = 0.1 * run * amp, cph = Math.cos(ph + 0.35), kA = lerp(0.95, 1.65, run);
+    P.hipL.rotation.x = sp * hipA + fwd; P.hipR.rotation.x = -sp * hipA + fwd;
+    P.kneeL.rotation.x = -(0.06 + amp * (0.14 + kA * Math.max(0, cph)));
+    P.kneeR.rotation.x = -(0.06 + amp * (0.14 + kA * Math.max(0, -cph)));
+    // CORPS : rebond deux fois par cycle (haut au croisement des jambes en marche,
+    // bas à l'appui en course), buste penché vers l'avant selon l'allure, épaules en
+    // contre-rotation des hanches, transfert du poids d'une jambe sur l'autre ;
+    // respiration légère à l'arrêt
+    const c2 = Math.cos(2 * ph);
+    m.position.y += amp * (lerp(0.03, -0.045, run) * c2 + 0.02 * run);
+    lean = -(0.05 + 0.2 * run) * amp;
+    P.torso.rotation.set(lean + Math.sin(gameT * 1.8) * 0.012 * (1 - amp), sp * lerp(0.14, 0.2, run) * amp, sp * 0.04 * amp);
+    // la tête compense : regard stable droit devant
+    P.head.rotation.set(-lean * 0.8, -P.torso.rotation.y * 0.75, -P.torso.rotation.z * 0.8);
+  }
   const it = ch.item;
   const aimP = ch.isPlayer ? ch.pitch * 0.8 : 0;
   if (it && it.kind === 'weapon' && it.id === 'pickaxe') {
@@ -4292,8 +4332,10 @@ function animateChar(ch, dt) {
     // après l'atterrissage, le bras remonte de la position basse (2.3) vers le port (0.6)
     const eq = ch.equipT > 0 ? clamp(ch.equipT / (ch.equipDur || 0.3), 0, 1) : 0;
     const ang = s > 0 ? lerp(-0.3, 2.6, s * s) : lerp(0.6 + sw * 0.3, 2.3, eq);
-    P.shR.rotation.set(ang, 0, 0);
-    P.shL.rotation.set(-sw * 0.6, 0, 0);
+    // coude plié à l'armé, qui se déplie au moment de l'impact (fouetté)
+    const el = s > 0 ? 0.2 + 0.8 * Math.sin(s * Math.PI) : 0.5;
+    P.shR.rotation.set(ang - el * 0.5, 0, 0.06); P.elR.rotation.set(el, 0, 0);
+    P.shL.rotation.set(-ap * armA, 0, -armOut); P.elL.rotation.set(elBase + Math.max(0, -ap) * 0.45 * amp, 0, 0);
   } else if (it && it.kind === 'weapon') {
     let rel = 0, tilt = 0, low = 0, k = 0, eq = 0;
     if (ch.reloading > 0) { const tot = WEAPONS[it.id].reload * RAR[it.rarity].reload; const rp = 1 - ch.reloading / tot; k = Math.sin(clamp(rp, 0, 1) * Math.PI); rel = k * 0.35; tilt = k * 0.9; }
@@ -4304,26 +4346,40 @@ function animateChar(ch, dt) {
     const kick = (ch.shotKick || 0) * 0.32;
     // balancement de l'arme en marchant (comme dans la vidéo) : le canon suit le pas
     const sway = sw * 0.15;
-    P.shR.rotation.set(Math.PI / 2 + aimP - rel - low + kick - sway, 0, eq * 0.25);
-    if (k > 0) P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - k * 1.5, 0, -0.55 + k * 0.45); // left hand goes to the belt for a new mag
-    else P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - low + kick - sway, 0, -0.55 - eq * 0.2);
-    if (ch.held) { ch.held.rotation.z = tilt + sw * 0.06; ch.held.rotation.x = eq * 0.8; ch.held.position.z = kick * 0.3; ch.held.position.y = -sway * 0.2; }
+    // épaule abaissée de la flexion du coude : l'avant-bras (et donc le canon) garde
+    // exactement la même direction, mais l'arme est tenue près du corps, coude plié
+    const eR = 0.55, eL = 0.45 + k * 0.6;
+    P.shR.rotation.set(Math.PI / 2 + aimP - rel - low + kick - sway - eR, 0, eq * 0.25); P.elR.rotation.set(eR + kick * 0.4, 0, 0);
+    if (k > 0) P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - k * 1.5 - eL, 0, -0.55 + k * 0.45); // left hand goes to the belt for a new mag
+    else P.shL.rotation.set(Math.PI / 2 + aimP - 0.1 - low + kick - sway - eL, 0, -0.55 - eq * 0.2);
+    P.elL.rotation.set(eL, 0, 0);
+    // l'arme reste pointée vers la cible : on annule l'inclinaison du buste et on
+    // réduit sa rotation (les bras sont portés par le torse)
+    P.shR.rotation.x -= lean; P.shL.rotation.x -= lean; P.torso.rotation.y *= 0.35;
+    // SPRINT arme en main : arme abaissée en travers du corps, coudes repliés
+    if (ch.sprint && k === 0) { const lo = run * 0.8; P.shR.rotation.x -= lo; P.shL.rotation.x -= lo; P.elR.rotation.x += lo * 0.4; P.elL.rotation.x += lo * 0.4; }
+    if (ch.held) { ch.held.rotation.z = tilt + sw * 0.06 + (ch.sprint ? run * 0.5 : 0); ch.held.rotation.x = eq * 0.8; ch.held.position.z = kick * 0.3; ch.held.position.y = -sway * 0.2; }
   } else if (it) {
     if (ch.using) {
       // SOIN : l'objet remonte devant le torse, la tête s'incline dessus,
       // petit tremblement pendant l'application + particules vertes (updateChar).
-      P.shR.rotation.set(1.85 + Math.sin(gameT * 9) * 0.06, 0, -0.3);
-      P.shL.rotation.set(1.6 - Math.sin(gameT * 9) * 0.06, 0, 0.3);
+      P.shR.rotation.set(1.2 + Math.sin(gameT * 9) * 0.06, 0, -0.3); P.elR.rotation.set(0.95, 0, 0);
+      P.shL.rotation.set(1.0 - Math.sin(gameT * 9) * 0.06, 0, 0.3); P.elL.rotation.set(0.9, 0, 0);
       P.head.rotation.set(0.3, 0, 0);
       if (ch.held) { ch.held.rotation.z = Math.sin(gameT * 8) * 0.08; }
     } else {
       const u = Math.sin(gameT * 10) * 0.2;
-      P.shR.rotation.set(1.2 + u, 0, 0); P.shL.rotation.set(1.0 - u, 0, -0.4);
+      P.shR.rotation.set(1.0 + u, 0, 0); P.elR.rotation.set(0.4, 0, 0); P.shL.rotation.set(0.8 - u, 0, -0.4); P.elL.rotation.set(0.4, 0, 0);
     }
-  } else { P.shR.rotation.set(-sw * 0.6, 0, 0); P.shL.rotation.set(sw * 0.6, 0, 0); }
-  if (buildMode && ch.isPlayer) { P.shR.rotation.set(1.0, 0, 0); P.shL.rotation.set(1.0, 0, -0.3); }
-  if (ch.crouch && ch.slideT > 0) { m.position.y -= 0.55; P.hipL.rotation.x = 1.25; P.hipR.rotation.x = 0.9; P.torso.rotation.x = -0.45; }
-  else if (ch.crouch) { m.position.y -= 0.32; P.hipL.rotation.x -= 0.7; P.hipR.rotation.x -= 0.7; P.torso.rotation.x = -0.15; }
+  } else { // mains vides : bras décollés du corps, coude plus plié quand le bras passe devant
+    P.shR.rotation.set(ap * armA, 0, armOut); P.shL.rotation.set(-ap * armA, 0, -armOut);
+    P.elR.rotation.set(elBase + Math.max(0, ap) * 0.45 * amp, 0, 0); P.elL.rotation.set(elBase + Math.max(0, -ap) * 0.45 * amp, 0, 0);
+  }
+  if (buildMode && ch.isPlayer) { P.shR.rotation.set(0.7, 0, 0); P.elR.rotation.set(0.6, 0, 0); P.shL.rotation.set(0.7, 0, -0.3); P.elL.rotation.set(0.6, 0, 0); }
+  // glissade : jambe avant tendue, l'autre repliée dessous
+  if (ch.crouch && ch.slideT > 0) { m.position.y -= 0.55; P.hipL.rotation.x = 1.25; P.kneeL.rotation.x = -0.15; P.hipR.rotation.x = 0.9; P.kneeR.rotation.x = -1.4; P.torso.rotation.x = -0.45; }
+  // accroupi : cuisses vers l'avant, genoux pliés (les pieds restent sous le corps)
+  else if (ch.crouch) { m.position.y -= 0.32; P.hipL.rotation.x += 0.95; P.hipR.rotation.x += 0.95; P.kneeL.rotation.x -= 1.65; P.kneeR.rotation.x -= 1.65; P.torso.rotation.x = -0.3; }
   if (ch.hurtT > 0) { ch.hurtT -= dt; }
 }
 

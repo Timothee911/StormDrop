@@ -151,6 +151,7 @@ renderer.setClearColor(0x000000, 0);
 const stageOutline = createOutline(renderer, { alpha: true, width: 2, fadeNear: 40, fadeFar: 120, strength: 0.95 });
 scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x3b2a9e, 1.1));
 const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(-3, 6, -5); key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02; // surfaces courbes des personnages : évite l'acné d'ombre
 key.shadow.camera.left = -3; key.shadow.camera.right = 3; key.shadow.camera.top = 4; key.shadow.camera.bottom = -2; scene.add(key);
 const rim = new THREE.DirectionalLight(0x8fd8ff, 1.6); rim.position.set(4, 3, 5); scene.add(rim);
 const fill = new THREE.PointLight(0xffb0ff, 2, 8); fill.position.set(2.5, 1.5, -2); scene.add(fill);
