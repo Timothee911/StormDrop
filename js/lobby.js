@@ -341,14 +341,14 @@ function renderPass() {
       // la balise fermante </div> de la case, sinon le DOM du passe entier casse.
       return rewardHTML(r, cls).replace('class="reward', `data-t="${t}" data-k="${k}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + '</div>');
     };
-    h += `<div class="tier ${S.level === t ? 'cur' : ''}"><div class="row-tag">${t === 1 ? 'PREMIUM' : '&nbsp;'}</div>${cell('prem')}${cell('free')}<div class="row-tag">${t === 1 ? 'GRATUIT' : '&nbsp;'}</div></div>`;
+    h += `<div class="tier ${S.level === t ? 'cur' : ''}"><div class="tier-num">${t}</div><div class="row-tag">${t === 1 ? 'PREMIUM' : '&nbsp;'}</div>${cell('prem')}${cell('free')}<div class="row-tag">${t === 1 ? 'GRATUIT' : '&nbsp;'}</div></div>`;
   }
   tr.innerHTML = h;
   tr.querySelectorAll('.reward[data-t]').forEach((el) => el.onclick = () => { passSel = { t: +el.dataset.t, k: el.dataset.k }; renderPass(); });
   const r = PASS[passSel.t][passSel.k];
   const pp = $('passPreview');
-  if (r.cat === 'eclats') pp.innerHTML = `<span class="pp-rar" style="background:#3fa9ff">MONNAIE</span><div class="pp-name">${r.amount} Éclats</div><div class="pp-type">Utilisables dans la boutique</div>`;
-  else { const it = itemOf(r.cat, r.id), RR = RARITIES[it.rarity]; pp.innerHTML = `<span class="pp-rar" style="background:${RR.color}">${RR.name.toUpperCase()}</span><div class="pp-name">${it.name}</div><div class="pp-type">${TYPE_NAME[r.cat]}</div>`; }
+  if (r.cat === 'eclats') pp.innerHTML = `<span class="pp-rar" style="background:#3fa9ff">MONNAIE</span><div class="pp-name">${r.amount} Éclats</div><div class="pp-type">Utilisables dans la boutique</div><div class="pp-tier">Débloqué au niveau ${passSel.t}</div>`;
+  else { const it = itemOf(r.cat, r.id), RR = RARITIES[it.rarity]; pp.innerHTML = `<span class="pp-rar" style="background:${RR.color}">${RR.name.toUpperCase()}</span><div class="pp-name">${it.name}</div><div class="pp-type">${TYPE_NAME[r.cat]}</div><div class="pp-tier">Débloqué au niveau ${passSel.t}</div>`; }
   showStageItem(r);
   const pb = $('passBuy');
   pb.classList.toggle('owned', S.passOwned);
