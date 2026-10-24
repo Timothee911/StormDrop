@@ -91,7 +91,7 @@ jobs:
           SERVER_PID=$!
           sleep 2
           STATUS=0
-          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/outline.js style.css lobby.css; do
+          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/outline.js js/weapons.js style.css lobby.css; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/$path)
             if [ "$CODE" != "200" ]; then
               echo "::error file=$path::HTTP $CODE lors du chargement de /$path"
