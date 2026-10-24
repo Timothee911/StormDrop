@@ -3146,7 +3146,7 @@ function driveVehicle(p, dt) {
   if (car && Math.abs(v.speed) > 14 && MR() < dt * 12) burst(_v1.set(v.pos.x + Math.sin(v.yaw) * 2, v.pos.y + 0.2, v.pos.z + Math.cos(v.yaw) * 2), 0xc8b088, 1, 1.5, 0.2, 0.3, 0.6);
 }
 // Launch pads (trampolines) and air vents (chimneys)
-const pads = [], vents = [];
+const pads = [], vents = []; // vents reste vide (colonnes d'air retirées)
 const padTop = matC(0x3fa9ff, { emissive: 0x1a5fd6, emissiveIntensity: 0.5 }), padBase = matC(0xffd23f);
 function placePad(x, z) {
   const h = terrainH(x, z); if (h < 2) return null;
@@ -3155,32 +3155,17 @@ function placePad(x, z) {
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, 0.3, 16), padBase); base.position.y = 0.15; base.castShadow = true;
   const top = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.12, 16), padTop); top.position.y = 0.34;
   g.add(base, top); g.position.set(x, h, z); scene.add(g);
-  const pad = { x, z, y: h + 0.4, top }; pads.push(pad);
+  const pad = { x, z, y: h + 0.4, top, bounce: 0 }; pads.push(pad);
   propBox(x, h, z, 1.35, 1.35, 0.4); // socle solide (marchable, 40 cm, rayon 1,35 comme le modèle)
   return pad;
 }
 {
-  const ventMat = new THREE.MeshBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  const ventGeo = new THREE.CylinderGeometry(2.2, 1.6, 46, 16, 1, true); ventGeo.translate(0, 23, 0);
-  const ringG = new THREE.TorusGeometry(1.8, 0.12, 6, 20); ringG.rotateX(Math.PI / 2);
+  // Les colonnes d'air (cheminées) ont été retirées : il ne reste que les trampolines.
   const spots = [];
   for (const p of POIS) spots.push([p.x + rand(-p.r * 0.5, p.r * 0.5), p.z + rand(-p.r * 0.5, p.r * 0.5)]);
   for (const p of POIS) spots.push([p.x + rand(-p.r, p.r), p.z + rand(-p.r, p.r)]);
   for (let i = 0; i < 14; i++) { const a = rand(6.28), r = rand(30, ISLAND_R * 0.7); spots.push([Math.cos(a) * r, Math.sin(a) * r]); }
-  spots.forEach(([x, z], i) => {
-    if (i % 2 === 0) placePad(x, z);
-    else {
-      const h = terrainH(x, z); if (h < 2) return;
-      queryCols(x, z, 2, tmpCols); if (tmpCols.some((c) => c.maxY > h + 0.3 && x > c.minX - 1.6 && x < c.maxX + 1.6 && z > c.minZ - 1.6 && z < c.maxZ + 1.6)) return;
-      const g = new THREE.Group();
-      const col = new THREE.Mesh(ventGeo, ventMat); g.add(col);
-      const rings = []; for (let k = 0; k < 4; k++) { const r = new THREE.Mesh(ringG, ventMat); r.position.y = k * 10; g.add(r); rings.push(r); }
-      const grate = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.0, 0.3, 12), matC(0x6b7380, { metalness: 0.5, roughness: 0.4 })); grate.position.y = 0.1; g.add(grate);
-      g.position.set(x, h, z); scene.add(g);
-      vents.push({ x, z, y: h, rings });
-      propBox(x, h, z, 2.0, 2.0, 0.3); // grille solide (rayon 2 m, marchable), colonne d'air traversable
-    }
-  });
+  spots.forEach(([x, z], i) => { if (i % 2 === 0) placePad(x, z); });
 }
 function updateMovers(ch, dt) {
   if (ch.mode !== 'ground' && ch.mode !== 'glide' && ch.mode !== 'fall') return;
@@ -3193,19 +3178,9 @@ function updateMovers(ch, dt) {
       if (!ch.isPlayer) ch.dropTarget = randomLandPoint(storm.phase >= 0 ? storm.nx : ch.pos.x, storm.phase >= 0 ? storm.nz : ch.pos.z, 40);
     }
   }
-  for (const v of vents) {
-    const dx = ch.pos.x - v.x, dz = ch.pos.z - v.z;
-    if (dx * dx + dz * dz < 4.5 && ch.pos.y < v.y + 46) {
-      if (ch.mode === 'ground') { ch.mode = 'glide'; ch.parts.glider.visible = true; ch.grounded = false; if (ch.isPlayer) { sfx('whoosh', 0.7); setBuildModeOff(); cancelEdit(); } }
-      if (ch.mode === 'fall') { ch.mode = 'glide'; ch.parts.glider.visible = true; }
-      ch.ventT = 0.4; ch.noFall = true;
-      if (!ch.isPlayer && !ch.dropTarget) ch.dropTarget = randomLandPoint(ch.pos.x, ch.pos.z, 40);
-    }
-  }
 }
 function updatePadsVents(dt) {
   for (const p of pads) { if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - dt * 3); p.top.position.y = 0.34 + Math.sin(p.bounce * 12) * p.bounce * 0.25; }
-  for (const v of vents) for (const r of v.rings) { r.position.y = (r.position.y + dt * 14) % 40; r.scale.setScalar(1 + r.position.y * 0.008); }
 }
 
 // =====================================================================
@@ -3317,7 +3292,9 @@ function buildSpyPOI(p) {
     // Dôme verrière centrale sur le toit de l'Agence (atrium de verre)
     hdeco(CYL_GEO, 0x1f2430, p.x, p.h + 20.6, p.z, 7.5, 0.6, 7.5);
     hdeco(CYL_GEO, 0x6fd0ff, p.x, p.h + 22.0, p.z, 6.4, 2.4, 6.4);
-    propBox(p.x, p.h + 20.6, p.z, 7.5, 7.5, 2.7); // dôme vitré de l'atrium : solide (20,6 -> 23,3)
+    // dôme vitré de l'atrium : collision à la taille réelle du modèle (socle rond 7,5 m, dôme 6,4 m), plus de toit invisible autour
+    propBox(p.x, p.h + 20.0, p.z, 3.75, 3.75, 0.9);
+    propBox(p.x, p.h + 20.9, p.z, 3.2, 3.2, 2.4);
     hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 7.0, 0.3, 0.3);
     hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 0.3, 0.3, 7.0);
 
