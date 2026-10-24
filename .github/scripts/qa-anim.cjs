@@ -213,13 +213,42 @@ async function gameTests() {
     // joueur (minD est horizontal : un joueur projeté en l'air passe au-dessus
     // du coffre) et fausseraient l'essai. Note : openChest ne retire JAMAIS le
     // collider d'un coffre — un coffre ouvert reste solide.
+    // Le choix des coffres doit être robuste à la carte aléatoire : si un mur
+    // ou un meuble se trouve sur le trajet (ou sous le point de départ), le
+    // joueur est éjecté ou bloqué et l'essai échoue sans que la physique soit
+    // en cause. On ne retient donc que des coffres au trajet dégagé depuis
+    // le point de départ jusqu'à la boîte (segment vs boîtes épaissies de 0,4 m).
+    const segRect = (x1, z1, x2, z2, minX, minZ, maxX, maxZ) => {
+      const dx = x2 - x1, dz = z2 - z1;
+      let t0 = 0, t1 = 1;
+      for (const [p, d, lo, hi] of [[x1, dx, minX, maxX], [z1, dz, minZ, maxZ]]) {
+        if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) return false; continue; }
+        let a = (lo - p) / d, b = (hi - p) / d;
+        if (a > b) [a, b] = [b, a];
+        t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+        if (t0 > t1) return false;
+      }
+      return true;
+    };
+    const pathClear = (col, ox, oz) => {
+      const cx = (col.minX + col.maxX) / 2, cz = (col.minZ + col.maxZ) / 2;
+      const sx = cx + ox, sz = cz + oz, y = col.minY + 0.05;
+      const obstacles = G.structs.filter((c) => c.alive && c !== col)
+        .concat(G.propCols.filter((c) => c !== col));
+      for (const c of obstacles) {
+        if (c.maxY <= y + 0.1 || c.minY >= y + 1.6) continue; // rien à hauteur de marche
+        if (segRect(sx, sz, cx, cz, c.minX - 0.4, c.minZ - 0.4, c.maxX + 0.4, c.maxZ + 0.4)) return false;
+      }
+      return true;
+    };
     const bots = G.chars.filter((c) => c.isAI);
     const botAlive = bots.map((b) => b.alive);
     bots.forEach((b) => { b.alive = false; });
-    for (const ch of G.chests.slice(0, 2)) {
-      if (ch.col && !ch.opened) out.chests.push(walkToward(ch.col, 2, 0));
+    for (const ch of G.chests) {
+      if (out.chests.length >= 2) break;
+      if (ch.col && !ch.opened && pathClear(ch.col, 2, 0)) out.chests.push(walkToward(ch.col, 2, 0));
     }
-    const ch2 = G.chests.find((c) => c.col && !c.opened); // diagonale sur un coffre
+    const ch2 = G.chests.find((c) => c.col && !c.opened && pathClear(c.col, 1.5, 1.5)); // diagonale sur un coffre
     if (ch2) out.chests.push(walkToward(ch2.col, 1.5, 1.5));
     bots.forEach((b, i) => { b.alive = botAlive[i]; });
     G.player.hp = 1000;
