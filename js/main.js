@@ -4736,11 +4736,37 @@ function updateDrops(dt) {
     if (!d.landed) {
       d.y -= 5 * dt; d.sway = (d.sway || 0) + dt;
       d.mesh.rotation.z = Math.sin(d.sway * 1.3) * 0.08; d.mesh.rotation.x = Math.cos(d.sway * 1.1) * 0.06;
-      let gy = terrainH(d.x, d.z);
+      let gy = terrainH(d.x, d.z), sup = null, sl = null;
       queryCols(d.x, d.z, 1, tmpCols);
-      for (const c of tmpCols) if (c.alive && c.type === 'box' && d.x > c.minX && d.x < c.maxX && d.z > c.minZ && d.z < c.maxZ && c.maxY > gy && c.maxY < d.y + 0.5) gy = c.maxY;
-      if (d.y <= gy) { d.y = gy; d.landed = true; d.mesh.rotation.set(0, d.mesh.rotation.y, 0); sfxAt('land', d.mesh.position, 1); burst(_v1.set(d.x, gy + 0.3, d.z), 0xd8c8a0, 16, 6, 0.25, 1, 0.8); d.col = propBox(d.x, gy, d.z, 1.06, 1.06, 1.3); } // caisse 1,5 m carrée : demi-diagonale 1,06 couvre toutes les rotations
+      for (const c of tmpCols) {
+        if (!c.alive) continue;
+        if (d.x <= c.minX || d.x >= c.maxX || d.z <= c.minZ || d.z >= c.maxZ) continue;
+        if (c.type === 'box') { if (c.maxY > gy && c.maxY < d.y + 0.5) { gy = c.maxY; sup = c; sl = null; } }
+        else if (c.type === 'slope') {
+          // toit à deux pentants : la caisse se pose sur la pente, pas dans la toiture
+          const h = slopeH(c, d.x, d.z);
+          if (h > gy && h < d.y + 0.5) { gy = h; sup = c; sl = c; }
+        }
+      }
+      // le faisceau désigne la surface sur laquelle la caisse va se poser (toit inclus)
+      if (d.beam) d.beam.position.y = gy;
+      if (d.y <= gy) {
+        d.y = gy; d.landed = true; d.sup = sup;
+        d.mesh.rotation.set(0, d.mesh.rotation.y, 0);
+        if (sl) { // caisse posée à plat sur la pente du toit
+          const a = Math.atan2(sl.y1 - sl.y0, sl.e1 - sl.e0);
+          if (sl.axis === 'x') d.mesh.rotation.z = a; else d.mesh.rotation.x = -a;
+        }
+        // le repère bleu a rempli son rôle : la caisse et sa lumière prennent le relais
+        if (d.beam) { scene.remove(d.beam); d.beam = null; }
+        sfxAt('land', d.mesh.position, 1); burst(_v1.set(d.x, gy + 0.3, d.z), 0xd8c8a0, 16, 6, 0.25, 1, 0.8); d.col = propBox(d.x, gy, d.z, 1.06, 1.06, 1.3);
+      } // caisse 1,5 m carrée : demi-diagonale 1,06 couvre toutes les rotations
       d.mesh.position.y = d.y; d.mesh.rotation.y += dt * 0.4;
+    } else if (d.sup && !d.sup.alive) {
+      // le support a été détruit (toit cassé sous la caisse) : elle retombe au sol
+      d.landed = false; d.sup = null;
+      if (d.col) { removePropCol(d.col); d.col = null; }
+      d.mesh.rotation.set(0, d.mesh.rotation.y, 0);
     } else if (d.balloon.visible) {
       // canopy collapses and drifts away
       d.cT = (d.cT || 0) + dt;
@@ -4752,7 +4778,7 @@ function updateDrops(dt) {
 }
 function openDrop(d) {
   d.opened = true; stats.supply++; addXP('Largage ouvert', 150);
-  scene.remove(d.beam); d.light.intensity = 0;
+  if (d.beam) { scene.remove(d.beam); d.beam = null; } d.light.intensity = 0;
   d.mesh.children[0].scale.set(1, 0.4, 1);
   sfx('chest', 0.8);
   const w = randWeaponItem(3); spawnLoot(w, d.x, d.y + 1, d.z); spawnLoot(ammoFor(w.id), d.x, d.y + 1, d.z); spawnLoot(ammoFor(w.id), d.x, d.y + 1, d.z);
@@ -4987,7 +5013,7 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
+window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
 // storm est aussi exposé directement : window.__game.storm
 
