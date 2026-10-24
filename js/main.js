@@ -4753,9 +4753,15 @@ function updateDrops(dt) {
       if (d.y <= gy) {
         d.y = gy; d.landed = true; d.sup = sup;
         d.mesh.rotation.set(0, d.mesh.rotation.y, 0);
-        if (sl) { // caisse posée à plat sur la pente du toit
-          const a = Math.atan2(sl.y1 - sl.y0, sl.e1 - sl.e0);
-          if (sl.axis === 'x') d.mesh.rotation.z = a; else d.mesh.rotation.x = -a;
+        if (sl) {
+          // caisse posée à plat sur la pente du toit : on aligne sa base sur
+          // la normale de pente (gradient signé — le second versant a une
+          // amplitude négative), puis on conserve son cap autour de cet axe.
+          const s = (sl.y1 - sl.y0) / (sl.e1 - sl.e0);
+          const n = new THREE.Vector3(sl.axis === 'x' ? -s : 0, 1, sl.axis === 'z' ? -s : 0).normalize();
+          const up = new THREE.Vector3(0, 1, 0);
+          d.mesh.quaternion.setFromUnitVectors(up, n);
+          d.mesh.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(up, d.mesh.rotation.y));
         }
         // le repère bleu a rempli son rôle : la caisse et sa lumière prennent le relais
         if (d.beam) { scene.remove(d.beam); d.beam = null; }
