@@ -2695,35 +2695,73 @@ function onBotDamaged(b, attacker) {
   if (!attacker || attacker === b) return;
   if (b.hench) { alertHenchmen(b.henchPoi, attacker); return; } // pas de construction, juste l'alerte
   if (!b.target || !b.target.alive || MR() < 0.5) { b.target = attacker; b.react = 0.15; }
-  if (b.mode === 'ground' && b.grounded && b.buildCd <= 0 && MR() < 0.35 + b.skill * 0.25 * DIFF.aim) {
-    b.buildCd = rand(2.2, 4.5) / DIFF.aim;
+  // Les bots construisent peu : cooldown long, faible probabilité, et une pièce à la fois.
+  if (b.mode === 'ground' && b.grounded && b.buildCd <= 0 && !(b.buildQ && b.buildQ.length) && MR() < 0.1 + b.skill * 0.1 * DIFF.aim) {
+    b.buildCd = rand(10, 20) / DIFF.aim;
     const mat = botMat(b, 40);
     if (!mat) return;
     const yaw = Math.atan2(-(attacker.pos.x - b.pos.x), -(attacker.pos.z - b.pos.z));
     const fake = { pos: b.pos, yaw };
-    if (b.hp + b.shield < 90 || MR() < 0.35) botBox(b, mat); // full 1x1 box to heal / reset
+    if (b.hp + b.shield < 60 && MR() < 0.5) botBox(b, mat, attacker); // box complète seulement en grand danger
     else {
-      const t = computeTarget(fake, 'wall', 0); placeBuild(b, 'wall', t.cx, t.cz, t.y, t.d, mat);
-      if (MR() < 0.6) { b.rampRush = rand(2.5, 4.5); }
+      const t = computeTarget(fake, 'wall', 0); queueBuild(b, 'wall', t.cx, t.cz, t.y, t.d, mat);
+      if (MR() < 0.25) { b.rampRush = rand(1.5, 2.5); }
     }
   }
 }
 function botMat(b, need) { for (const m of ['wood', 'stone', 'metal']) if (b.mats[m] >= need) return m; return null; }
-function botBox(b, mat) {
+function queueBuild(b, type, cx, cz, y, d, mat) { (b.buildQ || (b.buildQ = [])).push({ type, cx, cz, y, d, mat }); }
+// Pose une pièce de la file toutes les ~0.6 s (comme un joueur qui appuie sur la touche), jamais tout d'un coup.
+function botBuildQueue(b, dt) {
+  if (!b.buildQ || !b.buildQ.length) return;
+  b.qCd = (b.qCd || 0) - dt;
+  if (b.qCd > 0) return;
+  const q = b.buildQ.shift();
+  placeBuild(b, q.type, q.cx, q.cz, q.y, q.d, q.mat);
+  b.qCd = rand(0.5, 0.8) / Math.max(0.6, DIFF.aim);
+}
+function botBox(b, mat, attacker) {
   const cx = Math.floor(b.pos.x / CELL), cz = Math.floor(b.pos.z / CELL), y = Math.floor((b.pos.y + 0.6) / CELL) * CELL;
-  for (let d = 0; d < 4; d++) { const [wx, wz, wd] = normWall(cx, cz, d); if (!builds.has(buildKey('wall', wx, wz, y, wd))) placeBuild(b, 'wall', cx, cz, y, d, mat); }
-  if (MR() < 0.6) placeBuild(b, 'cone', cx, cz, y + CELL, 0, mat);
-  b.boxedT = rand(3, 6); b.boxCell = cx * 1000 + cz;
+  // Mur face à l'attaquant en premier, puis les autres côtés.
+  let first = 0;
+  if (attacker) { const dx = attacker.pos.x - b.pos.x, dz = attacker.pos.z - b.pos.z; first = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 3 : 1) : (dz > 0 ? 2 : 0); }
+  let n = 0;
+  for (let k = 0; k < 4; k++) { const d = (first + k) % 4; const [wx, wz, wd] = normWall(cx, cz, d); if (!builds.has(buildKey('wall', wx, wz, y, wd))) { queueBuild(b, 'wall', cx, cz, y, d, mat); n++; } }
+  if (MR() < 0.4) { queueBuild(b, 'cone', cx, cz, y + CELL, 0, mat); n++; }
+  b.boxedT = 1e3; b.boxCell = cx * 1000 + cz; b.boxY = y; b.boxFace = first;
+  b.editT = rand(0.4, 0.9); b.editStage = 0; b.boxFor = attacker || null;
+}
+// Édition par les bots : fenêtre pour tirer, puis porte pour sortir.
+function botEditWall(b, d, mask) {
+  const [wx, wz, wd] = normWall(Math.floor(b.pos.x / CELL), Math.floor(b.pos.z / CELL), d);
+  const col = builds.get(buildKey('wall', wx, wz, b.boxY, wd));
+  if (!col || !col.alive) return false;
+  if (editing && editing.col === col) return false;
+  applyEdit(col, mask); sfxAt('editok', col.mesh.position, 0.5); return true;
+}
+function botBoxEdit(b, dt) {
+  if (!(b.boxedT > 0) || b.boxY === undefined) return;
+  if (b.buildQ && b.buildQ.length) return; // la box n'est pas finie
+  b.editT -= dt;
+  if (b.editT > 0) return;
+  const face = b.boxFace || 0;
+  if (b.editStage === 0) {
+    b.editStage = 1; b.editT = rand(1.8, 3.2);
+    if ((b.target && b.target.alive) || (b.boxFor && b.boxFor.alive)) { botEditWall(b, face, 0x10); return; } // fenêtre au niveau des yeux
+  }
+  if (b.editStage === 1) {
+    // Sortie : porte dans le mur face à l'ennemi (ou celui de la fenêtre).
+    b.editStage = 2; botEditWall(b, face, 0x12); b.boxedT = 0.5; b.boxFor = null;
+  }
 }
 function botRampStep(b, dt) {
-  // build a ramp in front + protective wall, then walk up it
+  // une rampe à la fois, lentement
   b.rampRush -= dt; b.rampCd = (b.rampCd || 0) - dt;
   if (b.rampCd > 0 || !b.grounded) return;
   const mat = botMat(b, 20); if (!mat) { b.rampRush = 0; return; }
-  b.rampCd = 0.42 / Math.max(0.6, DIFF.aim);
+  b.rampCd = rand(0.9, 1.3) / Math.max(0.6, DIFF.aim);
   const fwd = { pos: b.pos, yaw: b.yaw };
   const r = computeTarget(fwd, 'ramp', 0); placeBuild(b, 'ramp', r.cx, r.cz, r.y, r.d, mat);
-  if (MR() < 0.7) { const w = computeTarget({ pos: _v3.set(b.pos.x - Math.sin(b.yaw) * 2.6, b.pos.y, b.pos.z - Math.cos(b.yaw) * 2.6), yaw: b.yaw }, 'wall', 0); placeBuild(b, 'wall', w.cx, w.cz, w.y, w.d, mat); }
 }
 function randomLandPoint(cx, cz, r) {
   for (let k = 0; k < 30; k++) {
@@ -2746,7 +2784,7 @@ function botThink(b, dt) {
   if (b.think <= 0) {
     b.think = rand(0.3, 0.6);
     // target acquisition
-    if (!b.target || !b.target.alive || b.target.pos.distanceTo(b.pos) > 90 || (b.lostT > 3)) {
+    if (!b.target || !b.target.alive || b.target.pos.distanceTo(b.pos) > 90 || (b.lostT > 3 && !(b.boxedT > 0))) {
       b.target = null; b.lostT = 0;
       // check the 3 nearest enemies in range for line of sight (allocation-free)
       let c1 = null, c2 = null, c3 = null, d1 = 1e9, d2 = 1e9, d3 = 1e9;
@@ -2794,8 +2832,9 @@ function botThink(b, dt) {
     if (b.boxedT > 0 && b.heals > 0 && b.shield < 100 && !b.healing) { b.healing = 2.5; }
     if (b.healing > 0) { b.healing -= dt; if (b.healing <= 0) { b.healing = 0; if (b.heals > 0) { b.heals--; b.shield = Math.min(100, b.shield + 50); } } }
   }
+  botBuildQueue(b, dt); botBoxEdit(b, dt);
   if (b.rampRush > 0 && b.target && b.target.alive) { botRampStep(b, dt); }
-  else if (b.target && b.target.alive && b.mode === 'ground' && b.buildCd <= 0 && b.target.pos.y > b.pos.y + 3 && b.target.pos.distanceTo(b.pos) < 40 && MR() < dt * 1.2 * DIFF.aim) { b.rampRush = rand(2, 4); b.buildCd = 3; }
+  else if (b.target && b.target.alive && b.mode === 'ground' && b.buildCd <= 0 && b.target.pos.y > b.pos.y + 3 && b.target.pos.distanceTo(b.pos) < 40 && MR() < dt * 0.25 * DIFF.aim) { b.rampRush = rand(1.5, 3); b.buildCd = rand(8, 14); }
   if (b.target && b.target.alive && b.seeing !== false) {
     const tp = b.target.pos;
     const dx = tp.x - b.pos.x, dz = tp.z - b.pos.z, d = Math.hypot(dx, dz);
@@ -2826,7 +2865,7 @@ function botThink(b, dt) {
       }
     }
     if (b.reloading <= 0 && b.item && b.item.kind === 'weapon' && b.item.mag === 0) startReload(b);
-  } else if (b.wp) {
+  } else if (b.wp && !(b.boxedT > 0)) {
     const dx = b.wp.x - b.pos.x, dz = b.wp.z - b.pos.z, d = Math.hypot(dx, dz);
     if (d > 0.5) { wish.set(dx / d, 0, dz / d); b.yaw = lerpAngle(b.yaw, Math.atan2(-dx, -dz), Math.min(1, dt * 5)); }
   }
