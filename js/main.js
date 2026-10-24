@@ -2604,6 +2604,7 @@ function harvestRock(r, ch, crit) {
 }
 function damageChar(t, dmg, attacker, head, wname, silent) {
   if (!t.alive) return false;
+  if (t.isPlayer && top1Pending) return false; // top 1 scellé : plus rien ne peut te tuer pendant le ralenti
   if (attacker && attacker !== t && attacker.team !== undefined && attacker.team === t.team) return false;
   let shieldHit = t.shield > 0; const orig = dmg;
   if (attacker && attacker.isPlayer && !silent) dmgNumber(_hp.copy(t.pos).add(_v2.set(0, 1.6, 0)), orig, head ? 'head' : shieldHit ? 'shield' : '');
@@ -2657,7 +2658,7 @@ function kill(t, attacker, wname) {
     else showCenter('ÉLIMINÉ', `Tu regardes ${mateAlive.name} — ton équipe est encore en jeu`, 3);
   } else {
     if (t.hench && teams.size === 1 && teams.has(0)) { /* les hommes de main ne déclenchent pas la victoire */ }
-    else if (teams.size === 1 && teams.has(0)) { if (player.alive) setTimeout(() => startVictory(), 700); else { wonMatch = true; finalizeXP(); setTimeout(() => endGame(true), 1500); } }
+    else if (teams.size === 1 && teams.has(0)) { if (player.alive) beginTop1(); else { wonMatch = true; finalizeXP(); setTimeout(() => endGame(true), 1500); } }
     else if (!teams.has(0) && !player.alive && state === 'playing' && !xpFinal) { placement = teams.size + 1; finalizeXP(); setTimeout(() => endGame(false), 2500); }
     if (!player.alive && spectateTarget === t) spectateTarget = mates.find((m) => m.alive) || (attacker && attacker.alive ? attacker : null);
   }
@@ -3632,6 +3633,7 @@ function warmupShaders() {
 function startGame() {
   document.getElementById('hud').classList.remove('hidden');
   state = 'playing'; gameT = 0;
+  top1Pending = false; victoryCam = false; // reset de la séquence TOP 1
   player = new Char(LOAD.name || 'Tim', true, LOAD);
   player.team = 0;
   player.keycards = {};
@@ -3734,33 +3736,46 @@ window.addEventListener('pointerdown', () => initAudio());
 window.addEventListener('keydown', () => initAudio());
 
 let matchOver = false; // vrai dès qu'un top 1 est décidé : la zone s'arrête, plus rien ne bouge sauf le perso
+// ---- Séquence TOP 1 : ralenti de 1,4 s puis caméra de face + stats ----
+let top1Pending = false, top1Until = 0; // ralenti cinématique, déclenché sur l'horloge réelle
+let victoryCam = false, victoryYaw = 0; // caméra devant le perso pour l'écran TOP 1
+function beginTop1() {
+  if (state !== 'playing' || !player.alive || top1Pending) return; // une seule fois : une mort de coéquipier ne relance pas le chrono
+  top1Pending = true;
+  top1Until = performance.now() + 1400; // 1,4 seconde de ralenti (temps réel, indépendant du framerate)
+  showCenter('TOP 1', 'Dernier survivant…', 1.4);
+}
 function startVictory() {
   if (state !== 'playing' || !player.alive) return;
   state = 'victory'; wonMatch = true; matchOver = true;
-  mouse.l = mouse.r = false; setBuildModeOff(); player.using = null;
+  // la caméra passe devant le perso : on le voit de face pendant les stats
+  victoryCam = true; victoryYaw = camYaw;
+  // stoppe l'emote (elle ferait tourner le dos du perso à la caméra) et ferme les menus ouverts
+  if (player.emoting) player.emoting = null;
+  if (paused) { paused = false; document.getElementById('pause').classList.add('hidden'); }
+  if (settingsOpen) { settingsOpen = false; $('gameSettings').classList.add('hidden'); }
+  mouse.l = mouse.r = false; setBuildModeOff(); cancelEdit(); player.using = null;
   if (player.mode !== 'ground') { player.mode = 'ground'; player.parts.glider.visible = false; }
   finalizeXP();
   document.getElementById('hud').classList.remove('hidden');
   document.getElementById('bigmap').classList.add('hidden');
-  document.getElementById('victory').classList.remove('hidden');
-  setTimeout(() => { document.getElementById('victoryQuit').classList.remove('hidden'); }, 6000);
-  setTimeout(() => { document.getElementById('victory').classList.add('hidden'); }, 8000);
   startConfetti();
   sfx('victory', 0.9); playMusic('victory');
+  endGame(true); // les stats s'affichent directement, avec TOP 1 en gros
 }
-let victoryT = -1;
 function endGame(won) {
   if (state === 'over') return;
   matchOver = true; // la partie est finie : le monde se fige
   state = 'over';
+  if (lockApi) lockApi.unlock(); // libère la souris pour cliquer sur les boutons
   document.getElementById('victoryQuit').classList.add('hidden');
   document.getElementById('victory').classList.add('hidden');
   document.getElementById('spectate').style.display = 'none';
   document.getElementById('endXp').textContent = `+${Math.round(matchXP)} XP gagnés cette partie`;
   mouse.l = mouse.r = false; buildMode = false;
   const es = document.getElementById('endscreen');
-  es.classList.remove('hidden'); es.classList.toggle('lose', !won);
-  document.getElementById('endPlace').textContent = won ? '#1' : '#' + placement;
+  es.classList.remove('hidden'); es.classList.toggle('lose', !won); es.classList.toggle('win', won);
+  document.getElementById('endPlace').textContent = won ? 'TOP 1' : '#' + placement;
   document.getElementById('endTitle').textContent = won ? 'VICTOIRE ROYALE' : 'ÉLIMINÉ';
   document.getElementById('endSub').textContent = won ? "Tu es le dernier survivant de l'île. Bien joué, " + (LOAD.name || 'Tim') + "." : `Éliminé par ${elimBy}`;
   const m = Math.floor(gameT / 60), s = Math.floor(gameT % 60);
@@ -4336,6 +4351,26 @@ function updateCamera(dt) {
     const t = performance.now() * 0.00004;
     camera.position.set(Math.cos(t) * 170, 70, Math.sin(t) * 170);
     camera.lookAt(0, 10, 0);
+    return;
+  }
+  // TOP 1 : caméra devant le perso, on le voit de face derrière les stats
+  if (victoryCam && player && player.alive && (state === 'victory' || state === 'over')) {
+    const pivot = _v3.copy(player.pos).add(_v1.set(0, 1.5, 0));
+    const fx = -Math.sin(victoryYaw), fz = -Math.cos(victoryYaw);
+    // collision : un mur devant le perso ne doit ni cacher son visage ni être traversé
+    // (marge 0,3 m ; plancher 0,2 m pour rester devant même un mur collé au visage)
+    let cd = 5;
+    _camO.copy(pivot); _camO.y += 0.2; _camD.set(fx, 0, fz);
+    raycaster.set(_camO, _camD); raycaster.far = cd + 0.3; raycaster.near = 0;
+    const hs = raycaster.intersectObjects(rayTargets, false);
+    for (const h of hs) { const ud = h.object.userData; if (ud.struct && ud.struct.alive) { cd = Math.max(0.2, Math.min(cd, h.distance - 0.3)); break; } }
+    const gy = Math.max(pivot.y + 0.5, terrainH(pivot.x + fx * cd, pivot.z + fz * cd) + 0.4);
+    camera.position.set(pivot.x + fx * cd, gy, pivot.z + fz * cd);
+    camTarget.copy(pivot).add(_v1.set(0, -0.15, 0));
+    camera.lookAt(camTarget);
+    if (Math.abs(camera.fov - SET.fov) > 0.01) { camera.fov = SET.fov; camera.updateProjectionMatrix(); }
+    player.mesh.visible = true;
+    camDistNow = cd; shoulderNow = 0;
     return;
   }
   // edge-turn fallback when the browser refuses pointer lock
@@ -4917,13 +4952,19 @@ function step(dt) {
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05);
+  // ralenti du top 1 : 1,4 s sur l'horloge réelle, le monde tourne au ralenti
+  let sdt = dt;
+  if (top1Pending) {
+    if (performance.now() >= top1Until) { top1Pending = false; startVictory(); }
+    else sdt = dt * 0.22;
+  }
   // sur téléphone, les contrôles tactiles disparaissent devant les menus + reset des commandes
   if (touchUIRoot) {
     const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen;
     if (!show && !touchUIRoot.classList.contains('hidden') && touchResetFn) touchResetFn();
     touchUIRoot.classList.toggle('hidden', !show);
   }
-  step(dt);
+  step(sdt);
   updateCamera(dt);
   if (state !== 'menu') {
     updateGhost();

@@ -145,8 +145,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 #pause .panel { display: flex; flex-direction: column; align-items: center; background: rgba(15,22,55,.85); padding: 32px 48px; border-radius: 10px; border: 1px solid var(--c-border); }
 #pause h2 { font-family: var(--font-display); font-size: 48px; font-style: italic; }
 
-#endscreen { position: fixed; inset: 0; z-index: 35; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(40,20,110,.55), rgba(5,8,25,.9)); }
-.end-inner { text-align: center; animation: pop .6s cubic-bezier(.2,1.4,.4,1); }
+#endscreen { position: fixed; inset: 0; z-index: 35; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(40,20,110,.55), rgba(5,8,25,.9)); overflow-y: auto; }
+#endscreen.win { background: radial-gradient(ellipse at center, rgba(40,20,110,.34), rgba(5,8,25,.76)); }
+.end-inner { text-align: center; animation: pop .6s cubic-bezier(.2,1.4,.4,1); margin: auto; padding: 24px 0; }
 #endPlace { font-family: var(--font-display); font-size: clamp(80px, 14vw, 160px); line-height: .9; color: var(--c-accent); text-shadow: 0 8px 0 #9a5a00, 0 20px 40px rgba(0,0,0,.5); font-style: italic; }
 #endTitle { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-style: italic; text-shadow: 0 5px 0 rgba(0,0,0,.4); }
 #endSub { font-size: 24px; font-weight: 700; margin-top: 6px; color: #e3e0ff; }
@@ -178,6 +179,23 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 #spectate { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 800; font-style: italic; background: var(--c-panel); padding: 6px 18px; border-radius: 4px; display: none; }
 .end-btns { display: flex; gap: 14px; justify-content: center; align-items: flex-end; }
 #endXp { margin-top: 14px; font-size: 18px; font-weight: 700; color: #ffe35c; }
+
+/* écrans peu hauts : on compacte l'écran de fin pour que les boutons restent visibles */
+@media (max-height: 720px) {
+  .end-inner { padding: 12px 0; }
+  #endPlace { font-size: clamp(52px, 9vw, 84px); }
+  #endTitle { font-size: clamp(26px, 4vw, 42px); }
+  #endSub { font-size: 16px; margin-top: 4px; }
+  #endStats { margin-top: 8px; }
+  #endStats b { font-size: 22px; }
+  #endStats div { padding: 5px 12px; font-size: 13px; }
+  .end-cols { margin-top: 8px; gap: 10px; }
+  #endBoard, #endXpList { min-width: 200px; padding: 5px 10px; }
+  .lb { font-size: 12px; gap: 5px; padding: 1px 0; }
+  .lb-h { font-size: 14px; }
+  #endBoard .lb:nth-child(n+7) { display: none; } /* top 5 seulement sur petits écrans */
+  #endXp { margin-top: 8px; font-size: 15px; }
+}
 
 #victory { position: fixed; inset: 0; z-index: 34; pointer-events: none; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 #victoryQuit { position: fixed; bottom: 18vh; left: 50%; transform: translateX(-50%); z-index: 36; }
