@@ -328,6 +328,8 @@ function drawModeArt() {
 let passSel = null;
 function renderPass() {
   const tr = $('passTrack');
+  // initialisé AVANT la boucle : la case sélectionnée doit porter .sel dès le 1er rendu
+  if (!passSel) passSel = { t: 1, k: 'prem' };
   let h = '';
   for (let t = 1; t <= MAX_TIER; t++) {
     const P = PASS[t] || {};
@@ -335,13 +337,14 @@ function renderPass() {
       const r = P[k]; if (!r) return rewardHTML(null);
       const unlocked = S.level >= t && (k === 'free' || S.passOwned);
       const cls = `${k === 'prem' ? 'prem' : ''} ${unlocked ? '' : 'locked'} ${passSel && passSel.t === t && passSel.k === k ? 'sel' : ''}`;
-      return rewardHTML(r, cls).replace('class="reward', `data-t="${t}" data-k="${k}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i></div>`));
+      // badge ✓ (débloqué) ou cadenas, placé DANS la case — attention à conserver
+      // la balise fermante </div> de la case, sinon le DOM du passe entier casse.
+      return rewardHTML(r, cls).replace('class="reward', `data-t="${t}" data-k="${k}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + '</div>');
     };
     h += `<div class="tier ${S.level === t ? 'cur' : ''}"><div class="row-tag">${t === 1 ? 'PREMIUM' : '&nbsp;'}</div>${cell('prem')}${cell('free')}<div class="row-tag">${t === 1 ? 'GRATUIT' : '&nbsp;'}</div></div>`;
   }
   tr.innerHTML = h;
   tr.querySelectorAll('.reward[data-t]').forEach((el) => el.onclick = () => { passSel = { t: +el.dataset.t, k: el.dataset.k }; renderPass(); });
-  if (!passSel) passSel = { t: 1, k: 'prem' };
   const r = PASS[passSel.t][passSel.k];
   const pp = $('passPreview');
   if (r.cat === 'eclats') pp.innerHTML = `<span class="pp-rar" style="background:#3fa9ff">MONNAIE</span><div class="pp-name">${r.amount} Éclats</div><div class="pp-type">Utilisables dans la boutique</div>`;
