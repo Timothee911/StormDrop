@@ -4750,9 +4750,11 @@ function updateDrops(dt) {
       }
       // le faisceau désigne la surface sur laquelle la caisse va se poser (toit inclus)
       if (d.beam) d.beam.position.y = gy;
+      d.mesh.position.y = d.y; d.mesh.rotation.y += dt * 0.4;
       if (d.y <= gy) {
         d.y = gy; d.landed = true; d.sup = sup;
-        d.mesh.rotation.set(0, d.mesh.rotation.y, 0);
+        const yaw = d.mesh.rotation.y; // cap capturé avant toute réorientation
+        d.mesh.rotation.set(0, yaw, 0);
         if (sl) {
           // caisse posée à plat sur la pente du toit : on aligne sa base sur
           // la normale de pente (gradient signé — le second versant a une
@@ -4761,13 +4763,17 @@ function updateDrops(dt) {
           const n = new THREE.Vector3(sl.axis === 'x' ? -s : 0, 1, sl.axis === 'z' ? -s : 0).normalize();
           const up = new THREE.Vector3(0, 1, 0);
           d.mesh.quaternion.setFromUnitVectors(up, n);
-          d.mesh.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(up, d.mesh.rotation.y));
+          d.mesh.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(up, yaw));
         }
         // le repère bleu a rempli son rôle : la caisse et sa lumière prennent le relais
         if (d.beam) { scene.remove(d.beam); d.beam = null; }
-        sfxAt('land', d.mesh.position, 1); burst(_v1.set(d.x, gy + 0.3, d.z), 0xd8c8a0, 16, 6, 0.25, 1, 0.8); d.col = propBox(d.x, gy, d.z, 1.06, 1.06, 1.3);
-      } // caisse 1,5 m carrée : demi-diagonale 1,06 couvre toutes les rotations
-      d.mesh.position.y = d.y; d.mesh.rotation.y += dt * 0.4;
+        sfxAt('land', d.mesh.position, 1); burst(_v1.set(d.x, gy + 0.3, d.z), 0xd8c8a0, 16, 6, 0.25, 1, 0.8);
+        // collision ajustée aux bornes mondiales de la caisse seule (sans ballon
+        // ni câbles) : une caisse inclinée dépasse la boîte de 1,06/1,3 d'origine
+        d.mesh.updateMatrixWorld(true);
+        const bb = new THREE.Box3().setFromObject(d.mesh.children[0]);
+        d.col = propBox((bb.min.x + bb.max.x) / 2, gy, (bb.min.z + bb.max.z) / 2, Math.max(0.75, (bb.max.x - bb.min.x) / 2), Math.max(0.75, (bb.max.z - bb.min.z) / 2), Math.max(1.2, bb.max.y - gy));
+      } // caisse 1,5 m carrée : la boîte englobe le modèle quelle que soit l'inclinaison
     } else if (d.sup && !d.sup.alive) {
       // le support a été détruit (toit cassé sous la caisse) : elle retombe au sol
       d.landed = false; d.sup = null;
