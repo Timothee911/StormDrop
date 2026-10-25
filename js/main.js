@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES } from './world.js';
+import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, grottoCutContains } from './world.js';
 import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
@@ -8,6 +8,7 @@ import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { BOT_PROFILE_IDS, profileOf, preferredDistance, combatIntent } from './bot-profiles.js';
 import { buildAgency } from './agency.js';
 import { buildAgencyVault } from './agency-vault.js';
+import { buildGrotto } from './grotto.js';
 import { createBranchedTrunk, createBroadleafCanopy, treeSpeciesAt } from './tree-geometry.js';
 import { SURFACE, surfaceForStyle, createSurfaceLibrary, installTerrainSurface, installBuildingSurface, createNatureLibrary, installNatureSurface } from './surface-materials.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
@@ -227,13 +228,14 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const cols = new Float32Array(pos.count * 3);
+  const visibleH = (x, z) => grottoCutContains(x, z, .05) ? GROTTO.surfaceY : terrainH(x, z);
   const c = new THREE.Color();
   const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x78b94d), g2 = new THREE.Color(0x4e983e), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0xb59262), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x377f3d), snowDirt = new THREE.Color(0xc9d3dc);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
-    const h = terrainH(x, z);
+    const h = visibleH(x, z);
     pos.setY(i, h);
-    const sl = Math.abs(terrainH(x + 1.5, z) - h) + Math.abs(terrainH(x, z + 1.5) - h);
+    const sl = Math.abs(visibleH(x + 1.5, z) - h) + Math.abs(visibleH(x, z + 1.5) - h);
     const n = fbm(x * 0.05, z * 0.05);
     if (h < 1.4) c.copy(h < -1 ? deep : sand);
     else { c.copy(g1).lerp(g2, n); if (h < 2.2) c.lerp(sand, (2.2 - h) / 0.8); }
@@ -244,6 +246,12 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
     if (h > 40) c.lerp(snow, clamp((h - 40) / 4, 0, 1));
     cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
   }
+  const indices = [];
+  for (let i = 0; i < geo.index.count; i += 3) {
+    const a = geo.index.getX(i), b = geo.index.getX(i + 1), c = geo.index.getX(i + 2);
+    if (!grottoCutContains((pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3, (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3)) indices.push(a, b, c);
+  }
+  geo.setIndex(indices);
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.computeVertexNormals();
   const tmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
@@ -1484,9 +1492,19 @@ function physics(ch, dt) {
   const disp = Math.hypot(ch.vel.x, ch.vel.z) * dt;
   const nSub = Math.max(1, Math.min(8, Math.ceil(disp / 0.12)));
   for (let sub = 0; sub < nSub; sub++) {
+    const previousX = ch.pos.x, previousZ = ch.pos.z;
     ch.pos.x += ch.vel.x * dt / nSub;
     ch.pos.z += ch.vel.z * dt / nSub;
     for (const c of tmpCols) {
+      if (c.type === 'cavernRoof') {
+        // The shaft lip is solid from the side too: do not let a character
+        // leave the ventilation tube halfway through the rock ceiling.
+        if (oldY + CH_H <= c.minY || oldY + STEP >= c.maxY) continue;
+        if ([[0,0],[CH_R,0],[-CH_R,0],[0,CH_R],[0,-CH_R]].some(([x,z]) => c.contains(ch.pos.x+x,ch.pos.z+z))) {
+          ch.pos.x = previousX; ch.pos.z = previousZ; ch.blocked = true;
+        }
+        continue;
+      }
       if (c.type !== 'box' || c.passable) continue;
       if (oldY + CH_H <= c.minY || oldY + STEP >= c.maxY) continue;
       const px = clamp(ch.pos.x, c.minX, c.maxX), pz = clamp(ch.pos.z, c.minZ, c.maxZ);
@@ -1509,7 +1527,8 @@ function physics(ch, dt) {
   for (const c of tmpCols) {
     if (!c.alive) continue;
     if (ch.pos.x < c.minX - tol || ch.pos.x > c.maxX + tol || ch.pos.z < c.minZ - tol || ch.pos.z > c.maxZ + tol) continue;
-    if (c.type === 'box') {
+    if (c.type === 'box' || c.type === 'cavernRoof') {
+      if (c.type === 'cavernRoof' && !c.contains(ch.pos.x, ch.pos.z)) continue;
       if (c.maxY <= oldY + STEP && c.maxY > ground) { ground = c.maxY; onTerrain = false; gcol = c; }
       else if (ch.vel.y > 0 && oldY + CH_H <= c.minY + 0.15 && ch.pos.y + CH_H > c.minY) { ch.pos.y = c.minY - CH_H; ch.vel.y = 0; }
     } else if (c.type === 'ramp' || c.type === 'cone') {
@@ -3016,7 +3035,7 @@ function closeGlider(ch) {
 function groundBelow(ch) {
   let g = Math.max(terrainH(ch.pos.x, ch.pos.z), -0.9);
   queryCols(ch.pos.x, ch.pos.z, 1, tmpCols);
-  for (const c of tmpCols) if (c.alive && c.maxY < ch.pos.y && c.maxY > g && ch.pos.x > c.minX && ch.pos.x < c.maxX && ch.pos.z > c.minZ && ch.pos.z < c.maxZ) g = c.maxY;
+  for (const c of tmpCols) if (c.alive && c.maxY < ch.pos.y && c.maxY > g && ch.pos.x > c.minX && ch.pos.x < c.maxX && ch.pos.z > c.minZ && ch.pos.z < c.maxZ && (c.type !== 'cavernRoof' || c.contains(ch.pos.x, ch.pos.z))) g = c.maxY;
   return g;
 }
 function airControl(ch, wish, dt) {
@@ -3199,6 +3218,14 @@ function placePad(x, z) {
 }
 function updateMovers(ch, dt) {
   if (ch.mode !== 'ground' && ch.mode !== 'glide' && ch.mode !== 'fall') return;
+  // A local physical exit; the ordinary staircase works in both directions.
+  if (ch.isPlayer && grottoLayout) {
+    const v = GROTTO.vent;
+    if (Math.hypot(ch.pos.x - v.x, ch.pos.z - v.z) < v.r - .5 && ch.pos.y >= GROTTO.floorY - .2 && ch.pos.y < GROTTO.surfaceY + 3) {
+      ch.vel.y = Math.max(ch.vel.y, 19); ch.grounded = false;
+      ch.mode = 'fall'; ch.manualFall = true; ch.noFall = true; ch.parts.glider.visible = false;
+    }
+  }
   for (const p of pads) {
     if (ch.mode !== 'ground') break;
     const dx = ch.pos.x - p.x, dz = ch.pos.z - p.z;
@@ -3242,7 +3269,7 @@ function buildVault(p, at) {
   let vx, vz, vy;
   if (at) { vx = at.x; vz = at.z; vy = at.y; }
   else { const s = vaultSpot(p); vx = s.x; vz = s.z; vy = Math.max(terrainH(vx, vz), 2.4); }
-  if (p.key === 'agency') {
+  if (p.key === 'agency' || p.key === 'grotto') {
     curHouse = { boxes: [], deco: [], mesh: null };
     const v = buildAgencyVault(p, { x: vx, y: vy, z: vz }, {
       THREE, scene, box: makeStructBox, mat: matC, collider: addCollider, removeCollider,
@@ -3306,7 +3333,7 @@ function buildPhoneBooth(p, at) {
   col.indestructible = true;
   booths.push({ x: bx, y: by, z: bz, mesh: g, col });
 }
-let agencyLayout = null;
+let agencyLayout = null, grottoLayout = null;
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
     curHouse = { boxes: [], deco: [], mesh: null };
@@ -3447,55 +3474,15 @@ function buildSpyPOI(p) {
     buildVault(p, { x: p.x - 9, y: y + 1.4, z: p.z });
     buildPhoneBooth(p, { x: p.x + 2, y: y + 1.4, z: p.z + 3 });
   } else if (p.key === 'grotto') {
-    buildHouse(p.x, p.z, p.h, 14, 12, 1, 'bunker');
-    buildHouse(p.x - 13, p.z + 8, p.h, 10, 9, 2, 'bunker');
-    buildHouse(p.x + 12, p.z - 9, p.h, 10, 8, 0, 'bunker');
-    // anneau rocheux : dôme ouvert en ciel (puits de lumière) avec deux entrées
     curHouse = { boxes: [], deco: [], mesh: null };
-    const RR = p.r * 1.05;
-    const rock = (cx2, cz2, w, h2, d2) => makeStructBox(cx2, Math.max(terrainH(cx2, cz2), 2.4) - 0.7, cz2, w, h2, d2, matC(0x59606c, { roughness: 0.95 }), { indestructible: true });
-    rock(p.x - RR * 0.55, p.z - RR, RR * 0.9, 5.4, 2.4); rock(p.x + RR * 0.55, p.z - RR, RR * 0.9, 6.6, 2.4);
-    rock(p.x - RR * 0.55, p.z + RR, RR * 0.9, 6.2, 2.4); rock(p.x + RR * 0.55, p.z + RR, RR * 0.9, 5, 2.4);
-    rock(p.x - RR, p.z - RR * 0.5, 2.4, 4.6, RR); rock(p.x - RR, p.z + RR * 0.5, 2.4, 5.8, RR);
-    rock(p.x + RR, p.z - RR * 0.5, 2.4, 6.4, RR); rock(p.x + RR, p.z + RR * 0.5, 2.4, 4.8, RR);
-    // moellons irréguliers par-dessus l'anneau
-    for (const [rx, rz, rs, ry2] of [[-RR * 0.5, -RR - 0.6, 3, 0.3], [RR * 0.6, -RR - 0.5, 2.4, -0.2], [-RR * 0.4, RR + 0.4, 2.6, 0.5], [RR * 0.5, RR + 0.5, 3.2, 0.1], [-RR + 0.4, -RR * 0.3, 2.6, 0.4], [-RR - 0.4, RR * 0.4, 2.2, -0.3], [RR + 0.4, -RR * 0.4, 2.8, 0.2], [RR - 0.3, RR * 0.5, 2.4, -0.4]]) {
-      hdeco(BOX, 0x6b7380, p.x + rx, p.h + 4.2, p.z + rz, rs, rs * 0.9, rs * 1.4, 0.15, ry2, 0.25);
-    }
-    // porte blindée à l'entrée sud : chambranle béton + vantail or, veilleuses rouges
-    {
-      const dx = p.x, dz = p.z + RR;
-      makeStructBox(dx - 4.4, p.h, dz, 1.6, 6, 2.6, matC(0x707684, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx + 4.4, p.h, dz, 1.6, 6, 2.6, matC(0x707684, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx, p.h + 6, dz, 10.4, 1.2, 2.8, matC(0x5d6370, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx, p.h, dz, 7.6, 5.2, 1, matC(0xffc400, { metalness: 0.75, roughness: 0.25 }), { hp: 900, mat: 'metal' });
-      // Bandes de danger jaunes & noires (hazard stripes) style base militaire Shadow
-      for (let s = 0; s < 7; s++) {
-        hdeco(BOX, s % 2 === 0 ? 0xf1c40f : 0x14141c, dx - 3.0 + s * 1.0, p.h + 5.0, dz + 0.55, 0.95, 0.5, 0.08);
-        hdeco(BOX, s % 2 === 0 ? 0xf1c40f : 0x14141c, dx - 3.0 + s * 1.0, p.h + 0.3, dz + 0.55, 0.95, 0.5, 0.08);
-      }
-      // Pistons hydrauliques d'ouverture de porte blindée
-      hdeco(CYL_GEO, 0x8a929e, dx - 3.4, p.h + 2.6, dz - 0.6, 0.35, 4.5, 0.35);
-      hdeco(CYL_GEO, 0x8a929e, dx + 3.4, p.h + 2.6, dz - 0.6, 0.35, 4.5, 0.35);
-      hdeco(BOX, 0x39ff88, dx, p.h + 5.7, dz - 0.6, 4, 0.25, 0.15);
-      hdeco(BOX, 0xff2e4d, dx - 4.2, p.h + 4.6, dz - 1.5, 0.4, 0.4, 0.4);
-      hdeco(BOX, 0xff2e4d, dx + 4.2, p.h + 4.6, dz - 1.5, 0.4, 0.4, 0.4);
-      // Projecteur industriel jaune au-dessus de l'entrée
-      hdeco(BOX, 0xf1c40f, dx, p.h + 6.8, dz + 1.2, 1.4, 0.8, 1.2);
-      hdeco(CYL_GEO, 0xfff6bd, dx, p.h + 6.8, dz + 1.8, 0.5, 0.2, 0.5, Math.PI / 2, 0, 0);
-    }
-    // cuves à carburant, conteneurs et tour de contrôle
-    hdeco(CYL_GEO, 0xe8e6df, p.x - 9, p.h + 1.5, p.z - 8, 2, 3, 2);
-    hdeco(CYL_GEO, 0xd2483a, p.x - 9, p.h + 2.6, p.z - 8, 2.1, 0.3, 2.1);
-    hdeco(CYL_GEO, 0xe8e6df, p.x - 6.5, p.h + 1.5, p.z - 9.5, 1.6, 3, 1.6);
-    const CC2 = [0xc0392b, 0x2980b9, 0x27ae60];
-    for (let k = 0; k < 3; k++) makeStructBox(p.x + 5 + k * 3.4, p.h, p.z - 7, 3, 2.6, 2.4, matC(CC2[k], { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
-    makeStructBox(p.x + 10, p.h, p.z + 7, 1.6, 5.2, 1.6, matC(0x707684, { roughness: 0.7 }), { indestructible: true });
-    makeStructBox(p.x + 10, p.h + 5.2, p.z + 7, 4.4, 2.6, 4, matC(0x5d6370, { roughness: 0.6, metalness: 0.2 }), { hp: 500, mat: 'stone' });
-    hdeco(BOX, 0x39ff88, p.x + 10, p.h + 6.4, p.z + 5.05, 3.8, 1, 0.08);
-    // veilleuses cyan sur l'anneau
-    for (const [lx2, lz2] of [[-RR * 0.5, -RR + 1.5], [RR * 0.5, -RR + 1.5], [-RR * 0.5, RR - 1.5], [RR * 0.5, RR - 1.5]]) hdeco(BOX, 0x39ff88, p.x + lx2, p.h + 4.6, p.z + lz2, 0.35, 0.35, 0.35);
+    grottoLayout = buildGrotto(p, {
+      THREE, scene, box: makeStructBox, deco: hdeco, mat: matC, collider: addCollider, target: addTarget,
+      surfaceLibrary, time: waterT,
+      chest: spawnChest, ammo: (x, y, z) => { const c = spawnAmmoBox(x, y, z); ammoBoxes.push(c); return c; }, lootSpots,
+    });
     { const H = curHouse; curHouse = null; finishHouse(H); }
+    buildVault(p, grottoLayout.vault);
+    buildPhoneBooth(p, { x: p.x - 13, y: p.h, z: p.z + 34 });
   } else if (p.key === 'rig') {
     // Plateforme pétrolière : coque gris-bleu à bandes jaunes, grues rouges,
     // hélipad jaune en porte-à-faux, passerelle vers la station satellite.
@@ -3570,7 +3557,7 @@ function buildSpyPOI(p) {
     placePad(p.x + 16, p.z);
     placePad(p.x - 16, p.z);
   }
-  if (p.key !== 'agency' && p.key !== 'yacht' && p.key !== 'rig') { buildVault(p); buildPhoneBooth(p); }
+  if (!['agency', 'grotto', 'yacht', 'rig'].includes(p.key)) { buildVault(p); buildPhoneBooth(p); }
   if (p.key === 'agency') placePad(p.x - 22, p.z + 8);
 }
 const spySpot0 = lootSpots.length;
@@ -3675,6 +3662,7 @@ function startGame() {
     if (p.key === 'yacht') { const yd = Math.max(terrainH(p.x, p.z), 2.4); sy = yd + 1.5; sx = p.x + rand(-10, 10); sz = p.z + rand(-3, 3); wpBox = { x: p.x, z: p.z, hx: 11, hz: 3.5 }; }
     else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; sx = p.x + rand(-8, 8); sz = p.z + rand(-6, 6); wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
     else if (p.key === 'agency' && agencyLayout) { sx = p.x; sz = p.z + 1; sy = agencyLayout.lobbyY; wpBox = agencyLayout.patrol; }
+    else if (p.key === 'grotto' && grottoLayout) { ({ x: sx, y: sy, z: sz } = grottoLayout.boss); wpBox = grottoLayout.patrol; }
     else { const bp = randomLandPoint(p.x, p.z, p.r * 0.3); sx = bp.x; sz = bp.z; sy = Math.max(terrainH(sx, sz), 2.4) + 0.1; }
     const boss = new Char(cfg.boss, false, { skin: cfg.skin, backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
     boss.hench = true; boss.boss = true; boss.bossPoi = p; boss.henchPoi = p; boss.wpBox = wpBox;
@@ -3696,6 +3684,11 @@ function startGame() {
         const [ox, oz] = posts[i % posts.length];
         h.pos.set(p.x + ox, i % posts.length < 3 ? sy : p.h, p.z + oz);
         h.wpBox = { x: h.pos.x, z: h.pos.z, hx: 2, hz: 2 };
+      }
+      else if (p.key === 'grotto' && grottoLayout) {
+        const [x, z, hx, hz, level = grottoLayout.floorY] = grottoLayout.posts[i % grottoLayout.posts.length];
+        h.pos.set(p.x + x, level, p.z + z);
+        h.wpBox = { x: h.pos.x, z: h.pos.z, hx, hz };
       }
       else if (wpBox) h.pos.set(hx2, sy, hz2);
       else { const hp2 = randomLandPoint(p.x, p.z, p.r * 0.8); h.pos.set(hp2.x, Math.max(terrainH(hp2.x, hp2.z), 2.4) + 0.1, hp2.z); }
@@ -3889,7 +3882,7 @@ function openVault(v) {
   }
   if (v.mechanism) {
     v.mechanism.begin(); sfx('vaultscan', 0.75);
-    showCenter('CARTE MIDAS VALIDÉE', 'Déverrouillage du mécanisme…', 2);
+    showCenter(`CARTE ${(SPY_STAFF[v.poi.key]?.boss || "D'ACCÈS").toUpperCase()} VALIDÉE`, 'Déverrouillage du mécanisme…', 2);
     return;
   }
   v.open = true; v.state = 'open';
@@ -4781,7 +4774,7 @@ function updateWorld(dt) {
       L.vel.y -= 20 * dt; L.pos.addScaledVector(L.vel, dt);
       let gy = terrainH(L.pos.x, L.pos.z);
       queryCols(L.pos.x, L.pos.z, 0.5, tmpCols);
-      for (const c of tmpCols) if (c.type === 'box' && L.pos.x > c.minX && L.pos.x < c.maxX && L.pos.z > c.minZ && L.pos.z < c.maxZ && c.maxY <= L.pos.y + 0.5 && c.maxY > gy) gy = c.maxY;
+      for (const c of tmpCols) if ((c.type === 'box' || (c.type === 'cavernRoof' && c.contains(L.pos.x, L.pos.z))) && L.pos.x > c.minX && L.pos.x < c.maxX && L.pos.z > c.minZ && L.pos.z < c.maxZ && c.maxY <= L.pos.y + 0.5 && c.maxY > gy) gy = c.maxY;
       if (L.pos.y <= gy) { L.pos.y = gy; L.vel.set(0, 0, 0); }
     }
     L.model.rotation.y += dt * 1.4;
@@ -4844,6 +4837,7 @@ function updateLightPool() {
   if (agencyLayout && pp.y < agencyLayout.lobbyY - 1.5 && Math.abs(pp.x - POIS[0].x) < 20 && Math.abs(pp.z - POIS[0].z) < 15) {
     for (const l of agencyLayout.lights) _lc.push(l);
   }
+  if (grottoLayout && pp.y < grottoLayout.surfaceY && Math.abs(pp.x - GROTTO.x) < 35 && Math.abs(pp.z - GROTTO.z) < 46) _lc.push(...grottoLayout.lights);
   for (const v of _lc) { const o = v.obj.position; v.d2 = (o.x - pp.x) ** 2 + (o.z - pp.z) ** 2 + ((o.y + v.y) - pp.y) ** 2 * 4; }
   _lc.sort((a, b) => a.d2 - b.d2);
   for (let i = 0; i < LIGHT_POOL.length; i++) {
@@ -4863,7 +4857,7 @@ function updateDrops(dt) {
       for (const c of tmpCols) {
         if (!c.alive) continue;
         if (d.x <= c.minX || d.x >= c.maxX || d.z <= c.minZ || d.z >= c.maxZ) continue;
-        if (c.type === 'box') { if (c.maxY > gy && c.maxY < d.y + 0.5) { gy = c.maxY; sup = c; sl = null; } }
+        if (c.type === 'box' || (c.type === 'cavernRoof' && c.contains(d.x, d.z))) { if (c.maxY > gy && c.maxY < d.y + 0.5) { gy = c.maxY; sup = c; sl = null; } }
         else if (c.type === 'slope') {
           // toit à deux pentants : la caisse se pose sur la pente, pas dans la toiture
           const h = slopeH(c, d.x, d.z);
@@ -5151,10 +5145,11 @@ window.render_game_to_text = () => JSON.stringify({
   nearbyBots: bots.filter((b) => b.alive && player && b.pos.distanceToSquared(player.pos) < 6400).slice(0, 8).map((b) => ({ name: b.name, profile: b.profile, tactic: b.tactic, hp: Math.round(b.hp), pos: b.pos.toArray().map((v) => +v.toFixed(1)) })),
   agencyVault: (() => { const v = vaults.find((v) => v.poi.key === 'agency'); return v && { pos: [v.x, v.y, v.z], open: v.open, state: v.state, angle: v.mechanism?.hinge.rotation.y, interior: true }; })(),
   agencyUnderground: agencyLayout && { levels: [agencyLayout.basementY, agencyLayout.lowerY], pipes: agencyLayout.pipeRuns, valves: agencyLayout.valves },
+  grotto: grottoLayout && { surfaceY: GROTTO.surfaceY, floorY: GROTTO.floorY, shaft: GROTTO.shaft, vaultInside: true, version: grottoLayout.version },
 });
 window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; },
-  agencyLayout, profileOf, preferredDistance, combatIntent, botThink,
+  agencyLayout, grottoLayout, profileOf, preferredDistance, combatIntent, botThink,
   surfaces: { library: surfaceLibrary, buildings: HOUSE_MAT, get terrain() { return terrainMaterial; } },
   nature: { library: natureLibrary, trees, rocks,
     meshes: { trunk: trunkIM, foliage: leafIM, crown: leaf2IM, broadFoliage: broadLeafIM, broadCrown: broadCrownIM, rock: rockIM } } };

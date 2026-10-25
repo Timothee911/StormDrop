@@ -1,5 +1,18 @@
 Original prompt: Ajoute des bots aux comportements variés. Refait l'agence pour qu'il ressemble vraiment à l'agence de fortnite chapitre 2 saison 2. Le coffre fort ne doit plus être dehors mais à l'intérieur de l'agence.
 
+## Grotto underground rebuild
+- Request: « Refait complètement la grotte. Qui est maintenant sur l'île principale qui descend en sous sol. Le but d'une grotte quoi. Mais vraiment comme Fortnite. »
+- Inland location (228,170); excavated, dry hangar 14m below the local surface.
+- Grid-aligned terrain cut and separate solid roof with real circular shaft openings and matching physics/hitscan.
+- Southern stairs with walkable landing/return, helipad under the main shaft, operations gallery/stairs, ventilation updraft exit.
+- Faceted rock walls, industrial pipes/collars/valves, generators, consoles, cargo cover and signs.
+- Brutus/minigun and four guards below ground; single interior vault uses the existing animated security door, matching card and sealed loot.
+- Original procedural geometry only; architectural inspiration: https://screenrant.com/fortnite-new-map-locations-chapter-2-season-2/
+- Dedicated low/high keyboard regression passes: entry descent/return, gallery stairs, solid roof/ceiling, shaft drop, ventilation exit, wrong/correct card, sealed loot, animated door, vault entry/exit and chest interaction.
+- Surface hill joins smoothly to the surrounding terrain; local grass transitions back to the existing snow biome. Roof uses the shared procedural terrain shader.
+- Existing low/high nature/surface tests, Agency/bot regression and mechanism/profile unit tests pass; full C2S2 smoke passes. PWA v35, Grotto module precached and HTTP-smoked in CI.
+- Desktop/mobile visual review and fresh deployed verification recorded with the delivery.
+
 ## Scope
 - Preserve existing lobby, controls, saves, weapons and other spy POIs.
 - Add assaut, sniper, constructeur, prudent and flanqueur AI profiles.
