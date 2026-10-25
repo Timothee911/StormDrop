@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { BOT_PROFILE_IDS, profileOf, preferredDistance, combatIntent } from './bot-profiles.js';
 import { buildAgency } from './agency.js';
+import { buildAgencyVault } from './agency-vault.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
 
 // =====================================================================
@@ -268,7 +269,16 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
   terrain.receiveShadow = true;
   scene.add(terrain);
 
-  const wg = new THREE.PlaneGeometry(3000, 3000, 1, 1); wg.rotateX(-Math.PI / 2);
+  // A geometric hole, not only fragment discard: transparent sea surfaces must
+  // never cross the sealed basement, including on software WebGL renderers.
+  const sea = new THREE.Shape();
+  sea.moveTo(-1500, -1500); sea.lineTo(1500, -1500);
+  sea.lineTo(1500, 1500); sea.lineTo(-1500, 1500); sea.closePath();
+  const dry = new THREE.Path(), ax = POIS[0].x, az = -POIS[0].z;
+  dry.moveTo(ax - 19.7, az - 14.7); dry.lineTo(ax - 19.7, az + 14.7);
+  dry.lineTo(ax + 19.7, az + 14.7); dry.lineTo(ax + 19.7, az - 14.7); dry.closePath();
+  sea.holes.push(dry);
+  const wg = new THREE.ShapeGeometry(sea); wg.rotateX(-Math.PI / 2);
   const wmat = new THREE.MeshStandardMaterial({ color: 0x23a3e0, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.84 });
   // animated ripples + sparkles: the normal is perturbed in the fragment shader from the world position
   wmat.onBeforeCompile = (sh) => {
@@ -279,7 +289,9 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
         float w1 = sin(vWP.x * 0.31 + uT * 1.4) + sin(vWP.z * 0.27 - uT * 1.1) + 0.6 * sin((vWP.x + vWP.z) * 0.62 + uT * 2.3);
         float w2 = cos(vWP.z * 0.33 + uT * 1.2) + cos(vWP.x * 0.24 + uT * 0.9) + 0.6 * cos((vWP.x - vWP.z) * 0.55 - uT * 2.0);
         normal = normalize(normal + (viewMatrix * vec4(w1 * 0.05, 0.0, w2 * 0.05, 0.0)).xyz);`)
-      .replace('#include <opaque_fragment>', `float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
+      .replace('#include <opaque_fragment>', `// The sealed underground Agency is dry below sea level.
+        if (abs(vWP.x - ${POIS[0].x.toFixed(2)}) < 19.7 && abs(vWP.z - ${POIS[0].z.toFixed(2)}) < 14.7) discard;
+        float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
         float distF = clamp(length(vWP.xz) / 230.0, 0.0, 1.0);
         outgoingLight = mix(outgoingLight, vec3(0.03, 0.32, 0.62), 0.28); outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.55, 0.75, 1.0), smoothstep(0.75, 1.0, distF)) + vec3(sparkle * 0.5);
         #include <opaque_fragment>`);
@@ -3291,6 +3303,18 @@ function buildVault(p, at) {
   let vx, vz, vy;
   if (at) { vx = at.x; vz = at.z; vy = at.y; }
   else { const s = vaultSpot(p); vx = s.x; vz = s.z; vy = Math.max(terrainH(vx, vz), 2.4); }
+  if (p.key === 'agency') {
+    curHouse = { boxes: [], deco: [], mesh: null };
+    const v = buildAgencyVault(p, { x: vx, y: vy, z: vz }, {
+      THREE, scene, box: makeStructBox, mat: matC, collider: addCollider, removeCollider,
+      target: addTarget, chest: spawnChest,
+      ammo: (x, y, z) => { const c = spawnAmmoBox(x, y, z); ammoBoxes.push(c); return c; },
+      chests, spawnLoot,
+      weapon: randWeaponItem, ammoFor,
+      sound: (name, vault) => sfxAt(name, _v1.set(vault.x, vault.y + 1.5, vault.z + 3.5), 0.8),
+    });
+    const H = curHouse; curHouse = null; finishHouse(H); vaults.push(v); return;
+  }
   curHouse = { boxes: [], deco: [], mesh: null };
   const wallM = matC(0x5a616c, { metalness: 0.4, roughness: 0.6 });
   makeStructBox(vx, vy - 0.35, vz, 7, 0.4, 7, wallM, { indestructible: true });
@@ -3350,7 +3374,8 @@ function buildSpyPOI(p) {
     agencyLayout = buildAgency(p, {
       THREE, box: makeStructBox, deco: hdeco, mat: matC, collider: addCollider,
       sides: footprintSides, wall: wallWithOpenings, frame: windowFrame,
-      chest: spawnChest, ammo: spawnAmmoBox, lootSpots, disc: propDisc,
+      chest: spawnChest, ammo: (x, y, z) => { const c = spawnAmmoBox(x, y, z); ammoBoxes.push(c); return c; },
+      lootSpots, disc: propDisc, scene,
     });
     { const H = curHouse; curHouse = null; finishHouse(H); }
     buildVault(p, agencyLayout.vault);
@@ -3872,8 +3897,13 @@ function nearestInteract() {
   }
   for (const c of chests) { if (c.opened) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd + 0.3) { bd = d; best = { type: 'chest', c }; } }
   for (const c of drops) { if (!c.landed || c.opened) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd + 0.6) { bd = d; best = { type: 'drop', c }; } }
-  for (const c of ammoBoxes) { if (c.opened) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd) { bd = d; best = { type: 'ammo', c }; } }
-  for (const v of vaults) { if (v.open) continue; const d = Math.hypot(v.x - player.pos.x, (v.z + 3.6) - player.pos.z) + Math.abs(v.y - player.pos.y) * 0.5; if (d < 3.2 && d < bd) { bd = d; best = { type: 'vault', v }; } }
+  for (const c of ammoBoxes) { if (c.opened || (c.vaultRef && !c.vaultRef.open)) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd) { bd = d; best = { type: 'ammo', c }; } }
+  for (const v of vaults) {
+    if (v.open) continue;
+    const tx = v.terminal ? v.terminal.x : v.x, tz = v.terminal ? v.terminal.z : v.z + 3.6;
+    const d = Math.hypot(tx - player.pos.x, tz - player.pos.z) + Math.abs(v.y - player.pos.y) * 0.5;
+    if (d < 3.2 && d < bd) { bd = d; best = { type: 'vault', v }; }
+  }
   for (const b of booths) { const d = Math.hypot(b.x - player.pos.x, b.z - player.pos.z) + Math.abs(b.y - player.pos.y) * 0.5; if (d < 2.8 && d < bd) { bd = d; best = { type: 'booth', b }; } }
   for (const dr of doors) { if (dr.broken || matchOver) continue; const d = Math.hypot(dr.hx - player.pos.x, dr.hz - player.pos.z) + Math.abs(dr.ly - player.pos.y) * 0.5; if (d < 2.4 && d < bd) { bd = d; best = { type: 'door', dr }; } }
   if (!best) for (const v of vehicles) { if (v.driver) continue; const d = Math.hypot(v.pos.x - player.pos.x, v.pos.z - player.pos.z) + Math.abs(v.pos.y - player.pos.y) * 0.3; if (d < 3.6) { best = { type: 'vehicle', v }; break; } }
@@ -3912,17 +3942,29 @@ function openChest(c, by = player) {
   }
 }
 function openVault(v) {
+  if (v.open || (v.mechanism && v.state !== 'locked')) return;
   if (!(player.keycards && player.keycards[v.poi.key])) {
     sfx('warn', 0.6);
     showCenter('COFFRE-FORT VERROUILLÉ', `Élimine le boss de ${v.poi.name} pour sa carte d'accès`, 2.4);
     return;
   }
-  v.open = true;
+  if (v.mechanism) {
+    v.mechanism.begin(); sfx('vaultscan', 0.75);
+    showCenter('CARTE MIDAS VALIDÉE', 'Déverrouillage du mécanisme…', 2);
+    return;
+  }
+  v.open = true; v.state = 'open';
   if (v.door && v.door.alive) {
     removeCollider(v.door); v.door.alive = false;
     scene.remove(v.door.mesh); removeTarget(v.door.mesh);
     if (v.door.house) rebuildHouse(v.door.house);
   }
+  completeVault(v);
+}
+function completeVault(v) {
+  if (v.rewarded) return;
+  v.rewarded = true;
+  if (v.seedLoot) v.seedLoot();
   burst(_v1.set(v.x, v.y + 2.2, v.z + 3), 0xffc400, 26, 6, 0.22, 0.5, 1);
   sfxAt('break', _v1, 1); sfx('chest', 0.9);
   addXP('Coffre-fort ouvert', 300);
@@ -4668,7 +4710,7 @@ function updateHUD(dt) {
   const pr = $('prompt');
   if (player.alive && player.mode === 'ground') {
     const t = nearestInteract();
-    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (player.keycards && player.keycards[t.v.poi.key] ? 'Ouvrir le coffre-fort' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
+    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (t.v.mechanism && t.v.state !== 'locked' ? 'Ouverture mécanique en cours…' : player.keycards && player.keycards[t.v.poi.key] ? 'Scanner la carte d’accès' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
     else pr.style.display = 'none';
   } else if (player.alive && player.mode === 'drive') { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> Descendre · ${Math.round(Math.abs(player.vehicle.speed) * 3.6)} km/h`; }
   else pr.style.display = 'none';
@@ -4860,7 +4902,10 @@ function updateLightPool() {
   const pp = player ? player.pos : camera.position;
   for (const c of chests) if (!c.opened && c.light.intensity > 0) _lc.push(c.light);
   for (const d of drops) if (!d.opened && d.light.intensity > 0) _lc.push(d.light);
-  for (const v of _lc) { const o = v.obj.position; v.d2 = (o.x - pp.x) ** 2 + (o.z - pp.z) ** 2; }
+  if (agencyLayout && pp.y < agencyLayout.lobbyY - 1.5 && Math.abs(pp.x - POIS[0].x) < 20 && Math.abs(pp.z - POIS[0].z) < 15) {
+    for (const l of agencyLayout.lights) _lc.push(l);
+  }
+  for (const v of _lc) { const o = v.obj.position; v.d2 = (o.x - pp.x) ** 2 + (o.z - pp.z) ** 2 + ((o.y + v.y) - pp.y) ** 2 * 4; }
   _lc.sort((a, b) => a.d2 - b.d2);
   for (let i = 0; i < LIGHT_POOL.length; i++) {
     const L = LIGHT_POOL[i], v = _lc[i];
@@ -5100,6 +5145,7 @@ function step(dt) {
   if (player.mode === 'bus' && bus.active) { player.pos.copy(bus.pos); }
   updatePlayer(dt);
   updateDoors(dt);
+  for (const v of vaults) if (v.mechanism && v.mechanism.update(dt)) completeVault(v);
   frameN++;
   for (const c of chars) {
     const cp = camera.position, dx = c.pos.x - cp.x, dz = c.pos.z - cp.z;
@@ -5164,7 +5210,8 @@ window.render_game_to_text = () => JSON.stringify({
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
   botProfiles: Object.fromEntries(BOT_PROFILE_IDS.map((id) => [id, bots.filter((b) => b.profile === id && b.alive).length])),
   nearbyBots: bots.filter((b) => b.alive && player && b.pos.distanceToSquared(player.pos) < 6400).slice(0, 8).map((b) => ({ name: b.name, profile: b.profile, tactic: b.tactic, hp: Math.round(b.hp), pos: b.pos.toArray().map((v) => +v.toFixed(1)) })),
-  agencyVault: (() => { const v = vaults.find((v) => v.poi.key === 'agency'); return v && { pos: [v.x, v.y, v.z], open: v.open, interior: true }; })(),
+  agencyVault: (() => { const v = vaults.find((v) => v.poi.key === 'agency'); return v && { pos: [v.x, v.y, v.z], open: v.open, state: v.state, angle: v.mechanism?.hinge.rotation.y, interior: true }; })(),
+  agencyUnderground: agencyLayout && { levels: [agencyLayout.basementY, agencyLayout.lowerY], pipes: agencyLayout.pipeRuns, valves: agencyLayout.valves },
 });
 window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; },

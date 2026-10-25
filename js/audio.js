@@ -62,6 +62,9 @@ export function sfx(name, vol = 1, pan = 0) {
     case 'build': tone(o, t, 0.09, 'triangle', 320, 180, 0.4); noise(o, t, 0.07, 'bandpass', 2000, 1.0, 0.002, 0.3); break;
     case 'break': noise(o, t, 0.35, 'lowpass', 1200, 0.8, 0.003, 0.9); tone(o, t, 0.2, 'sawtooth', 140, 50, 0.25); break;
     case 'reload': tone(o, t, 0.05, 'square', 600, 400, 0.12); tone(o, t + 0.35, 0.05, 'square', 800, 500, 0.14); break;
+    case 'vaultscan': [660, 880, 1100].forEach((f, i) => tone(o, t + i * 0.16, 0.14, 'sine', f, f, 0.16)); break;
+    case 'vaultrelease': noise(o, t, 0.65, 'bandpass', 500, 2, 0.02, 0.45); tone(o, t, 0.5, 'triangle', 180, 65, 0.3); break;
+    case 'vaultopen': noise(o, t, 2.8, 'lowpass', 450, 0.6, 0.12, 0.3); tone(o, t, 2.7, 'sine', 75, 38, 0.25); break;
     case 'pickup': tone(o, t, 0.16, 'sine', 420, 980, 0.3); break;
     case 'chest': [523, 659, 784, 1046].forEach((f, i) => tone(o, t + i * 0.07, 0.25, 'triangle', f, f, 0.25)); break;
     case 'door': tone(o, t, 0.22, 'sawtooth', 90, 170, 0.1); noise(o, t + 0.16, 0.1, 'lowpass', 900, 1.2, 0.01, 0.25); break;

@@ -9,6 +9,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 (async () => {
   const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
+  // Fixed simulation steps avoid a concurrent render loop on software GPUs.
+  await page.evaluateOnNewDocument(() => {
+    if (location.pathname.endsWith('game.html')) window.requestAnimationFrame = (fn) => { window.__qaFrame = fn; return 0; };
+    localStorage.setItem('stormdrop-settings-v2', JSON.stringify({ quality: 'basse', outline: 0 }));
+  });
   const errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
@@ -26,6 +31,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   if (!frame) { console.log('FAIL | chargement de la partie (launched=' + launched + ')'); await browser.close(); process.exit(1); }
   await frame.waitForSelector('#hud', { timeout: 15000 }).catch(() => {});
   await sleep(2500);
+  await frame.evaluate(() => window.__qaFrame());
 
   const results = [];
   let failed = 0;
@@ -75,7 +81,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await frame.evaluate(() => {
     window.__game.jumpFromBus();
     let n = 0;
-    while (window.__game.player.mode !== 'ground' && n++ < 400) window.advanceTime(100);
+    while (window.__game.player.mode !== 'ground' && n++ < 400) {
+      for (let i = 0; i < 6; i++) window.__game.stepOnly(1 / 60);
+    }
+    window.advanceTime(16);
   });
   check('joueur au sol', (await frame.evaluate(() => window.__game.player.mode)) === 'ground');
 
@@ -246,8 +255,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     G.player.pos.set(vA.x, vA.y, vA.z + 5);
     window.advanceTime(60);
     const t = G.interact();
+    if (vA.mechanism) for (let i = 0; i < 300; i++) G.stepOnly(1 / 60);
     window.advanceTime(400);
-    const openedWithKey = vA.open && !vA.door.alive;
+    const openedWithKey = vA.open && (vA.mechanism ? vA.state === 'open' && vA.door.alive : !vA.door.alive);
     // 4) les coffres intérieurs s'ouvrent maintenant
     let chestAfter = null;
     for (const c of G.chests.filter((x) => x.vaultRef === vA && !x.opened)) { G.openChest(c); chestAfter = c.opened; break; }
@@ -295,7 +305,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let boardState = 'playing';
   for (let i = 0; i < 12; i++) { // la victoire passe par un setTimeout réel de 700 ms
     await sleep(450);
-    boardState = await frame.evaluate(() => JSON.parse(window.render_game_to_text()).state);
+    boardState = await frame.evaluate(() => { window.__qaFrame(); return JSON.parse(window.render_game_to_text()).state; });
     if (boardState !== 'playing') break;
   }
   check('victoire déclenchée, PNJ exclus du classement', boardState !== 'playing' && board.alive === 1, JSON.stringify(board) + ' state=' + boardState);

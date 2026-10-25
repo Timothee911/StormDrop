@@ -31,3 +31,15 @@ Original prompt: Ajoute des bots aux comportements variés. Refait l'agence pour
 ## Limits
 - Procedural low-poly interpretation of the reference, not imported Fortnite assets or a 1:1 replica.
 - Long-match balance, all possible player-built obstructions and extended mobile touch play require human playtesting.
+
+## Underground expansion
+- Follow-up: « Continue d'améliorer l'agence avec des sous sol, plein de tuyaux. […] refait la salle du coffre fort, la porte qui s'ouvre. »
+- Added a second dry technical basement and an east stairwell; preserved the original hall/B1 staircase.
+- Industrial pipe runs, valves, cable trays, generators, boilers, security consoles and French wayfinding signs; clear stair shafts and walkable central passages.
+- Steel-toned floors and ceiling panels, with underground lighting reusing the fixed light pool rather than increasing shader light counts.
+- Dedicated circular vault room: thick hinged leaf, wheel, retracting bolts, red/amber/green card reader, gold shelves, three locked chests and two ammo crates.
+- Sequence: scan, unlock, inward swing, then reward and release loot. The leaf remains solid and visible; repeated interaction cannot duplicate XP.
+- Service-worker v30 caches all three new modules; deeper terrain excavation and a geometric hole in the sea surface keep B2 dry below sea level, including its rendered appearance.
+- Regression passes: physical entrance/B1/vault/exit and B1/B2 round trips, no/wrong/correct card, scan/open intermediate states, sealed loot, persistent door and one-time XP; five bot profiles and storm priority still pass with no page errors.
+- Pure mechanism tests cover phase boundaries, wheel/bolt movement, monotonic hinge angle and completion.
+- References: https://www.thegamer.com/fortnites-chapter-2-season-2-vault-locations-unlock-guide/ and https://screenrant.com/fortnite-vault-key-cards-chapter-2-season-2/

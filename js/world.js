@@ -85,7 +85,7 @@ export function terrainH(x, z) {
   // Excavate the Agency foundation only inside its sealed basement footprint.
   // Rendering, hitscan and character physics all use the same ground function.
   const agency = POIS[0];
-  if (Math.abs(x - agency.x) < 19.7 && Math.abs(z - agency.z) < 14.7) return agency.h - 4.3;
+  if (Math.abs(x - agency.x) < 19.7 && Math.abs(z - agency.z) < 14.7) return agency.h - 8.5;
   return h;
 }
 

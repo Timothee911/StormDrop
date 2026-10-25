@@ -1,20 +1,21 @@
+import { buildUnderground } from './agency-underground.js';
 // Bespoke Agency headquarters. All dimensions are in metres relative to the POI.
 // Reference silhouette: pale limestone, stepped wings, round bastions and blue GHOST flags.
 export function buildAgency(p, api) {
-  const { THREE, box, deco, mat, collider, sides, wall, frame, chest, ammo, lootSpots, disc } = api;
+  const { THREE, box, deco, mat, collider, sides, wall, frame, chest, ammo, lootSpots, disc, scene } = api;
   const C = { stone: 0xd8d7cf, trim: 0xf0eee4, seam: 0xb7b6af, dark: 0x333d47, blue: 0x234e86, glass: 0x527587, floor: 0xb8b4a9 };
   const g = p.h + 0.2, basement = p.h - 4;
   const BOX = new THREE.BoxGeometry(1, 1, 1);
   const CYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 40);
   const solid = (x, y, z, w, h, d, color = C.stone, fixed = false) =>
     box(p.x + x, y, p.z + z, w, h, d, mat(color), { hp: 350, mat: 'stone', indestructible: fixed });
-  const detail = (x, y, z, w, h, d, color = C.trim, ry = 0) =>
-    deco(BOX, color, p.x + x, y + h / 2, p.z + z, w, h, d, 0, ry, 0);
+  const detail = (x, y, z, w, h, d, color = C.trim, ry = 0, rz = 0) =>
+    deco(BOX, color, p.x + x, y + h / 2, p.z + z, w, h, d, 0, ry, rz);
   const cylinder = (x, y, z, diameter, h, color) =>
     deco(CYL, color, p.x + x, y + h / 2, p.z + z, diameter, h, diameter);
 
   // Slabs are split around real stairwells, never covered by an invisible floor.
-  function slab(y, x0, x1, z0, z1, holes = []) {
+  function slab(y, x0, x1, z0, z1, holes = [], floorColor = C.floor) {
     let rects = [[x0, x1, z0, z1]];
     for (const [a, b, c, d] of holes) {
       const next = [];
@@ -25,7 +26,7 @@ export function buildAgency(p, api) {
       }
       rects = next.filter(([l, r, n, s]) => r - l > 0.02 && s - n > 0.02);
     }
-    for (const [l, r, n, s] of rects) solid((l + r) / 2, y - 0.22, (n + s) / 2, r - l, 0.22, s - n, C.floor, true);
+    for (const [l, r, n, s] of rects) solid((l + r) / 2, y - 0.22, (n + s) / 2, r - l, 0.22, s - n, floorColor, true);
   }
   function stairs(x, z0, z1, low, high, width = 3.4) {
     // Visual stair treads + a continuous slope for smooth collision in both directions.
@@ -66,14 +67,12 @@ export function buildAgency(p, api) {
   }
 
   // Sealed lower storey: the vault is below the lobby, surrounded by foundation walls.
-  slab(basement, -20, 20, -15, 15);
+  const underground = buildUnderground(p, { THREE, solid, detail, slab, stairs, deco, scene, collider });
   for (const z of [-15, 15]) solid(0, basement, z, 40.5, g - basement, 0.65, C.dark, true);
   for (const x of [-20, 20]) solid(x, basement, 0, 0.65, g - basement, 30.5, C.dark, true);
   const basementHole = [-18.1, -13.9, -2, 8.5];
   slab(g, -20, 20, -15, 15, [basementHole]);
   stairs(-16, 0, 8, basement, g);
-  // Basement security partition with a 3m-wide passage to the vault corridor.
-  solid(-2, basement, -2, 0.4, 3.9, 25, C.dark, true);
   detail(-9, basement + 0.02, 0, 2.3, 0.025, 7, C.blue);
   for (const z of [-10, -4, 3, 10]) detail(-18.8, basement + 3.3, z, 0.18, 0.12, 1.8, 0x97c8d8);
   // Interior wayfinding: arrow at the stairs and a blue runner to the security door.
@@ -183,6 +182,7 @@ export function buildAgency(p, api) {
     vault: { x: p.x - 9, y: basement, z: p.z - 7 },
     lobbyY: g, basementY: basement,
     basementStairs: { x: p.x - 16, bottomZ: p.z, topZ: p.z + 8 },
+    ...underground,
     patrol: { x: p.x, z: p.z + 1, hx: 4, hz: 4 },
   };
 }

@@ -84,7 +84,9 @@ jobs:
           echo "Asset check terminé ($MISSING manquant(s))."
 
       - name: Vérifier les profils tactiques des bots
-        run: node --experimental-default-type=module .github/scripts/qa-bot-profiles.mjs
+        run: |
+          node --experimental-default-type=module .github/scripts/qa-bot-profiles.mjs
+          node --experimental-default-type=module .github/scripts/qa-vault-mechanism.mjs
 
       - name: Démarrer un serveur et tester le lobby + le jeu
         id: smoke
@@ -94,7 +96,7 @@ jobs:
           SERVER_PID=$!
           sleep 2
           STATUS=0
-          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/agency.js js/bot-profiles.js js/outline.js js/weapons.js style.css lobby.css; do
+          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/agency.js js/agency-underground.js js/agency-vault.js js/vault-mechanism.js js/bot-profiles.js js/outline.js js/weapons.js style.css lobby.css; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/$path)
             if [ "$CODE" != "200" ]; then
               echo "::error file=$path::HTTP $CODE lors du chargement de /$path"
