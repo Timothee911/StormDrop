@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES } from './world.js';
+import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, inGrotto, grottoCamCeil, grottoCamFloor } from './world.js';
 import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
@@ -1504,6 +1504,9 @@ class Char {
 // Physics
 // =====================================================================
 const tmpCols = [];
+// La Grotte : un point situé sous le terrain mais dans l'empreinte de la grotte
+// (cratère, tunnel, caverne) repose sur les colliders rocheux, pas sur le terrain.
+function underGrotto(x, z, y) { return y < terrainH(x, z) - 0.35 && inGrotto(x, z); }
 function rampH(c, x, z) {
   let t;
   const x0 = c.cx * CELL, z0 = c.cz * CELL;
@@ -1554,6 +1557,9 @@ function physics(ch, dt) {
   if (rr > WORLD_R) { ch.pos.x *= WORLD_R / rr; ch.pos.z *= WORLD_R / rr; }
   ch.pos.y += ch.vel.y * dt;
   let ground = terrainH(ch.pos.x, ch.pos.z), onTerrain = true, gcol = null;
+  // dans la grotte souterraine, le "sol terrain" est plus haut que le perso :
+  // on ignore le terrain (la voûte rocheuse et les dalles servent de plafond/sol)
+  if (underGrotto(ch.pos.x, ch.pos.z, ch.pos.y)) { ground = -1e9; onTerrain = false; }
   const tol = 0.22;
   for (const c of tmpCols) {
     if (!c.alive) continue;
@@ -1594,8 +1600,11 @@ const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vect
 function terrainRay(o, d, maxD) {
   let step = 1.0, t = 0, prevT = 0;
   while (t < maxD) {
-    const y = o.y + d.y * t, h = terrainH(o.x + d.x * t, o.z + d.z * t);
+    const sx = o.x + d.x * t, sz = o.z + d.z * t, y = o.y + d.y * t, h = terrainH(sx, sz);
     if (y < h) {
+      // dans la Grotte souterraine, les tirs traversent le "terrain" ci-dessus :
+      // c'est la voûte rocheuse (colliders) qui les arrête, pas la heightmap
+      if (y < h - 0.35 && inGrotto(sx, sz)) { prevT = t; t += step; step = Math.min(step * 1.08, 4); continue; }
       let a = prevT, b = t;
       for (let k = 0; k < 8; k++) { const m = (a + b) / 2; if (o.y + d.y * m < terrainH(o.x + d.x * m, o.z + d.z * m)) b = m; else a = m; }
       return b;
@@ -3039,7 +3048,7 @@ function closeGlider(ch) {
   if (ch.isPlayer) sfx('whoosh', 0.4);
 }
 function groundBelow(ch) {
-  let g = Math.max(terrainH(ch.pos.x, ch.pos.z), -0.9);
+  let g = underGrotto(ch.pos.x, ch.pos.z, ch.pos.y) ? -1e9 : Math.max(terrainH(ch.pos.x, ch.pos.z), -0.9);
   queryCols(ch.pos.x, ch.pos.z, 1, tmpCols);
   for (const c of tmpCols) if (c.alive && c.maxY < ch.pos.y && c.maxY > g && ch.pos.x > c.minX && ch.pos.x < c.maxX && ch.pos.z > c.minZ && ch.pos.z < c.maxZ) g = c.maxY;
   return g;
@@ -3320,6 +3329,50 @@ function buildPhoneBooth(p, at) {
   booths.push({ x: bx, y: by, z: bz, mesh: g, col });
 }
 const AGENCY_PAL = { wall: 0xe0ded6, trim: 0xffc400, accent: 0xffc400 };
+// ---- La Grotte : matériau rocheux dédié + petit batcher (collider invisible +
+// roches fusionnées en un seul maillage, mouchetures procédurales par pixel)
+const CAVE_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 });
+CAVE_MAT.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
+    .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>
+      varying vec3 vWP;
+      float crHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float crNoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(crHash(i), crHash(i + vec2(1.0, 0.0)), f.x), mix(crHash(i + vec2(0.0, 1.0)), crHash(i + vec2(1.0, 1.0)), f.x), f.y);
+      }`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+      // strates et mouchetures de la roche, plus sombre dans les anfractuosités
+      float strat = crNoise(vec2(vWP.x + vWP.z, vWP.y * 1.7) * 0.55);
+      float mott = crNoise(vWP.xz * 1.3 + vWP.y * 0.8) * 0.6 + crNoise(vWP.xz * 3.1 + 9.0) * 0.4;
+      diffuseColor.rgb *= 0.78 + strat * 0.3 + (mott - 0.5) * 0.18;
+      diffuseColor.rgb *= 0.9 + 0.1 * smoothstep(0.25, 0.9, crNoise(vWP.xz * 0.22 + 31.0));`);
+};
+const CAVE_HIDDEN = new THREE.MeshStandardMaterial({ visible: false });
+const grottoGeos = [];
+let grottoWaterfallTex = null, grottoPoolPos = null;
+function gdeco(geo, hex, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) {
+  _de.set(rx, ry, rz, 'XYZ'); _dq.setFromEuler(_de);
+  _dm.compose(_dp.set(x, y, z), _dq, _ds.set(sx, sy, sz));
+  grottoGeos.push({ geo, color: hcol(hex), m: _dm.clone() });
+}
+// coque rocheuse : collider indestructible invisible + roche visible dans le maillage fusionné
+function gshell(x, y, z, w, h, d, hex = 0x5b6472) {
+  makeStructBox(x, y, z, w, h, d, CAVE_HIDDEN, { indestructible: true, shadow: false });
+  gdeco(BOX, hex, x, y + h / 2, z, w, h, d);
+}
+function finishGrotto() {
+  if (!grottoGeos.length) return;
+  const geos = grottoGeos.map((g) => colorize(g.geo.clone().applyMatrix4(g.m), g.color));
+  const mesh = new THREE.Mesh(mergeGeometries(geos), CAVE_MAT);
+  geos.forEach((x) => x.dispose());
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  scene.add(mesh);
+  grottoGeos.length = 0;
+}
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
     buildTower(p.x, p.z, p.h, 18, 18, 5, 0, AGENCY_PAL);
@@ -3515,55 +3568,145 @@ function buildSpyPOI(p) {
     buildVault(p, { x: p.x - 9, y: y + 1.4, z: p.z });
     buildPhoneBooth(p, { x: p.x + 2, y: y + 1.4, z: p.z + 3 });
   } else if (p.key === 'grotto') {
-    buildHouse(p.x, p.z, p.h, 14, 12, 1, 'bunker');
-    buildHouse(p.x - 13, p.z + 8, p.h, 10, 9, 2, 'bunker');
-    buildHouse(p.x + 12, p.z - 9, p.h, 10, 8, 0, 'bunker');
-    // anneau rocheux : dôme ouvert en ciel (puits de lumière) avec deux entrées
-    curHouse = { boxes: [], deco: [], mesh: null };
-    const RR = p.r * 1.05;
-    const rock = (cx2, cz2, w, h2, d2) => makeStructBox(cx2, Math.max(terrainH(cx2, cz2), 2.4) - 0.7, cz2, w, h2, d2, matC(0x59606c, { roughness: 0.95 }), { indestructible: true });
-    rock(p.x - RR * 0.55, p.z - RR, RR * 0.9, 5.4, 2.4); rock(p.x + RR * 0.55, p.z - RR, RR * 0.9, 6.6, 2.4);
-    rock(p.x - RR * 0.55, p.z + RR, RR * 0.9, 6.2, 2.4); rock(p.x + RR * 0.55, p.z + RR, RR * 0.9, 5, 2.4);
-    rock(p.x - RR, p.z - RR * 0.5, 2.4, 4.6, RR); rock(p.x - RR, p.z + RR * 0.5, 2.4, 5.8, RR);
-    rock(p.x + RR, p.z - RR * 0.5, 2.4, 6.4, RR); rock(p.x + RR, p.z + RR * 0.5, 2.4, 4.8, RR);
-    // moellons irréguliers par-dessus l'anneau
-    for (const [rx, rz, rs, ry2] of [[-RR * 0.5, -RR - 0.6, 3, 0.3], [RR * 0.6, -RR - 0.5, 2.4, -0.2], [-RR * 0.4, RR + 0.4, 2.6, 0.5], [RR * 0.5, RR + 0.5, 3.2, 0.1], [-RR + 0.4, -RR * 0.3, 2.6, 0.4], [-RR - 0.4, RR * 0.4, 2.2, -0.3], [RR + 0.4, -RR * 0.4, 2.8, 0.2], [RR - 0.3, RR * 0.5, 2.4, -0.4]]) {
-      hdeco(BOX, 0x6b7380, p.x + rx, p.h + 4.2, p.z + rz, rs, rs * 0.9, rs * 1.4, 0.15, ry2, 0.25);
+    // =============================================================
+    // LA GROTTE : cratère creusé dans la colline, bouche de tunnel en
+    // pierres, escalier minier qui plonge sous terre et grande caverne
+    // voûtée (cascade, bassin, cristaux, QG de Brutus, coffre-fort).
+    // =============================================================
+    const G = GROTTO;
+    const KX = G.cavernX, KZ = G.cavernZ, FY = G.floor1;
+    const vx = -G.uz, vz = G.ux; // perpendiculaire à l'axe du tunnel
+    const ROCK_A = 0x5b6472, ROCK_B = 0x4e5663, ROCK_C = 0x67707e;
+    // QG de Brutus : plateforme métallique surélevée au nord de la caverne
+    const PX = KX - 4, PZ = KZ - 8, PT = FY + 3.6;
+
+    // ---- TUNNEL DESCENDANT : escalier minier qui plonge sous terre (plein ouest)
+    // marches étroites alignées sur l'axe + parois continues + plafond qui suit
+    for (let i = 0; i < 15; i++) {
+      const d = G.mouthD + 0.5 + i, top = G.floor0 - i * 0.5;
+      gshell(G.cx + G.ux * d, top - 1.8, G.cz, 1.06, 1.8, 8.6, pick([ROCK_A, ROCK_B])); // marche
+      gshell(G.cx + G.ux * d, top + 3.45, G.cz, 1.06, 1.4, 10.6, ROCK_B); // plafond
     }
-    // porte blindée à l'entrée sud : chambranle béton + vantail or, veilleuses rouges
+    // parois continues du couloir (de la bouche à la caverne)
     {
-      const dx = p.x, dz = p.z + RR;
-      makeStructBox(dx - 4.4, p.h, dz, 1.6, 6, 2.6, matC(0x707684, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx + 4.4, p.h, dz, 1.6, 6, 2.6, matC(0x707684, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx, p.h + 6, dz, 10.4, 1.2, 2.8, matC(0x5d6370, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx, p.h, dz, 7.6, 5.2, 1, matC(0xffc400, { metalness: 0.75, roughness: 0.25 }), { hp: 900, mat: 'metal' });
-      // Bandes de danger jaunes & noires (hazard stripes) style base militaire Shadow
-      for (let s = 0; s < 7; s++) {
-        hdeco(BOX, s % 2 === 0 ? 0xf1c40f : 0x14141c, dx - 3.0 + s * 1.0, p.h + 5.0, dz + 0.55, 0.95, 0.5, 0.08);
-        hdeco(BOX, s % 2 === 0 ? 0xf1c40f : 0x14141c, dx - 3.0 + s * 1.0, p.h + 0.3, dz + 0.55, 0.95, 0.5, 0.08);
-      }
-      // Pistons hydrauliques d'ouverture de porte blindée
-      hdeco(CYL_GEO, 0x8a929e, dx - 3.4, p.h + 2.6, dz - 0.6, 0.35, 4.5, 0.35);
-      hdeco(CYL_GEO, 0x8a929e, dx + 3.4, p.h + 2.6, dz - 0.6, 0.35, 4.5, 0.35);
-      hdeco(BOX, 0x39ff88, dx, p.h + 5.7, dz - 0.6, 4, 0.25, 0.15);
-      hdeco(BOX, 0xff2e4d, dx - 4.2, p.h + 4.6, dz - 1.5, 0.4, 0.4, 0.4);
-      hdeco(BOX, 0xff2e4d, dx + 4.2, p.h + 4.6, dz - 1.5, 0.4, 0.4, 0.4);
-      // Projecteur industriel jaune au-dessus de l'entrée
-      hdeco(BOX, 0xf1c40f, dx, p.h + 6.8, dz + 1.2, 1.4, 0.8, 1.2);
-      hdeco(CYL_GEO, 0xfff6bd, dx, p.h + 6.8, dz + 1.8, 0.5, 0.2, 0.5, Math.PI / 2, 0, 0);
+      const wx = (G.cx - G.endD - 0.5 + G.cx - G.mouthD) / 2, ww = G.endD - G.mouthD + 0.5;
+      for (const sgn of [-1, 1]) gshell(wx, 9, G.cz + sgn * 4.6, ww, 12.8, 1.3, ROCK_B);
     }
-    // cuves à carburant, conteneurs et tour de contrôle
-    hdeco(CYL_GEO, 0xe8e6df, p.x - 9, p.h + 1.5, p.z - 8, 2, 3, 2);
-    hdeco(CYL_GEO, 0xd2483a, p.x - 9, p.h + 2.6, p.z - 8, 2.1, 0.3, 2.1);
-    hdeco(CYL_GEO, 0xe8e6df, p.x - 6.5, p.h + 1.5, p.z - 9.5, 1.6, 3, 1.6);
-    const CC2 = [0xc0392b, 0x2980b9, 0x27ae60];
-    for (let k = 0; k < 3; k++) makeStructBox(p.x + 5 + k * 3.4, p.h, p.z - 7, 3, 2.6, 2.4, matC(CC2[k], { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
-    makeStructBox(p.x + 10, p.h, p.z + 7, 1.6, 5.2, 1.6, matC(0x707684, { roughness: 0.7 }), { indestructible: true });
-    makeStructBox(p.x + 10, p.h + 5.2, p.z + 7, 4.4, 2.6, 4, matC(0x5d6370, { roughness: 0.6, metalness: 0.2 }), { hp: 500, mat: 'stone' });
-    hdeco(BOX, 0x39ff88, p.x + 10, p.h + 6.4, p.z + 5.05, 3.8, 1, 0.08);
-    // veilleuses cyan sur l'anneau
-    for (const [lx2, lz2] of [[-RR * 0.5, -RR + 1.5], [RR * 0.5, -RR + 1.5], [-RR * 0.5, RR - 1.5], [RR * 0.5, RR - 1.5]]) hdeco(BOX, 0x39ff88, p.x + lx2, p.h + 4.6, p.z + lz2, 0.35, 0.35, 0.35);
-    { const H = curHouse; curHouse = null; finishHouse(H); }
+
+    // ---- FAÇADE DE L'ENTRÉE : piliers rocheux qui cadrent l'entaille
+    {
+      const mx = G.cx + G.ux * G.mouthD, mz = G.cz;
+      for (const sgn of [-1, 1]) gshell(mx, G.floor0 - 2.5, mz + sgn * 5.6, 2.8, 7.5, 2.8, ROCK_C);
+      gshell(mx, G.floor0 + 3.4, mz, 2.8, 1.6, 12.4, ROCK_C);
+      gdeco(BOX, 0x39ff88, mx, G.floor0 + 4.35, mz - 3.4, 0.35, 0.35, 0.35);
+      gdeco(BOX, 0x39ff88, mx, G.floor0 + 4.35, mz + 3.4, 0.35, 0.35, 0.35);
+    }
+
+    // ---- CAVERNE : salle voûtée sous le plateau (sol 10, voûte 21,5)
+    gshell(KX, FY - 2, KZ, 31, 2, 31, ROCK_A); // dalle du sol
+    const WH = 14;
+    gshell(KX, FY - 1.5, KZ - 13.5, 28.6, WH, 1.4, ROCK_B); // paroi nord
+    gshell(KX, FY - 1.5, KZ + 13.5, 28.6, WH, 1.4, ROCK_B); // paroi sud
+    gshell(KX - 13.5, FY - 1.5, KZ, 1.4, WH, 28.6, ROCK_B); // paroi ouest
+    // paroi est : percée par la bouche du tunnel (trou z ±5,5, hauteur libre < 19)
+    gshell(KX + 13.5, FY - 1.5, KZ - 9.9, 1.4, WH, 8.8, ROCK_B);
+    gshell(KX + 13.5, FY - 1.5, KZ + 9.9, 1.4, WH, 8.8, ROCK_B);
+    gshell(KX + 13.5, 19, KZ, 1.4, 3.5, 11, ROCK_B); // linteau au-dessus de la bouche
+    for (const [ox, oz] of [[-7, -7], [7, -7], [-7, 7], [7, 7]]) gshell(KX + ox, 21.5, KZ + oz, 18, 1.4, 18, ROCK_B); // voûte en 4 dalles
+    gshell(KX - 1, FY, KZ + 2, 3.6, 11.5, 3.6, ROCK_C); // pilier central qui soutient la voûte
+    // roches irrégulières plaquées sur les parois
+    for (const [bx, bz, by2, bs] of [[-12.5, -5, 13, 2.4], [12.4, 4, 15, 2.8], [5, 12.5, 11, 2.2], [-7, -12.4, 17, 2.6], [12.5, -9, 18, 2.4], [-12.4, 8, 19, 2.2]])
+      gdeco(BOX, ROCK_C, KX + bx, by2, KZ + bz, bs, bs * 0.85, bs * 1.2, 0.3, 0.5, 0.2);
+    // stalactites suspendues à la voûte + stalagmites
+    for (const [sx2, sz2, sl] of [[-10, -10, 2.6], [4, -11, 3.2], [11, 2, 2.2], [-3, 11, 2.8], [9, 10, 2.4], [-11, 3, 2.0]])
+      gdeco(PRISM_GEO, 0x8b939e, KX + sx2, 21.6 - sl, KZ + sz2, 1.1, sl, 1.1, Math.PI, 0, 0);
+    for (const [sx2, sz2, sl] of [[-6, 6, 1.6], [8, -4, 2.0], [2, 9, 1.4], [-9, -2, 1.8]])
+      gdeco(PRISM_GEO, 0x8b939e, KX + sx2, FY, KZ + sz2, 1.0, sl, 1.0, 0, 0, 0);
+
+    // ---- QG DE BRUTUS : plateforme, piliers, escalier, garde-corps
+    for (const [ox, oz] of [[-4.5, -2.8], [4.5, -2.8], [-4.5, 2.8], [4.5, 2.8]]) gshell(PX + ox, FY, PZ + oz, 0.7, 3.6, 0.7, 0x5a616c);
+    gshell(PX, PT, PZ, 11, 0.55, 7, 0x5a616c);
+    for (let i = 0; i < 8; i++) gshell(PX - 2, PT - 0.45 * (i + 1) - 1.0, PZ + 4 + i * 0.92, 2.6, 1.0, 0.95, 0x5a616c);
+    gdeco(BOX, 0x8a929e, PX, PT + 0.55, PZ - 3.5, 11, 0.9, 0.1);
+    gdeco(BOX, 0x8a929e, PX, PT + 0.55, PZ + 3.5, 11, 0.9, 0.1);
+    gdeco(BOX, 0x8a929e, PX - 5.5, PT + 0.55, PZ, 0.1, 0.9, 7);
+    gdeco(BOX, 0x39424e, PX - 2, PT + 0.55, PZ - 1, 2.6, 0.8, 1.4); // table de commandement
+    gdeco(BOX, 0x39ff88, PX - 2, PT + 1.0, PZ - 1, 1.6, 0.06, 0.9); // écran radar
+    gdeco(BOX, 0x8a6a3a, PX + 3.2, PT + 0.55, PZ + 2, 1.2, 1.1, 1.2); // caisse
+    gdeco(BOX, 0x6b5430, PX + 3.2, PT + 1.65, PZ + 2, 1.0, 0.1, 1.0);
+
+    // ---- CASCADE ET BASSIN (angle sud-ouest)
+    {
+      const wx = KX - 10.5, wz = KZ + 10.5;
+      grottoWaterfallTex = canvasTex((g, s) => {
+        g.fillStyle = 'rgba(190,230,255,0.9)'; g.fillRect(0, 0, s, s);
+        for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.5})`; g.fillRect(Math.random() * s, Math.random() * s, 2 + Math.random() * 4, 12 + Math.random() * 30); }
+      }, 128);
+      grottoWaterfallTex.wrapS = grottoWaterfallTex.wrapT = THREE.RepeatWrapping;
+      const wf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 11, 12, 1, true), new THREE.MeshBasicMaterial({ map: grottoWaterfallTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      wf.position.set(wx, 15.5, wz); scene.add(wf);
+      const pool = new THREE.Mesh(BOX, new THREE.MeshStandardMaterial({ color: 0x1d8fd6, transparent: true, opacity: 0.72, roughness: 0.12, metalness: 0.1 }));
+      pool.scale.set(9, 0.55, 9); pool.position.set(KX - 8.5, 10.28, KZ + 8.5); scene.add(pool);
+      grottoPoolPos = new THREE.Vector3(wx, FY, wz);
+    }
+
+    // ---- CRISTAUX LUMINEUX CYAN (maillage émissif fusionné)
+    {
+      const crysGeos = [];
+      const crys = (x, y, z, s) => {
+        _de.set(rand(-0.3, 0.3), 0, rand(-0.3, 0.3), 'XYZ'); _dq.setFromEuler(_de);
+        _dm.compose(_dp.set(x, y, z), _dq, _ds.set(s, s * 1.8, s));
+        crysGeos.push(colorize(PRISM_GEO.clone().applyMatrix4(_dm), hcol(0x9fe8ff)));
+      };
+      for (const [cx2, cy2, cz2, s] of [[-12.2, 12, -6, 0.9], [12.2, 16, -11, 1.1], [6, 11, 12.2, 0.8], [-12.2, 18, 6, 1.0], [-4, 19.5, -12.2, 0.7], [11, 19, 9, 0.9]]) crys(KX + cx2, cy2, KZ + cz2, s);
+      const crysMesh = new THREE.Mesh(mergeGeometries(crysGeos), matC(0x53e0ff, { emissive: 0x17a0c8, emissiveIntensity: 1.7, roughness: 0.25 }));
+      crysMesh.castShadow = true; scene.add(crysMesh);
+    }
+
+    // ---- LANTERNES (tunnel + entrée) et éclairage de la caverne
+    const lampM = matC(0xffd9a0, { emissive: 0xff9a2e, emissiveIntensity: 1.6 });
+    const lampAt = (x, y, z) => { const l = new THREE.Mesh(BOX, lampM); l.scale.set(0.32, 0.5, 0.32); l.position.set(x, y, z); scene.add(l); };
+    lampAt(G.cx + G.ux * 10.5 + vx * 3.1, G.floor0 + 2.2, G.cz + G.uz * 10.5 + vz * 3.1);
+    lampAt(G.cx + G.ux * 17 + vx * 3.1, G.floor0 - 3.5 + 2.2, G.cz + G.uz * 17 + vz * 3.1);
+    lampAt(G.cx + G.ux * 24 + vx * 3.1, G.floor0 - 7 + 2.2, G.cz + G.uz * 24 + vz * 3.1);
+    const addCaveLight = (x, y, z, color, intensity, dist) => { const L = new THREE.PointLight(color, intensity, dist); L.position.set(x, y, z); scene.add(L); };
+    addCaveLight(G.cx + G.ux * 17, G.floor0 - 3.5 + 2.6, G.cz + G.uz * 17, 0xffb46b, 7, 16); // milieu du tunnel
+    addCaveLight(KX, 18, KZ, 0x66d9ff, 14, 34); // caverne
+    addCaveLight(KX - 9, 13, KZ + 9, 0x7fd0ff, 9, 20); // cascade
+    addCaveLight(PX, PT + 2.5, PZ, 0xffc98a, 8, 18); // QG
+
+    // ---- SURFACE : deux bunkers et un hélipad sur le pourtour du cratère
+    buildHouse(p.x - 24, p.z + 17, p.h, 10, 9, 2, 'bunker');
+    buildHouse(p.x + 21, p.z - 19, p.h, 10, 8, 0, 'bunker');
+    {
+      const hx = p.x + 22, hz = p.z + 18;
+      makeStructBox(hx, p.h - 0.35, hz, 6.4, 0.45, 6.4, matC(0x3a3f47, { metalness: 0.3, roughness: 0.6 }), { indestructible: true });
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.1, 20), matC(0x1f2430)); ring.position.set(hx, p.h + 0.2, hz); scene.add(ring);
+      for (const [mx, mz, mw, md] of [[-0.7, 0, 0.4, 1.6], [0.7, 0, 0.4, 1.6], [0, 0, 1.4, 0.4]]) { const m = new THREE.Mesh(BOX, matC(0xffd23f)); m.scale.set(mw, 0.05, md); m.position.set(hx + mx, p.h + 0.26, hz + mz); scene.add(m); }
+    }
+    // blocs erratiques autour du cratère
+    for (const [bx, bz, bs] of [[-14, 6, 2.6], [10, -13, 3.2], [16, 9, 2.2], [-9, -16, 2.8], [-19, -4, 2.4]])
+      gshell(G.cx + bx, terrainH(G.cx + bx, G.cz + bz) - 0.5, G.cz + bz, bs, bs, bs * 1.3, ROCK_C);
+
+    // ---- COFFRE-FORT ET CABINE DANS LA CAVERNE
+    buildVault(p, { x: KX + 8, y: FY, z: KZ - 8 });
+    buildPhoneBooth(p, { x: KX + 9, y: FY, z: KZ + 10 });
+
+    // ---- COFFRES, MUNITIONS ET BUTIN
+    spawnChest(KX - 9, FY + 0.05, KZ - 6);
+    spawnChest(KX + 3, FY + 0.05, KZ + 7);
+    spawnChest(PX - 2, PT + 0.55, PZ);
+    spawnChest(KX - 3, FY + 0.05, KZ + 10);
+    ammoBoxes.push(spawnAmmoBox(KX + 11, FY + 0.05, KZ - 11));
+    ammoBoxes.push(spawnAmmoBox(PX + 3, PT + 0.55, PZ - 1));
+    lootSpots.push({ x: KX + 1, y: FY + 0.6, z: KZ - 10 });
+    lootSpots.push({ x: KX - 10, y: FY + 0.6, z: KZ - 2 });
+    lootSpots.push({ x: KX + 5, y: FY + 0.6, z: KZ + 9 });
+    lootSpots.push({ x: PX + 2, y: PT + 0.7, z: PZ + 1 });
+    lootSpots.push({ x: KX - 11, y: FY + 0.6, z: KZ + 5 });
+
+    // fusion de toutes les roches de la grotte en un seul maillage
+    finishGrotto();
   } else if (p.key === 'rig') {
     // Plateforme pétrolière : coque gris-bleu à bandes jaunes, grues rouges,
     // hélipad jaune en porte-à-faux, passerelle vers la station satellite.
@@ -3638,7 +3781,7 @@ function buildSpyPOI(p) {
     placePad(p.x + 16, p.z);
     placePad(p.x - 16, p.z);
   }
-  if (p.key !== 'yacht' && p.key !== 'rig') { buildVault(p); buildPhoneBooth(p); }
+  if (p.key !== 'yacht' && p.key !== 'rig' && p.key !== 'grotto') { buildVault(p); buildPhoneBooth(p); }
   if (p.key === 'agency') placePad(p.x - 22, p.z + 8);
 }
 const spySpot0 = lootSpots.length;
@@ -3740,6 +3883,8 @@ function startGame() {
     let sx, sy, sz, wpBox = null;
     if (p.key === 'yacht') { const yd = Math.max(terrainH(p.x, p.z), 2.4); sy = yd + 1.5; sx = p.x + rand(-10, 10); sz = p.z + rand(-3, 3); wpBox = { x: p.x, z: p.z, hx: 11, hz: 3.5 }; }
     else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; sx = p.x + rand(-8, 8); sz = p.z + rand(-6, 6); wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
+    // La Grotte : Brutus et ses hommes de main gardent la caverne souterraine
+    else if (p.key === 'grotto') { sx = GROTTO.cavernX - 4; sz = GROTTO.cavernZ - 8; sy = GROTTO.floor1 + 3.6 + 0.1; wpBox = { x: GROTTO.cavernX, z: GROTTO.cavernZ, hx: 10, hz: 10 }; }
     else { const bp = randomLandPoint(p.x, p.z, p.r * 0.3); sx = bp.x; sz = bp.z; sy = Math.max(terrainH(sx, sz), 2.4) + 0.1; }
     const boss = new Char(cfg.boss, false, { skin: cfg.skin, backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
     boss.hench = true; boss.boss = true; boss.bossPoi = p; boss.henchPoi = p; boss.wpBox = wpBox;
@@ -4581,7 +4726,27 @@ function updateCamera(dt) {
   const shEff = shoulderNow * Math.min(1, cd / 2.5);
   camera.position.set(pivot.x - d.x * cd + rx * shEff, pivot.y - d.y * cd, pivot.z - d.z * cd + rz * shEff);
   const th = terrainH(camera.position.x, camera.position.z) + 0.4;
-  if (camera.position.y < th) camera.position.y = th;
+  // Grotte : la caméra reste entre le sol rocheux et le plafond du tunnel/de la
+  // caverne. Uniquement quand le JOUEUR est lui-même sous la voûte — en surface
+  // au-dessus de la grotte, la caméra garde son comportement normal. Hors du
+  // volume couvert (cratère ouvert, ravin d'entrée côté cratère), l'exception
+  // terrain ne s'applique pas : la caméra ne peut pas plonger sous le sol.
+  const pInCave = player.alive && player.mode !== 'bus' && player.mode !== 'drive'
+    && (() => { const pc = grottoCamCeil(player.pos.x, player.pos.z); return pc !== null && player.pos.y < pc; })();
+  let gClamped = false;
+  if (pInCave) {
+    const gc = grottoCamCeil(camera.position.x, camera.position.z);
+    if (gc !== null) {
+      const gf = grottoCamFloor(camera.position.x, camera.position.z);
+      if (gf !== null && camera.position.y < gf + 0.3) camera.position.y = gf + 0.3;
+      if (camera.position.y > gc) camera.position.y = gc;
+      gClamped = true;
+    }
+  }
+  // dans le volume couvert de la Grotte, la caméra peut passer sous le niveau du
+  // terrain au-dessus (le plafond rocheux la protège déjà)
+  const camUnder = gClamped && camera.position.y < th - 0.75 && inGrotto(camera.position.x, camera.position.z);
+  if (camera.position.y < th && !camUnder) camera.position.y = th;
   camTarget.copy(camera.position).add(d);
   camera.lookAt(camTarget);
   if (player.alive) player.mesh.visible = !scopeOn && player.mode !== 'bus' && player.mode !== 'drive';
@@ -4812,9 +4977,12 @@ function updateWorld(dt) {
   for (const L of loot) {
     if (!L.alive) continue;
     L.t += dt;
-    if (L.vel.lengthSq() > 0.01 || L.pos.y > terrainH(L.pos.x, L.pos.z) + 0.05) {
+    const lTh = terrainH(L.pos.x, L.pos.z);
+    // dans la Grotte, le butin tombe sur les dalles rocheuses (colliders), pas sur le terrain au-dessus
+    const lUnder = underGrotto(L.pos.x, L.pos.z, L.pos.y);
+    if (L.vel.lengthSq() > 0.01 || L.pos.y > lTh + 0.05 || lUnder) {
       L.vel.y -= 20 * dt; L.pos.addScaledVector(L.vel, dt);
-      let gy = terrainH(L.pos.x, L.pos.z);
+      let gy = lUnder ? -1e9 : lTh;
       queryCols(L.pos.x, L.pos.z, 0.5, tmpCols);
       for (const c of tmpCols) if (c.type === 'box' && L.pos.x > c.minX && L.pos.x < c.maxX && L.pos.z > c.minZ && L.pos.z < c.maxZ && c.maxY <= L.pos.y + 0.5 && c.maxY > gy) gy = c.maxY;
       if (L.pos.y <= gy) { L.pos.y = gy; L.vel.set(0, 0, 0); }
@@ -4823,6 +4991,11 @@ function updateWorld(dt) {
     L.model.position.y = 0.55 + Math.sin(L.t * 2.2) * 0.1;
   }
   chestHumT -= dt;
+  // cascade de la Grotte : défilement de la texture + embruns au pied
+  if (grottoWaterfallTex) {
+    grottoWaterfallTex.offset.y -= dt * 0.85;
+    if (grottoPoolPos && MR() < dt * 2.5) burst(_v1.set(grottoPoolPos.x + (MR() - 0.5) * 2.4, 10.7, grottoPoolPos.z + (MR() - 0.5) * 2.4), 0xbfe8ff, 2, 2.2, 0.09, 0.4, 0.5);
+  }
   let nearC = null, nearD = 11;
   const pp = player.pos;
   for (const c of chests) {

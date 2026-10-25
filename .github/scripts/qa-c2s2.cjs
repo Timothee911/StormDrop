@@ -300,6 +300,49 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   check('victoire déclenchée, PNJ exclus du classement', boardState !== 'playing' && board.alive === 1, JSON.stringify(board) + ' state=' + boardState);
 
+  // --- 9bis. La Grotte : caverne souterraine sous la colline ---
+  const cave = await frame.evaluate(() => {
+    const G = window.__game, p = G.player, R = [];
+    // le cratère d'entrée est bien creusé dans la colline
+    R.push(['cratère creusé sous y=25', G.terrainH(200, 165) < 25, 'y=' + G.terrainH(200, 165).toFixed(1)]);
+    // l'entaille de la bouche est évidée sous le plafond rocheux
+    R.push(['entaille de la bouche < 22', G.terrainH(190, 165) < 22, 'y=' + G.terrainH(190, 165).toFixed(1)]);
+    // descente du tunnel : le joueur est téléporté de marche en marche et doit
+    // rester au sol (colliders rocheux) jusqu'à la caverne (y ~ 10)
+    // sol attendu : marche i = 17 - 0.5 * i (tunnel aligné, plein ouest)
+    let okSteps = true, lastY = 99;
+    for (let s = 0; s < 14; s++) {
+      const d = 10.5 + s; // distance au centre du cratère le long de l'axe
+      const floorTop = 17 - 0.5 * s;
+      p.pos.set(200 - d, floorTop + 0.15, 165);
+      p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+      window.advanceTime(200);
+      if (!p.alive) { R.push(['joueur vivant dans la grotte', false, 'mort au pas ' + s]); okSteps = false; break; }
+      if (!p.grounded) { R.push(['au sol dans le tunnel', false, 'pas ' + s + ' y=' + p.pos.y.toFixed(1)]); okSteps = false; break; }
+      if (Math.abs(p.pos.y - floorTop) > 0.6) { R.push(['marches du tunnel praticables', false, 'pas ' + s + ' y=' + p.pos.y.toFixed(1) + ' attendu ' + floorTop.toFixed(1)]); okSteps = false; break; }
+      lastY = p.pos.y;
+    }
+    R.push(['descente jusqu\'à la caverne', okSteps && lastY < 11.6, 'y final ' + lastY.toFixed(1)]);
+    // le joueur est bien SOUS le terrain dans le tunnel profond
+    R.push(['tunnel souterrain', p.pos.y < G.terrainH(p.pos.x, p.pos.z) - 0.35, 'y=' + p.pos.y.toFixed(1) + ' terrain=' + G.terrainH(p.pos.x, p.pos.z).toFixed(1)]);
+    // marche jusqu'au fond de la caverne : sol plat à 10
+    p.pos.set(171, 10.3, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(300);
+    R.push(['sol de la caverne à y=10', p.grounded && Math.abs(p.pos.y - 10) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // Brutus garde la caverne depuis son QG
+    const brutus = G.henchmen.find((c) => c.alive && c.boss && c.name === 'Brutus');
+    R.push(['Brutus garde la caverne', !!brutus && brutus.pos.y < 16, brutus ? 'y=' + brutus.pos.y.toFixed(1) : 'absent']);
+    // coffre-fort de la Grotte au sol de la caverne
+    const vg = G.vaults.find((v) => v.poi.key === 'grotto');
+    R.push(['coffre-fort dans la caverne', !!vg && vg.y < 16, vg ? 'y=' + vg.y.toFixed(1) : 'absent']);
+    // pas de dégâts de zone en début de partie : on doit rester en vie
+    // (Brutus et ses hommes ripostent — seule la survie est vérifiée)
+    window.advanceTime(1500);
+    R.push(['joueur vivant', p.alive, 'hp=' + p.hp.toFixed(0)]);
+    return R.map((r) => (r[1] ? 'PASS' : 'FAIL') + '|' + r[0] + '|' + (r[2] ?? '')).join('\n');
+  });
+  for (const line of cave.split('\n')) { const i = line.indexOf('|'); check(line.slice(i + 1), line.startsWith('PASS'), line.slice(line.indexOf('|', i + 1) + 1)); }
+
   console.log(results.join('\n'));
   console.log('---');
   console.log(errors.length ? 'JS ERRORS:\n' + errors.slice(0, 10).join('\n') : 'AUCUNE ERREUR JS');

@@ -43,14 +43,14 @@ Les touches sont définies par position physique : le jeu affiche automatiquemen
 - **L'Agence** : tour recalée aux couleurs GHOST (calcaire, listels or, toits bleu nuit), drapeaux bleus sur la tour, emblème doré sur la façade.
 - **Le Requin** : manoir blanc moderne à toits plats en porte-à-faux, baies vitrées, piscine sur la terrasse, phare rouge et blanc, hélipad sur pilotis, rochers en tête de requin et aileron au large.
 - **Le Yacht** : coque à bande dorée et hublots, mât radar blanc et or, hélipad poupe cerclé de jaune avec marquage H, garde-corps dorés.
-- **La Grotte** : anneau rocheux ouvert en ciel (style caverne à puits de lumière), porte blindée dorée gardée par des veilleuses rouges, cuves à carburant, conteneurs et tour de contrôle à fenêtres cyan.
+- **La Grotte** : sur l'île principale, une colline percée d'un cratère d'entrée (marqué par deux bunkers, des rochers et un hélipad). Un tunnel en marches descend en sous-sol vers une vraie caverne : plafond et parois rocheux, mur d'escalade, cascade avec bassin lumineux, cristaux cyan, QG sur plateforme avec lampes orange. Brutus et ses hommes de main patrouillent la caverne ; le coffre-fort est niché au fond contre le mur nord.
 - **La Plateforme** : plateforme pétrolière gris-bleu à bandes jaunes de flottaison, grue rouge avec flèche et contrepoids, hélipad jaune en porte-à-faux, passerelle treillis vers la station satellite (salle de contrôle).
 - **Passe de combat Top Secret** : les agents de la saison en récompenses (Brutus, TNTina, Meowscles, Skye, Homme de main, Midas au palier 100... enfin 30).
 - **Skye** : silhouette distincte (bonnet rose, cheveux bruns) au lieu du clone du Lapin.
 
 ## Nouveautés v4 — Saison Espions (inspirée du Chapitre 2 Saison 2)
 
-- **5 POI espions** : L'Agence (tour noire et or au centre de l'île, statue dorée, hélipad), Le Requin (île avec mâchoires de requin à l'entrée), Le Yacht (navire blanc et or amarré sur son île), La Grotte (bunker béton ceinturé d'un mur), La Plateforme (plateforme pétrolière sur pilotis avec trampolines d'accès).
+- **5 POI espions** : L'Agence (tour noire et or au centre de l'île, statue dorée, hélipad), Le Requin (île avec mâchoires de requin à l'entrée), Le Yacht (navire blanc et or amarré sur son île), La Grotte (caverne souterraine sous une colline de l'île principale), La Plateforme (plateforme pétrolière sur pilotis avec trampolines d'accès).
 - **Boss mythiques** : Midas (Mitrailleuse de Midas), Skye (AR de Skye), Meowscles (AR Lourd Peow Peow), Brutus (Minigun de Brutus) et TNTina (Arc Ka-Boom). Chaque boss patrouille son POI avec ses hommes de main, a une étiquette dorée et une réserve de points de vie et de bouclier bien supérieure. Éliminé, il lâche **son arme mythique + une carte d'accès**.
 - **Hommes de main** : PNJ en costume qui patrouillent les POI espions, ripèrent quand on les attaque (tout le POI est alerté) et ne comptent pas dans les joueurs restants ni le classement.
 - **Coffres-forts** : chaque POI espion abrite un coffre-fort doré verrouillé. Il faut la carte du boss pour l'ouvrir ; avec la carte en poche, une **ligne bleue pointillée** sur la minicarte et la grande carte indique le chemin. Butin garanti : 2 coffres-forts (armes rares+), potions, munitions, matériaux.
