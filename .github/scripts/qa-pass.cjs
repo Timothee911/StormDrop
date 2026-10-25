@@ -33,10 +33,10 @@ const fail = (m) => { console.error('ECHEC:', m); process.exitCode = 1; };
   if (!/brutus/i.test(first.pp)) fail("l'aperçu du 1er rendu ne montre pas Brutus: " + first.pp);
   if (!/Débloqué au niveau 1/.test(first.pp)) fail("niveau de déblocage absent du 1er rendu: " + first.pp);
 
-  // --- 1) Une partie jouée : +3000 XP -> niveau 2, sans acheter le passe
+  // --- 1) Une partie jouée : +12000 XP -> niveau 2 (10 000 XP par niveau), sans acheter le passe
   await page.evaluate((xp) => {
     window.postMessage({ type: 'stormdrop-result', action: 'lobby', won: false, placement: 12, kills: 2, time: 240, xp, xpLog: {}, stats: { damage: 300, chests: 4, harvested: 50, builds: 10, supply: 1, headshots: 2 } }, '*');
-  }, 3000);
+  }, 12000);
   await new Promise(r => setTimeout(r, 900));
   const cont = await page.$('#rsContinue');
   if (cont) { await cont.click(); await new Promise(r => setTimeout(r, 500)); }
@@ -90,10 +90,11 @@ const fail = (m) => { console.error('ECHEC:', m); process.exitCode = 1; };
   });
   if (!r2.ok) fail('structure DOM cassée après le clic');
 
-  // --- 3) Beaucoup d'XP + passe achetée : niveau 9, structure et badges
+  // --- 3) Beaucoup d'XP + passe achetée : niveau 9 (12 000 + 58 000 + 14 700 XP
+  // de défis = 84 700 XP cumulés), structure et badges
   await page.evaluate((xp) => {
     window.postMessage({ type: 'stormdrop-result', action: 'lobby', won: true, placement: 1, kills: 8, time: 600, xp, xpLog: {}, stats: { damage: 2000, chests: 10, harvested: 500, builds: 80, supply: 3, headshots: 6 } }, '*');
-  }, 22000);
+  }, 58000);
   await new Promise(r => setTimeout(r, 900));
   const cont2 = await page.$('#rsContinue');
   if (cont2) { await cont2.click(); await new Promise(r => setTimeout(r, 500)); }
@@ -114,6 +115,7 @@ const fail = (m) => { console.error('ECHEC:', m); process.exitCode = 1; };
   });
   console.log('niveau ' + r3.level + ' + passe premium:', JSON.stringify(r3));
   if (r3.structure !== 'ok') fail('structure DOM cassée niveau 9: ' + r3.structure);
+  if (r3.level !== '9') fail('niveau attendu 9 après les deux parties, obtenu ' + r3.level);
   if (r3.checks === 0) fail('aucune coche ✓ après achat du passe');
   if (r3.checks + r3.locks !== r3.cells) fail('badges incohérents: ' + r3.checks + '+' + r3.locks + '!=' + r3.cells);
   await page.screenshot({ path: '/tmp/qa-pass-lvl9.png' });
