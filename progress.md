@@ -42,4 +42,7 @@ Original prompt: Ajoute des bots aux comportements variés. Refait l'agence pour
 - Service-worker v30 caches all three new modules; deeper terrain excavation and a geometric hole in the sea surface keep B2 dry below sea level, including its rendered appearance.
 - Regression passes: physical entrance/B1/vault/exit and B1/B2 round trips, no/wrong/correct card, scan/open intermediate states, sealed loot, persistent door and one-time XP; five bot profiles and storm priority still pass with no page errors.
 - Pure mechanism tests cover phase boundaries, wheel/bolt movement, monotonic hinge angle and completion.
+- Full C2S2 browser regression passes: five spy POIs/vaults/bosses, henchmen, player counter, disguise, weapons, boss loot/XP, keycards, grapple and victory; no JS errors.
+- The legacy test now controls RAF and advances simulation without hundreds of redundant renders during landing. Production frame scheduling is unchanged.
+- Deployed preview checked in a fresh context: lobby navigation and launch, 35 pipe runs / 16 valves, B2 geometry, card input and a fully opened vault whose hinged leaf remains visible and solid.
 - References: https://www.thegamer.com/fortnites-chapter-2-season-2-vault-locations-unlock-guide/ and https://screenrant.com/fortnite-vault-key-cards-chapter-2-season-2/

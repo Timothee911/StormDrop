@@ -31,7 +31,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   if (!frame) { console.log('FAIL | chargement de la partie (launched=' + launched + ')'); await browser.close(); process.exit(1); }
   await frame.waitForSelector('#hud', { timeout: 15000 }).catch(() => {});
   await sleep(2500);
-  await frame.evaluate(() => window.__qaFrame());
+  await frame.evaluate(() => { window.advanceTime(250); window.__qaFrame(); });
 
   const results = [];
   let failed = 0;
