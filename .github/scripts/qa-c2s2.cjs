@@ -335,6 +335,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // coffre-fort de la Grotte au sol de la caverne
     const vg = G.vaults.find((v) => v.poi.key === 'grotto');
     R.push(['coffre-fort dans la caverne', !!vg && vg.y < 16, vg ? 'y=' + vg.y.toFixed(1) : 'absent']);
+    // crâne de l'Ombre : bas-relief présent dans la falaise ouest du cratère
+    const sb = G.grottoSkullBounds;
+    R.push(["crâne de l'Ombre sculpté dans la falaise", !!sb && sb.min.x < 186.6 && sb.max.x > 184 && sb.max.y > 33 && sb.max.y < 36 && sb.min.z < 160 && sb.max.z > 170, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) : 'absent']);
+    // passerelle métallique du mur sud : praticable
+    p.pos.set(172.7, 14.2, 176.7); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(200);
+    R.push(['passerelle du mur sud praticable', p.grounded && Math.abs(p.pos.y - 13.8) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // escalier d'accès de la passerelle : marches praticables
+    p.pos.set(180.2, 12.2, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(200);
+    R.push(['escalier de la passerelle praticable', p.grounded && p.pos.y > 11 && p.pos.y < 13.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // conteneur de fret : solide (cover au bord du bassin)
+    p.pos.set(166, 13.4, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(200);
+    R.push(['conteneur de fret solide', p.grounded && Math.abs(p.pos.y - 12.8) < 0.6, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
     // pas de dégâts de zone en début de partie : on doit rester en vie
     // (Brutus et ses hommes ripostent — seule la survie est vérifiée)
     window.advanceTime(1500);

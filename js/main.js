@@ -3353,7 +3353,7 @@ CAVE_MAT.onBeforeCompile = (sh) => {
 };
 const CAVE_HIDDEN = new THREE.MeshStandardMaterial({ visible: false });
 const grottoGeos = [];
-let grottoWaterfallTex = null, grottoPoolPos = null;
+let grottoWaterfallTex = null, grottoPoolPos = null, grottoSkullBounds = null;
 function gdeco(geo, hex, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) {
   _de.set(rx, ry, rz, 'XYZ'); _dq.setFromEuler(_de);
   _dm.compose(_dp.set(x, y, z), _dq, _ds.set(sx, sy, sz));
@@ -3646,7 +3646,8 @@ function buildSpyPOI(p) {
       const wf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 11, 12, 1, true), new THREE.MeshBasicMaterial({ map: grottoWaterfallTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
       wf.position.set(wx, 15.5, wz); scene.add(wf);
       const pool = new THREE.Mesh(BOX, new THREE.MeshStandardMaterial({ color: 0x1d8fd6, transparent: true, opacity: 0.72, roughness: 0.12, metalness: 0.1 }));
-      pool.scale.set(9, 0.55, 9); pool.position.set(KX - 8.5, 10.28, KZ + 8.5); scene.add(pool);
+      // grand bassin turquoise qui baigne tout l'angle sud-ouest de la caverne
+      pool.scale.set(11, 0.55, 11); pool.position.set(KX - 8.2, 10.28, KZ + 7.7); scene.add(pool);
       grottoPoolPos = new THREE.Vector3(wx, FY, wz);
     }
 
@@ -3675,6 +3676,51 @@ function buildSpyPOI(p) {
     addCaveLight(KX - 9, 13, KZ + 9, 0x7fd0ff, 9, 20); // cascade
     addCaveLight(PX, PT + 2.5, PZ, 0xffc98a, 8, 18); // QG
 
+    // ---- CRÂNE DE L'OMBRE : bas-relief géant sculpté dans la falaise ouest du
+    // cratère, au-dessus de la bouche du tunnel (v12.10 de Fortnite : la Grotte
+    // a pris parti pour l'Ombre et un crâne est gravé dans la falaise)
+    {
+      const skullStart = grottoGeos.length;
+      const SK = 0xa4a9b0, SKD = 0x7f848b, SKK = 0x14171d;
+      gdeco(BOX, SK, 185.2, 27.5, 165, 2.4, 6.5, 13.5);   // crâne : masse supérieure
+      gdeco(BOX, SK, 185.2, 33.4, 165, 2.0, 1.4, 10.5);   // arrondi du dôme
+      gdeco(BOX, SK, 185.2, 25.0, 165, 2.2, 3.2, 11.5);   // milieu du visage
+      gdeco(BOX, SKD, 185.9, 27.9, 165, 2.6, 1.6, 12.5, 0, 0, 0.1); // arcade sourcilière agressive
+      gdeco(BOX, SKK, 186.15, 26.2, 161.9, 0.7, 2.6, 3.1); // orbite gauche creusée
+      gdeco(BOX, SKK, 186.15, 26.2, 168.1, 0.7, 2.6, 3.1); // orbite droite creusée
+      gdeco(PRISM_GEO, SKK, 185.7, 24.2, 165, 1.3, 2.3, 1.4, 0, Math.PI / 2, 0); // cavité nasale
+      gdeco(BOX, SKD, 185.8, 25.3, 160.2, 1.4, 1.4, 2.4);  // pommette gauche
+      gdeco(BOX, SKD, 185.8, 25.3, 169.8, 1.4, 1.4, 2.4); // pommette droite
+      gdeco(BOX, SK, 185.4, 22.2, 165, 1.9, 2.8, 9.5);    // mâchoire inférieure
+      gdeco(BOX, SKD, 185.6, 20.7, 165, 1.4, 1.4, 5.2);   // menton fondu dans la pente
+      // bornes du crâne exposées à la QA (le relief est bien dans la falaise)
+      const sb = new THREE.Box3(), tb = new THREE.Box3();
+      for (let i = skullStart; i < grottoGeos.length; i++) {
+        if (!grottoGeos[i].geo.boundingBox) grottoGeos[i].geo.computeBoundingBox();
+        sb.union(tb.copy(grottoGeos[i].geo.boundingBox).applyMatrix4(grottoGeos[i].m));
+      }
+      grottoSkullBounds = sb;
+    }
+
+    // ---- PASSERELLE MÉTALLIQUE le long du mur sud + conteneurs et cuve :
+    // habillage industriel de la base souterraine de l'Ombre
+    {
+      const WM = 0x5a616c;
+      gshell(172.7, 13.3, 176.7, 17.4, 0.5, 2.2, WM); // tablier le long du mur sud
+      for (const cxp of [165, 177.6, 181.8]) gdeco(BOX, 0x39424e, cxp, 12.1, 177.3, 0.5, 1.2, 0.4); // consoles
+      gdeco(BOX, 0x8a929e, 172.7, 14.5, 175.65, 17.4, 0.9, 0.1); // garde-corps
+      for (let i = 0; i < 5; i++) gdeco(BOX, 0x8a929e, 164.5 + i * 4.1, 14.5, 175.65, 0.12, 0.9, 0.12); // poteaux
+      // escalier d'accès depuis le sol de la caverne (côté est)
+      for (let i = 0; i < 8; i++) gshell(180.2, 13.8 - 0.45 * (i + 1) - 1.0, 170.2 + i * 0.92, 2.2, 1.0, 0.95, WM);
+      // conteneurs de fret (le premier a les pieds dans le bassin)
+      makeStructBox(166, 10, 173.5, 6.5, 2.8, 2.8, matC(0xb03a2e, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+      makeStructBox(160, 10, 161, 2.8, 2.8, 6.5, matC(0x2980b9, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+      // cuve cylindrique contre le mur nord-ouest
+      const tank = new THREE.Mesh(CYL_GEO, matC(0x8fa3ad, { metalness: 0.4, roughness: 0.5 }));
+      tank.scale.set(2.6, 4, 2.6); tank.position.set(159.5, 12, 155); tank.castShadow = true; scene.add(tank);
+      propBox(159.5, 10, 155, 1.3, 1.3, 4); // cuve : solide
+    }
+
     // ---- SURFACE : deux bunkers et un hélipad sur le pourtour du cratère
     buildHouse(p.x - 24, p.z + 17, p.h, 10, 9, 2, 'bunker');
     buildHouse(p.x + 21, p.z - 19, p.h, 10, 8, 0, 'bunker');
@@ -3690,13 +3736,13 @@ function buildSpyPOI(p) {
 
     // ---- COFFRE-FORT ET CABINE DANS LA CAVERNE
     buildVault(p, { x: KX + 8, y: FY, z: KZ - 8 });
-    buildPhoneBooth(p, { x: KX + 9, y: FY, z: KZ + 10 });
+    buildPhoneBooth(p, { x: KX + 6.5, y: FY, z: KZ + 5 }); // déplacée : libère le pied de l'escalier de la passerelle
 
     // ---- COFFRES, MUNITIONS ET BUTIN
     spawnChest(KX - 9, FY + 0.05, KZ - 6);
     spawnChest(KX + 3, FY + 0.05, KZ + 7);
     spawnChest(PX - 2, PT + 0.55, PZ);
-    spawnChest(KX - 3, FY + 0.05, KZ + 10);
+    spawnChest(KX + 6, FY + 0.05, KZ + 8); // déplacé : l'ancien emplacement est noyé par le grand bassin
     ammoBoxes.push(spawnAmmoBox(KX + 11, FY + 0.05, KZ - 11));
     ammoBoxes.push(spawnAmmoBox(PX + 3, PT + 0.55, PZ - 1));
     lootSpots.push({ x: KX + 1, y: FY + 0.6, z: KZ - 10 });
@@ -5352,7 +5398,7 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
+window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
 // storm est aussi exposé directement : window.__game.storm
 
