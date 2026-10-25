@@ -3,8 +3,8 @@ export const SURFACE = Object.freeze({ PLAIN: 0, WOOD: 1, BRICK: 2, STONE: 3, PL
 
 // Shared instanced nature materials. The generators never consume the map RNG.
 export function createNatureLibrary(THREE) {
-  const library = { version: 2 };
-  for (const [kind, seed, base] of [['bark', 7731, 166], ['foliage', 7732, 159], ['rock', 7733, 189]]) {
+  const library = { version: 3 };
+  for (const [kind, seed, base] of [['bark', 7731, 166], ['foliage', 7732, 159], ['rock', 7733, 189], ['broadleaf', 7734, 155]]) {
     const s = 512, c = canvas(s), g = c.getContext('2d'), r = random(seed);
     grain(g, s, seed, base, kind === 'rock' ? 28 : 18);
     // Draw a toroidal tile: strokes crossing an edge continue at the opposite edge.
@@ -47,6 +47,25 @@ export function createNatureLibrary(THREE) {
             g.beginPath(); g.moveTo(-spread, -h - size * .25); g.lineTo(0, -h);
             g.lineTo(spread, -h - size * .25); g.stroke();
           }
+        });
+      }
+    } else if (kind === 'broadleaf') {
+      for (let i = 0; i < 850; i++) {
+        const x = r() * s, y = r() * s, angle = r() * Math.PI * 2;
+        const length = 13 + r() * 26, width = length * (.32 + r() * .15), shade = 75 + r() * 160;
+        wrap(() => {
+          g.translate(x, y); g.rotate(angle);
+          g.beginPath(); g.moveTo(0, -length / 2);
+          g.bezierCurveTo(width, -length * .2, width, length * .3, 0, length / 2);
+          g.bezierCurveTo(-width, length * .3, -width, -length * .2, 0, -length / 2);
+          g.fillStyle = gray(shade); g.fill();
+          g.strokeStyle = gray(shade * .62); g.lineWidth = .9; g.stroke();
+          g.beginPath(); g.moveTo(0, -length * .4); g.lineTo(0, length * .42);
+          for (const sign of [-1, 1]) for (let j = 0; j < 3; j++) {
+            const h = -length * .2 + j * length * .19;
+            g.moveTo(0, h + length * .12); g.lineTo(sign * width * .6, h);
+          }
+          g.strokeStyle = gray(Math.min(250, shade + 30)); g.lineWidth = .8; g.stroke();
         });
       }
     } else {
@@ -118,9 +137,10 @@ export function createNatureLibrary(THREE) {
 }
 
 export function installNatureSurface(material, library, kind) {
-  if (!['bark', 'foliage', 'rock'].includes(kind)) throw new Error(`Unknown nature surface: ${kind}`);
+  if (!['bark', 'foliage', 'rock', 'broadleaf'].includes(kind)) throw new Error(`Unknown nature surface: ${kind}`);
+  const foliage = kind === 'foliage' || kind === 'broadleaf';
   material.userData.natureSurface = kind;
-  material.customProgramCacheKey = () => `stormdrop-nature-v2-${kind}`;
+  material.customProgramCacheKey = () => `stormdrop-nature-v3-${kind}`;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.natureDetail = { value: library[kind] };
     const varyings = 'varying vec3 vNatureP; varying vec3 vNatureWorld; varying vec2 vNatureUV; varying vec2 vNaturePhase;';
@@ -153,7 +173,7 @@ export function installNatureSurface(material, library, kind) {
           float natureRelief=natureSample.r;
         `}
         float natureNear=1.0-smoothstep(30.0,95.0,length(vViewPosition));
-        diffuseColor.rgb*=mix(1.0,${kind === 'foliage' ? '.36+.85' : kind === 'bark' ? '.30+1.10' : '.40+.83'}*natureRelief,natureNear);
+        diffuseColor.rgb*=mix(1.0,${foliage ? '.36+.85' : kind === 'bark' ? '.30+1.10' : '.40+.83'}*natureRelief,natureNear);
         ${kind === 'rock' ? `
           float natureCrack=smoothstep(.05,.55,(natureSample.a-.502)*2.0);
           diffuseColor.rgb*=1.0-.48*natureCrack*natureNear;
@@ -165,7 +185,7 @@ export function installNatureSurface(material, library, kind) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         vec3 nq0=dFdx(-vViewPosition),nq1=dFdy(-vViewPosition);
         vec3 nr1=cross(nq1,normal),nr2=cross(normal,nq0); float ndet=dot(nq0,nr1);
-        normal=normalize(abs(ndet)*normal-sign(ndet)*${kind === 'foliage' ? '.012' : '.028'}*natureNear
+        normal=normalize(abs(ndet)*normal-sign(ndet)*${foliage ? '.012' : '.028'}*natureNear
           *(dFdx(natureRelief)*nr1+dFdy(natureRelief)*nr2));
       `);
   };

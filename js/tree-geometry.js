@@ -1,4 +1,28 @@
 // One reusable mesh per trunk, including its branches: no extra draw calls per tree.
+export function treeSpeciesAt(x, z, snow = 0) {
+  if (snow > .3) return 'pine';
+  const value = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+  return value - Math.floor(value) < .42 ? 'broadleaf' : 'pine';
+}
+
+export function createBroadleafCanopy(THREE, mergeGeometries) {
+  const make = (lobes) => {
+    const parts = lobes.map(([x, y, z, sx, sy, sz], i) =>
+      new THREE.DodecahedronGeometry(1, 0).rotateY(i * .71).scale(sx, sy, sz).translate(x, y, z));
+    const geometry = mergeGeometries(parts, false);
+    for (const part of parts) part.dispose();
+    geometry.computeBoundingBox(); geometry.computeBoundingSphere();
+    geometry.userData = { species: 'broadleaf', lobes: lobes.length };
+    return geometry;
+  };
+  return {
+    lower: make([[-1.8, 0, .3, 2, 1.25, 1.85], [1.5, .12, .6, 2, 1.2, 1.85],
+      [.1, .2, -1.5, 2, 1.3, 1.85], [-.8, -.1, 1.4, 2.1, 1.2, 1.8], [1, -.12, -.8, 2, 1.2, 1.85]]),
+    upper: make([[-1, .35, -.2, 1.8, 1.25, 1.7], [.8, .55, .3, 1.8, 1.2, 1.7],
+      [.2, .4, -1.1, 1.7, 1.2, 1.65]])
+  };
+}
+
 export function createBranchedTrunk(THREE, mergeGeometries) {
   const height = 2.8;
   const parts = [new THREE.CylinderGeometry(.28, .42, height, 6).translate(0, height / 2, 0)];

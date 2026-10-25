@@ -8,7 +8,7 @@ import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { BOT_PROFILE_IDS, profileOf, preferredDistance, combatIntent } from './bot-profiles.js';
 import { buildAgency } from './agency.js';
 import { buildAgencyVault } from './agency-vault.js';
-import { createBranchedTrunk } from './tree-geometry.js';
+import { createBranchedTrunk, createBroadleafCanopy, treeSpeciesAt } from './tree-geometry.js';
 import { SURFACE, surfaceForStyle, createSurfaceLibrary, installTerrainSurface, installBuildingSurface, createNatureLibrary, installNatureSurface } from './surface-materials.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
 
@@ -500,7 +500,7 @@ const CYL_GEO = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
 const trees = [], rocks = [], cacti = [];
 const dummy = new THREE.Object3D();
 const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
-let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
+let trunkIM, leafIM, leaf2IM, broadLeafIM, broadCrownIM, rockIM, cactusIM;
 {
   const pts = [], cpts = [];
   let tries = 0;
@@ -518,28 +518,51 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
   }
   const trunkG = createBranchedTrunk(THREE, mergeGeometries);
   const leafG = new THREE.ConeGeometry(1, 1, 7); leafG.translate(0, 0.5, 0);
+  const broadG = createBroadleafCanopy(THREE, mergeGeometries);
+  for (const p of pts) p.species = treeSpeciesAt(p.x, p.z, p.snow);
+  const pineTrees = [], broadleafTrees = [];
+  const broadCount = pts.filter(p => p.species === 'broadleaf').length, pineCount = pts.length - broadCount;
   const barkMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0x986039, roughness: .96, flatShading: true }), natureLibrary, 'bark');
   const foliageMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .9, flatShading: true }), natureLibrary, 'foliage');
+  const broadMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0xd3e6c2, roughness: .92, flatShading: true }), natureLibrary, 'broadleaf');
   trunkIM = new THREE.InstancedMesh(trunkG, barkMat, pts.length);
-  leafIM = new THREE.InstancedMesh(leafG, foliageMat, pts.length);
-  leaf2IM = new THREE.InstancedMesh(leafG, foliageMat, pts.length);
+  leafIM = new THREE.InstancedMesh(leafG, foliageMat, Math.max(1, pineCount));
+  leaf2IM = new THREE.InstancedMesh(leafG, foliageMat, Math.max(1, pineCount));
+  broadLeafIM = new THREE.InstancedMesh(broadG.lower, broadMat, Math.max(1, broadCount));
+  broadCrownIM = new THREE.InstancedMesh(broadG.upper, broadMat, Math.max(1, broadCount));
+  leafIM.count = leaf2IM.count = pineCount; broadLeafIM.count = broadCrownIM.count = broadCount;
   const lc = new THREE.Color(), snowC = new THREE.Color(0xeef6ff);
   pts.forEach((p, i) => {
-    const s = rand(0.85, 1.35);
-    const tree = { i, x: p.x, z: p.z, y: p.h - 0.2, s, hp: 150, alive: true, ims: null };
-    dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(s, 2.8 * s, s); dummy.updateMatrix();
+    const s = rand(0.85, 1.35), broad = p.species === 'broadleaf';
+    const list = broad ? broadleafTrees : pineTrees, leafI = list.length;
+    const lower = broad ? broadLeafIM : leafIM, upper = broad ? broadCrownIM : leaf2IM;
+    const tree = { i, x: p.x, z: p.z, y: p.h - 0.2, s, snow: p.snow, species: p.species,
+      hp: 150, alive: true, ims: [trunkIM, lower, upper], instanceIndices: [i, leafI, leafI] };
+    list.push(tree);
+    dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0);
+    dummy.scale.set((broad ? 1.18 : 1) * s, (broad ? 3.5 : 2.8) * s, (broad ? 1.18 : 1) * s); dummy.updateMatrix();
     trunkIM.setMatrixAt(i, dummy.matrix);
-    dummy.position.set(p.x, tree.y + 2.0 * s, p.z); dummy.scale.set(2.6 * s, 4.2 * s, 2.6 * s); dummy.updateMatrix(); leafIM.setMatrixAt(i, dummy.matrix);
-    dummy.position.set(p.x, tree.y + 4.3 * s, p.z); dummy.scale.set(1.8 * s, 3.2 * s, 1.8 * s); dummy.updateMatrix(); leaf2IM.setMatrixAt(i, dummy.matrix);
+    dummy.position.set(p.x, tree.y + (broad ? 3.7 : 2.0) * s, p.z);
+    dummy.scale.set((broad ? 1 : 2.6) * s, (broad ? 1 : 4.2) * s, (broad ? 1 : 2.6) * s);
+    dummy.updateMatrix(); lower.setMatrixAt(leafI, dummy.matrix);
+    dummy.position.set(p.x, tree.y + (broad ? 4.5 : 4.3) * s, p.z);
+    dummy.scale.set((broad ? 1 : 1.8) * s, (broad ? 1 : 3.2) * s, (broad ? 1 : 1.8) * s);
+    dummy.updateMatrix(); upper.setMatrixAt(leafI, dummy.matrix);
     lc.setHSL(0.27 + rand(-0.04, 0.05), 0.55 + rand(0.15), 0.32 + rand(0.1));
-    if (p.snow > 0.3) { lc.setHSL(0.36, 0.35, 0.28); leafIM.setColorAt(i, lc); leaf2IM.setColorAt(i, lc.lerp(snowC, 0.75 * p.snow)); }
-    else { leafIM.setColorAt(i, lc); lc.offsetHSL(0.01, 0, 0.05); leaf2IM.setColorAt(i, lc); }
-    tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + 3.2 * s });
+    if (p.snow > 0.3) { lc.setHSL(0.36, 0.35, 0.28); lower.setColorAt(leafI, lc); upper.setColorAt(leafI, lc.lerp(snowC, 0.75 * p.snow)); }
+    else {
+      if (broad) lc.offsetHSL(.015, -.05, -.035);
+      lower.setColorAt(leafI, lc); lc.offsetHSL(broad ? -.005 : .01, 0, broad ? .04 : .05); upper.setColorAt(leafI, lc);
+    }
+    const radius = (broad ? .6 : .5) * s;
+    tree.col = addCollider({ type: 'box', minX: p.x - radius, maxX: p.x + radius, minZ: p.z - radius, maxZ: p.z + radius, minY: tree.y, maxY: tree.y + (broad ? 3.8 : 3.2) * s });
     tree.col.tree = tree;
     trees.push(tree);
   });
-  for (const t of trees) t.ims = [trunkIM, leafIM, leaf2IM];
-  for (const im of [trunkIM, leafIM, leaf2IM]) { im.castShadow = true; im.receiveShadow = true; im.userData.treeIM = true; im.userData.list = trees; scene.add(im); addTarget(im); }
+  for (const [im, list] of [[trunkIM, trees], [leafIM, pineTrees], [leaf2IM, pineTrees], [broadLeafIM, broadleafTrees], [broadCrownIM, broadleafTrees]]) {
+    im.castShadow = true; im.receiveShadow = true; im.userData.treeIM = true; im.userData.list = list;
+    scene.add(im); addTarget(im);
+  }
   // Cacti (desert)
   const cacG = mergeGeometries([
     new THREE.CylinderGeometry(0.42, 0.48, 3.4, 8).translate(0, 1.7, 0),
@@ -2573,7 +2596,9 @@ function harvestTree(t, ch, crit) {
   t.shake = 0.25;
   if (t.hp <= 0) {
     t.alive = false; removeCollider(t.col);
-    for (const im of t.ims) { im.setMatrixAt(t.i, ZERO_M); im.instanceMatrix.needsUpdate = true; }
+    for (let j = 0; j < t.ims.length; j++) {
+      const im = t.ims[j]; im.setMatrixAt(t.instanceIndices?.[j] ?? t.i, ZERO_M); im.instanceMatrix.needsUpdate = true;
+    }
     burst(_v1.set(t.x, t.y + 3, t.z), 0x4caf50, 22, 6, 0.4, 0.7, 1.2);
     sfxAt('break', _v1, 0.8);
   }
@@ -5131,7 +5156,8 @@ window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; },
   agencyLayout, profileOf, preferredDistance, combatIntent, botThink,
   surfaces: { library: surfaceLibrary, buildings: HOUSE_MAT, get terrain() { return terrainMaterial; } },
-  nature: { library: natureLibrary, trees, rocks, meshes: { trunk: trunkIM, foliage: leafIM, crown: leaf2IM, rock: rockIM } } };
+  nature: { library: natureLibrary, trees, rocks,
+    meshes: { trunk: trunkIM, foliage: leafIM, crown: leaf2IM, broadFoliage: broadLeafIM, broadCrown: broadCrownIM, rock: rockIM } } };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built

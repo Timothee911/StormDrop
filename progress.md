@@ -77,3 +77,14 @@ Original prompt: Ajoute des bots aux comportements variés. Refait l'agence pour
 - Nature library/shader v2; offline cache v33 includes the new tree geometry module. Added branch picking, geometry bounds, finite vertices, fracture mask coverage and destruction checks to the low/high regression.
 - Low/high nature regression passes: 448 vertices per shared trunk, four branch groups, 12 tapered segments, branch-targeted melee grants wood, tree and rock destruction/collider removal remain correct. Intact-stone/fissure mask coverage verified; no shader/console errors.
 - Agency/bots, building/grass, full C2S2 gameplay and pure bot/vault regression suites pass. Real mouse harvesting removes all trunk/branch/foliage instances and grants wood; screenshots of green/snowy trees, fissured rocks and 375px resize inspected. Existing narrow-screen HUD overlaps unchanged.
+
+## Broadleaf trees mixed with pines
+- Request: « Ajoute des arbres feuillus plus larges en complément des sapins ».
+- Added rounded multilobed crowns (five lower/three upper dodecahedral lobes), with thicker/taller forked trunks and wider, lower silhouettes than pines.
+- A deterministic coordinate hash selects broadleaf trees for 42% of temperate candidates without consuming map RNG or moving existing roots/rocks. Snow-weight > .3 stays pine; desert cacti unchanged.
+- New original 512×512 oval-leaf/vein texture distinct from pine needles, with deeper green instance colours. Four shared nature textures; library/shader v3 and service worker v34.
+- Compact lower/upper foliage batches per species add only two forest-wide draw calls, not meshes per tree. The common trunk keeps global tree IDs; each tree carries per-part instance indices so ray picking, harvesting and vehicle destruction target the correct compact batch entries.
+- Trunk colliders match the thicker broadleaf roots without blocking the entire wide crown. Both species keep 150 HP and the existing wood/weak-point mechanics.
+- Validation: low/high nature regression passes with both species present, deterministic four-texture generation, compact index mapping, crown ray picking, branch harvesting, complete destruction and untouched neighbours (including matching foliage indices across species).
+- Real mouse harvesting of a non-first broadleaf (different global/foliage indices) grants wood and hides exactly its three owned parts; cactus fallback harvesting also passes. Agency/bots, building/grass, full C2S2 and pure bot/vault suites pass with no JS/shader errors.
+- Broadleaf desktop and 375px screenshots inspected; resize renders correctly. Existing narrow-screen HUD overlaps remain outside this tree pass.
