@@ -8,6 +8,9 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 ## Contenu
 
+- Bots à cinq profils tactiques : assaut, sniper, constructeur, prudent et flanqueur. Distances, armes recherchées, rafales, repli et construction varient selon le profil ; la zone et le regroupement restent prioritaires.
+- Agence reconstruite : ailes en pierre claire, bastions arrondis, fenêtres verticales, drapeaux bleus, hall sur deux niveaux et étages accessibles. Son coffre-fort est dans un sous-sol fermé accessible par l'escalier intérieur à gauche du hall ; la carte de Midas reste nécessaire.
+
 - Construction sur grille (bois / pierre / métal) à 5 matériaux, édition 3x3 (toit de la même texture que les murs), tir ADS, 6 raretés d'armes dont la mythique, tempête en phases, bus de combat, planeur, véhicules, trampolines et cheminées d'air.
 - Physique sur tous les objets : mobilier, coffres, caisses de munitions, largages, pads, cheminées d'air et décor des POI sont solides (murs fins infranchissables même à grande vitesse grâce aux sous-pas).
 - La zone apparaît 1 min après la fin du bus, bouge pour la première fois 2 min après son activation et se referme bien plus lentement ; dégâts 1, puis 2 à la moitié des joueurs, 5 au quart, 15 à 5 survivants.

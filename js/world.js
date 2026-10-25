@@ -68,7 +68,8 @@ export const POIS = [
   { name: 'Mont Grêle', x: 160, z: 247, r: 28, style: 'chalet' },
   { name: 'Chalets Givrés', x: 41, z: 256, r: 28, style: 'chalet' },
 ];
-for (const p of POIS) p.h = Math.max(2.5, rawH(p.x, p.z));
+// The headquarters sits on a raised foundation, keeping its lower storey above sea level.
+for (const p of POIS) p.h = Math.max(p.key === 'agency' ? 6.5 : 2.5, rawH(p.x, p.z));
 
 export function terrainH(x, z) {
   let h = rawH(x, z);
@@ -81,6 +82,10 @@ export function terrainH(x, z) {
       h += (p.h - h) * t;
     }
   }
+  // Excavate the Agency foundation only inside its sealed basement footprint.
+  // Rendering, hitscan and character physics all use the same ground function.
+  const agency = POIS[0];
+  if (Math.abs(x - agency.x) < 19.7 && Math.abs(z - agency.z) < 14.7) return agency.h - 4.3;
   return h;
 }
 

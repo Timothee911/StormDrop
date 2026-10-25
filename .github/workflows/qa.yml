@@ -83,6 +83,9 @@ jobs:
           echo "TOTAL_MISSING=$MISSING" >> $GITHUB_ENV
           echo "Asset check terminé ($MISSING manquant(s))."
 
+      - name: Vérifier les profils tactiques des bots
+        run: node --experimental-default-type=module .github/scripts/qa-bot-profiles.mjs
+
       - name: Démarrer un serveur et tester le lobby + le jeu
         id: smoke
         run: |
@@ -91,7 +94,7 @@ jobs:
           SERVER_PID=$!
           sleep 2
           STATUS=0
-          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/outline.js js/weapons.js style.css lobby.css; do
+          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/agency.js js/bot-profiles.js js/outline.js js/weapons.js style.css lobby.css; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/$path)
             if [ "$CODE" != "200" ]; then
               echo "::error file=$path::HTTP $CODE lors du chargement de /$path"
@@ -136,6 +139,17 @@ jobs:
           pkill -f "http.server 8090" 2>/dev/null || true
           exit $STATUS
 
+      - name: Test Agence intérieure et bots tactiques
+        id: agence
+        run: |
+          set -e
+          STATUS=0
+          nohup python3 -m http.server 8090 > /tmp/server-agency.log 2>&1 &
+          sleep 2
+          node .github/scripts/qa-agency-bots.cjs || STATUS=1
+          pkill -f "http.server 8090" 2>/dev/null || true
+          exit $STATUS
+
       - name: Test passe de combat (DOM, badges, sélection)
         id: passe
         run: |
@@ -161,6 +175,7 @@ jobs:
           echo "| Lobby + modules servis | ${{ steps.smoke.outcome == 'success' && 'OK' || (steps.smoke.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Test navigateur reel | ${{ steps.navigateur.outcome == 'success' && 'OK' || (steps.navigateur.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Gameplay Saison Espions | ${{ steps.saison.outcome == 'success' && 'OK' || (steps.saison.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Agence intérieure et bots | ${{ steps.agence.outcome == 'success' && 'OK' || (steps.agence.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Animations (toit, chute, parachute) | ${{ steps.anim.outcome == 'success' && 'OK' || (steps.anim.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Passe de combat (DOM, badges) | ${{ steps.passe.outcome == 'success' && 'OK' || (steps.passe.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

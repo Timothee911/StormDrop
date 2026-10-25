@@ -5,6 +5,8 @@ import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.j
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
+import { BOT_PROFILE_IDS, profileOf, preferredDistance, combatIntent } from './bot-profiles.js';
+import { buildAgency } from './agency.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
 
 // =====================================================================
@@ -2744,15 +2746,17 @@ const bots = [];
 function onBotDamaged(b, attacker) {
   if (!attacker || attacker === b) return;
   if (b.hench) { alertHenchmen(b.henchPoi, attacker); return; } // pas de construction, juste l'alerte
+  if (attacker.team === b.team) return;
+  const profile = profileOf(b);
   if (!b.target || !b.target.alive || MR() < 0.5) { b.target = attacker; b.react = 0.15; }
   // Les bots construisent peu : cooldown long, faible probabilité, et une pièce à la fois.
-  if (b.mode === 'ground' && b.grounded && b.buildCd <= 0 && !(b.buildQ && b.buildQ.length) && MR() < 0.1 + b.skill * 0.1 * DIFF.aim) {
-    b.buildCd = rand(10, 20) / DIFF.aim;
+  if (b.mode === 'ground' && b.grounded && b.buildCd <= 0 && !(b.buildQ && b.buildQ.length) && MR() < profile.build) {
+    b.buildCd = rand(10, 20) / (DIFF.aim * (b.profile === 'constructeur' ? 2 : 1));
     const mat = botMat(b, 40);
     if (!mat) return;
     const yaw = Math.atan2(-(attacker.pos.x - b.pos.x), -(attacker.pos.z - b.pos.z));
     const fake = { pos: b.pos, yaw };
-    if (b.hp + b.shield < 60 && MR() < 0.5) botBox(b, mat, attacker); // box complète seulement en grand danger
+    if (b.hp + b.shield < profile.retreat + 20 && MR() < 0.6) botBox(b, mat, attacker);
     else {
       const t = computeTarget(fake, 'wall', 0); queueBuild(b, 'wall', t.cx, t.cz, t.y, t.d, mat);
       if (MR() < 0.25) { b.rampRush = rand(1.5, 2.5); }
@@ -2830,6 +2834,7 @@ function canSee(a, b) {
   return h && h.type === 'char' && h.char === b;
 }
 function botThink(b, dt) {
+  const profile = profileOf(b);
   b.think -= dt; b.buildCd -= dt; b.react -= dt;
   if (b.think <= 0) {
     b.think = rand(0.3, 0.6);
@@ -2846,7 +2851,7 @@ function botThink(b, dt) {
         if (d < d1) { c3 = c2; d3 = d2; c2 = c1; d2 = d1; c1 = c; d1 = d; } else if (d < d2) { c3 = c2; d3 = d2; c2 = c; d2 = d; } else if (d < d3) { c3 = c; d3 = d; }
       }
       const best = c1 && canSee(b, c1) ? c1 : c2 && canSee(b, c2) ? c2 : c3 && canSee(b, c3) ? c3 : null;
-      if (best) { b.target = best; b.react = rand(0.8, 1.6) * DIFF.react; }
+      if (best) { b.target = best; b.seeing = true; b.react = rand(0.8, 1.6) * DIFF.react; }
     } else {
       b.seeing = canSee(b, b.target);
       if (!b.seeing) b.lostT += 0.45; else b.lostT = 0;
@@ -2866,7 +2871,7 @@ function botThink(b, dt) {
     // pick weapon by distance
     if (b.target) {
       const d = b.target.pos.distanceTo(b.pos);
-      let want = d < 12 ? 'shotgun' : d < 30 ? 'smg' : d > 55 ? 'sniper' : 'ar';
+      let want = d < 10 ? 'shotgun' : b.profile === 'sniper' && d > 28 ? 'sniper' : d < 30 ? profile.weapon : d > 55 ? 'sniper' : 'ar';
       let idx = b.slots.findIndex((s) => s && s.id === want);
       if (idx < 0) idx = b.slots.findIndex((s, i) => i > 0 && s && s.kind === 'weapon');
       if (idx > 0 && idx !== b.cur) { b.cur = idx; b.cool = 0.3; }
@@ -2876,7 +2881,10 @@ function botThink(b, dt) {
   }
   // movement
   const wish = _bw.set(0, 0, 0);
-  let speed = RUN * 0.92;
+  let speed = RUN * 0.92 * profile.speed;
+  b.tactic = 'patrouille';
+  const stormUrgent = storm.phase >= 0 && Math.hypot(b.pos.x - storm.cx, b.pos.z - storm.cz) > storm.r - 6;
+  const regroup = b.mate && player.alive && b.pos.distanceTo(player.pos) > 35;
   if (b.boxedT > 0) {
     b.boxedT -= dt;
     if (b.boxedT > 0 && b.heals > 0 && b.shield < 100 && !b.healing) { b.healing = 2.5; }
@@ -2884,25 +2892,35 @@ function botThink(b, dt) {
   }
   botBuildQueue(b, dt); botBoxEdit(b, dt);
   if (b.rampRush > 0 && b.target && b.target.alive) { botRampStep(b, dt); }
-  else if (b.target && b.target.alive && b.mode === 'ground' && b.buildCd <= 0 && b.target.pos.y > b.pos.y + 3 && b.target.pos.distanceTo(b.pos) < 40 && MR() < dt * 0.25 * DIFF.aim) { b.rampRush = rand(1.5, 3); b.buildCd = rand(8, 14); }
-  if (b.target && b.target.alive && b.seeing !== false) {
+  else if (b.profile === 'constructeur' && b.target && b.target.alive && b.mode === 'ground' && b.buildCd <= 0 && b.target.pos.y > b.pos.y + 3 && b.target.pos.distanceTo(b.pos) < 40 && MR() < dt * 0.5 * DIFF.aim) { b.rampRush = rand(1.5, 3); b.buildCd = rand(8, 14); }
+  if (stormUrgent || regroup) { b.boxedT = 0; b.buildQ = []; b.rampRush = 0; }
+  if (b.target && b.target.alive && b.seeing !== false && !stormUrgent && !regroup) {
     const tp = b.target.pos;
     const dx = tp.x - b.pos.x, dz = tp.z - b.pos.z, d = Math.hypot(dx, dz);
     b.yaw = lerpAngle(b.yaw, Math.atan2(-dx, -dz), Math.min(1, dt * 8));
     const W = weaponOf(b);
-    const pref = !W || W.melee ? 2 : W === WEAPONS.shotgun ? 6 : W === WEAPONS.sniper ? 50 : W === WEAPONS.smg ? 14 : 24;
+    const pref = preferredDistance(profile, b.item && b.item.id);
+    const intent = combatIntent(profile, d, pref, b.hp + b.shield, b.reloading > 0);
     const nx = dx / (d || 1), nz = dz / (d || 1);
-    let approach = d > pref + 4 ? 1 : d < pref - 3 ? -0.7 : 0;
+    let approach = intent.approach;
+    b.tactic = intent.retreat ? 'repli' : profile.flank && d > 12 ? 'contournement' : 'combat';
+    if (intent.retreat && b.heals > 0 && b.buildCd <= 0 && b.grounded && b.profile === 'constructeur') {
+      const mat = botMat(b, 40);
+      if (mat) { botBox(b, mat, b.target); b.buildCd = 10; }
+    }
     if (b.rampRush > 0) approach = 1;
     if (b.boxedT > 0) approach = 0;
     b.strafeT -= dt; if (b.strafeT <= 0) { b.strafe = MR() < 0.5 ? -1 : 1; b.strafeT = rand(0.5, 1.6); }
-    const strafeK = b.rampRush > 0 || b.boxedT > 0 ? 0 : 0.8;
-    wish.set(nx * approach - nz * b.strafe * strafeK, 0, nz * approach + nx * b.strafe * strafeK);
-    if (b.grounded && MR() < dt * 0.6) b.vel.y = JUMP_V;
+    const strafeK = b.rampRush > 0 || b.boxedT > 0 ? 0 : intent.strafe;
+    const lateral = b.strafe * strafeK + (b.rampRush > 0 || b.boxedT > 0 || d <= 12 ? 0 : b.flankSide * intent.flank);
+    wish.set(nx * approach - nz * lateral, 0, nz * approach + nx * lateral);
+    if (b.profile === 'sniper') b.crouch = d >= pref - 3 && d <= pref + 4 && !intent.retreat;
+    else b.crouch = false;
+    if (b.grounded && !b.crouch && MR() < dt * profile.jump) b.vel.y = JUMP_V;
     // aim & shoot
     if (b.react <= 0 && W) {
       b.burst -= dt;
-      if (b.burst < -rand(1.2, 2.4) * DIFF.react) b.burst = rand(0.5, 1.1);
+      if (b.burst < -rand(1.2, 2.4) * DIFF.react / profile.burst) b.burst = rand(0.5, 1.1) * profile.burst;
       if (b.burst > 0 || W.melee) {
         _o.copy(b.pos); _o.y += 1.55;
         _v3.copy(tp); _v3.y += rand(0.9, 1.7);
@@ -2916,6 +2934,9 @@ function botThink(b, dt) {
     }
     if (b.reloading <= 0 && b.item && b.item.kind === 'weapon' && b.item.mag === 0) startReload(b);
   } else if (b.wp && !(b.boxedT > 0)) {
+    b.crouch = false;
+    b.tactic = stormUrgent ? 'zone' : regroup ? 'regroupement' : b.wpKind;
+    if (regroup && !stormUrgent) b.wp = player.pos;
     const dx = b.wp.x - b.pos.x, dz = b.wp.z - b.pos.z, d = Math.hypot(dx, dz);
     if (d > 0.5) { wish.set(dx / d, 0, dz / d); b.yaw = lerpAngle(b.yaw, Math.atan2(-dx, -dz), Math.min(1, dt * 5)); }
   }
@@ -2931,9 +2952,12 @@ function botThink(b, dt) {
         const r = computeTarget(b, 'ramp', 0); placeBuild(b, 'ramp', r.cx, r.cz, r.y, r.d, 'wood');
       }
       if (b.stuckN > 4) { b.wp = randomLandPoint(b.pos.x, b.pos.z, 30); b.stuckN = 0; }
+      if (b.profile === 'flanqueur') b.flankSide *= -1;
     } else b.stuckN = 0;
     b.lastP.copy(b.pos); b.stuckT = 0;
   }
+  if (wish.lengthSq() > 1) wish.normalize();
+  if (b.crouch) speed *= 0.55;
   if (b.inWater) speed *= 0.55;
   const acc = b.grounded ? 12 : 3;
   b.vel.x = lerp(b.vel.x, wish.x * speed, Math.min(1, acc * dt));
@@ -3273,7 +3297,7 @@ function buildVault(p, at) {
   makeStructBox(vx, vy, vz - 3.3, 7, 4, 0.6, wallM, { indestructible: true });
   makeStructBox(vx - 3.3, vy, vz, 0.6, 4, 7, wallM, { indestructible: true });
   makeStructBox(vx + 3.3, vy, vz, 0.6, 4, 7, wallM, { indestructible: true });
-  makeStructBox(vx, vy + 4, vz, 7.4, 0.6, 7.4, wallM, { indestructible: true });
+  makeStructBox(vx, vy + (p.key === 'agency' ? 3.6 : 4), vz, 7.4, 0.35, 7.4, wallM, { indestructible: true });
   makeStructBox(vx - 2.4, vy, vz + 3.3, 2.6, 4, 0.6, wallM, { indestructible: true });
   makeStructBox(vx + 2.4, vy, vz + 3.3, 2.6, 4, 0.6, wallM, { indestructible: true });
   const door = makeStructBox(vx, vy, vz + 3.3, 2.2, 3.6, 0.5, matC(0xffc400, { metalness: 0.75, roughness: 0.25 }), { indestructible: true });
@@ -3319,74 +3343,18 @@ function buildPhoneBooth(p, at) {
   col.indestructible = true;
   booths.push({ x: bx, y: by, z: bz, mesh: g, col });
 }
-const AGENCY_PAL = { wall: 0xe0ded6, trim: 0xffc400, accent: 0xffc400 };
+let agencyLayout = null;
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
-    buildTower(p.x, p.z, p.h, 18, 18, 5, 0, AGENCY_PAL);
-    // Grand parvis de l'Agence : colonnade majestueuse en marbre blanc & or
     curHouse = { boxes: [], deco: [], mesh: null };
-    // Colonnade d'entrée néoclassique (4 imposantes colonnes avec chapiteaux dorés)
-    for (let c = -2; c <= 2; c++) {
-      if (c === 0) continue;
-      const colX = p.x + c * 3.2, colZ = p.z + 10.4;
-      hdeco(CYL_GEO, 0xf4f1ea, colX, p.h + 5.5, colZ, 1.1, 11, 1.1);
-      hdeco(BOX, 0xffc400, colX, p.h + 11.2, colZ, 1.5, 0.5, 1.5); // chapiteau or
-      hdeco(BOX, 0x3a404c, colX, p.h + 0.25, colZ, 1.6, 0.5, 1.6); // base
-      propBox(colX, p.h, colZ, 0.8, 0.8, 11.4); // colonne solide
-    }
-    // Fronton d'entrée art-déco avec aigle/blason d'or
-    hdeco(BOX, 0xf4f1ea, p.x, p.h + 11.8, p.z + 10.4, 16, 1.0, 2.2);
-    hdeco(BOX, 0xffc400, p.x, p.h + 12.5, p.z + 10.8, 14, 0.35, 0.4);
-    hdeco(CYL_GEO, 0xffc400, p.x, p.h + 12.8, p.z + 11.2, 1.6, 0.25, 1.6, Math.PI / 2, 0, 0); // médaillon central
-    // Caméras de surveillance avec LED rouge clignotante aux 4 coins
-    for (const [cx2, cz2] of [[-9.4, -9.4], [9.4, -9.4], [-9.4, 9.4], [9.4, 9.4]]) {
-      hdeco(BOX, 0x1a1a22, p.x + cx2, p.h + 20, p.z + cz2, 0.5, 0.4, 0.8);
-      hdeco(BOX, 0xff1e42, p.x + cx2, p.h + 20, p.z + cz2 + (cz2 > 0 ? 0.42 : -0.42), 0.18, 0.18, 0.18);
-      propBox(p.x + cx2, p.h + 19.8, p.z + cz2, 0.3, 0.42, 0.4); // caméra : solide
-    }
-    // Dôme verrière centrale sur le toit de l'Agence (atrium de verre)
-    hdeco(CYL_GEO, 0x1f2430, p.x, p.h + 20.6, p.z, 7.5, 0.6, 7.5);
-    hdeco(CYL_GEO, 0x6fd0ff, p.x, p.h + 22.0, p.z, 6.4, 2.4, 6.4);
-    // dôme vitré de l'atrium : collision à la taille réelle du modèle (socle rond 7,5 m, dôme 6,4 m), plus de toit invisible autour
-    propDisc(p.x, p.h + 20.0, p.z, 3.75, 0.9);
-    propDisc(p.x, p.h + 20.9, p.z, 3.2, 2.4);
-    hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 7.0, 0.3, 0.3);
-    hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 0.3, 0.3, 7.0);
-
-    // Statue dorée de Midas sur le parvis
-    const sx = p.x + 14, sz = p.z - 8;
-    hdeco(BOX, 0x39404c, sx, p.h, sz, 3.2, 0.5, 3.2);
-    hdeco(BOX, 0x2c313c, sx, p.h + 0.5, sz, 2.4, 0.6, 2.4);
-    hdeco(BOX, 0xffc400, sx, p.h + 1.1, sz, 0.9, 1.7, 0.5);
-    hdeco(BOX, 0xffc400, sx, p.h + 2.8, sz, 0.6, 0.6, 0.6);
-    hdeco(BOX, 0x3fa9ff, sx, p.h + 3.7, sz, 1.1, 1.1, 1.1);
-    // Projecteurs au sol braqués vers la façade
-    for (const [px3, pz3] of [[-10, 15], [10, 15]]) {
-      hdeco(BOX, 0x2c313c, p.x + px3, p.h, p.z + pz3, 0.8, 0.6, 0.8);
-      hdeco(CYL_GEO, 0xffe89e, p.x + px3, p.h + 0.6, p.z + pz3, 0.35, 0.4, 0.35, -Math.PI / 4, 0, 0);
-    }
+    agencyLayout = buildAgency(p, {
+      THREE, box: makeStructBox, deco: hdeco, mat: matC, collider: addCollider,
+      sides: footprintSides, wall: wallWithOpenings, frame: windowFrame,
+      chest: spawnChest, ammo: spawnAmmoBox, lootSpots, disc: propDisc,
+    });
     { const H = curHouse; curHouse = null; finishHouse(H); }
-    // hélipad
-    curHouse = { boxes: [], deco: [], mesh: null };
-    hdeco(CYL_GEO, 0x2c313c, p.x - 15, p.h + 0.06, p.z + 13, 9, 0.12, 9);
-    hdeco(BOX, 0xffc400, p.x - 15, p.h + 0.14, p.z + 13, 3.4, 0.06, 0.8);
-    hdeco(BOX, 0xffc400, p.x - 15, p.h + 0.14, p.z + 13, 0.8, 0.06, 3.4);
-    { const H = curHouse; curHouse = null; finishHouse(H); }
-    buildHouse(p.x - 18, p.z + 16, p.h, 10, 9, 1, 'agency');
-    buildHouse(p.x + 9, p.z + 19, p.h, 9, 8, 2, 'agency');
-    // drapeaux GHOST bleus sur la tour + emblème doré sur la façade
-    curHouse = { boxes: [], deco: [], mesh: null };
-    for (const [fx, fz] of [[-8.4, -8.4], [8.4, -8.4], [-8.4, 8.4], [8.4, 8.4]]) {
-      hdeco(BOX, 0x8d929a, p.x + fx, p.h + 22, p.z + fz, 0.22, 4, 0.22);
-      propBox(p.x + fx, p.h + 20, p.z + fz, 0.16, 0.16, 4.4); // mât de drapeau : solide sur sa hauteur visible seulement
-      hdeco(BOX, 0x1f3a8a, p.x + fx + 1.1, p.h + 23.4, p.z + fz, 2.2, 1.4, 0.08);
-      propBox(p.x + fx + 1.1, p.h + 22.7, p.z + fz, 1.1, 0.05, 1.4); // toile de drapeau : solide
-      hdeco(BOX, 0xffffff, p.x + fx + 1.1, p.h + 23.4, p.z + fz + 0.05, 0.7, 0.7, 0.02);
-    }
-    hdeco(CYL_GEO, 0xf2efe6, p.x, p.h + 13, p.z + 9.25, 3.2, 0.25, 3.2, Math.PI / 2, 0, 0, null, 'YXZ');
-    hdeco(CYL_GEO, 0xffc400, p.x, p.h + 13, p.z + 9.3, 2.2, 0.25, 2.2, Math.PI / 2, 0, 0, null, 'YXZ');
-    hdeco(BOX, 0x1f3a8a, p.x, p.h + 13, p.z + 9.35, 1.1, 1.1, 0.06);
-    { const H = curHouse; curHouse = null; finishHouse(H); }
+    buildVault(p, agencyLayout.vault);
+    buildPhoneBooth(p, { x: p.x + 26, y: p.h, z: p.z - 13 });
   } else if (p.key === 'shark') {
     // manoir moderne blanc à toits plats (la Sky Villa) : rez creux + terrasse
     curHouse = { boxes: [], deco: [], mesh: null };
@@ -3638,7 +3606,7 @@ function buildSpyPOI(p) {
     placePad(p.x + 16, p.z);
     placePad(p.x - 16, p.z);
   }
-  if (p.key !== 'yacht' && p.key !== 'rig') { buildVault(p); buildPhoneBooth(p); }
+  if (p.key !== 'agency' && p.key !== 'yacht' && p.key !== 'rig') { buildVault(p); buildPhoneBooth(p); }
   if (p.key === 'agency') placePad(p.x - 22, p.z + 8);
 }
 const spySpot0 = lootSpots.length;
@@ -3723,6 +3691,8 @@ function startGame() {
     let nm = pick(allNames), k = 0; while (used.has(nm) && k++ < 40) nm = pick(allNames); if (used.has(nm)) nm = pick(allNames) + randi(2, 99); used.add(nm);
     if (Math.floor((i + 1) / TEAM_SIZE) === 0 && LOAD.mateNames && LOAD.mateNames[i]) { nm = String(LOAD.mateNames[i]).slice(0, 16); used.add(nm); }
     const b = new Char(nm, false, randomLoadout());
+    b.profile = BOT_PROFILE_IDS[i % BOT_PROFILE_IDS.length];
+    b.flankSide = i % 2 ? -1 : 1;
     // teams: first (TEAM_SIZE-1) bots are the player's squad mates
     b.team = Math.floor((i + 1) / TEAM_SIZE);
     b.mate = b.team === 0;
@@ -3740,6 +3710,7 @@ function startGame() {
     let sx, sy, sz, wpBox = null;
     if (p.key === 'yacht') { const yd = Math.max(terrainH(p.x, p.z), 2.4); sy = yd + 1.5; sx = p.x + rand(-10, 10); sz = p.z + rand(-3, 3); wpBox = { x: p.x, z: p.z, hx: 11, hz: 3.5 }; }
     else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; sx = p.x + rand(-8, 8); sz = p.z + rand(-6, 6); wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
+    else if (p.key === 'agency' && agencyLayout) { sx = p.x; sz = p.z + 1; sy = agencyLayout.lobbyY; wpBox = agencyLayout.patrol; }
     else { const bp = randomLandPoint(p.x, p.z, p.r * 0.3); sx = bp.x; sz = bp.z; sy = Math.max(terrainH(sx, sz), 2.4) + 0.1; }
     const boss = new Char(cfg.boss, false, { skin: cfg.skin, backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
     boss.hench = true; boss.boss = true; boss.bossPoi = p; boss.henchPoi = p; boss.wpBox = wpBox;
@@ -3756,7 +3727,13 @@ function startGame() {
       h.hench = true; h.henchPoi = p; h.bossRef = boss; h.wpBox = wpBox;
       const hx2 = wpBox ? wpBox.x + rand(-wpBox.hx, wpBox.hx) : null;
       const hz2 = wpBox ? wpBox.z + rand(-wpBox.hz, wpBox.hz) : null;
-      if (wpBox) h.pos.set(hx2, sy, hz2);
+      if (p.key === 'agency' && agencyLayout) {
+        const posts = [[10, 1], [-10, 4], [0, -10], [24, 18], [-24, 18]];
+        const [ox, oz] = posts[i % posts.length];
+        h.pos.set(p.x + ox, i % posts.length < 3 ? sy : p.h, p.z + oz);
+        h.wpBox = { x: h.pos.x, z: h.pos.z, hx: 2, hz: 2 };
+      }
+      else if (wpBox) h.pos.set(hx2, sy, hz2);
       else { const hp2 = randomLandPoint(p.x, p.z, p.r * 0.8); h.pos.set(hp2.x, Math.max(terrainH(hp2.x, hp2.z), 2.4) + 0.1, hp2.z); }
       h.mode = 'ground'; h.grounded = true; h.mesh.visible = true;
       h.hp = 100; h.shield = 50; h.heals = 1;
@@ -4032,7 +4009,14 @@ function botPickGoal(b) {
   if (b.armed && (free < 3 || storm.stage === 'shrink')) return;
   let best = null, bd = b.armed ? 22 : 45;
   for (const c of chests) { if (c.opened || Math.abs(c.y - b.pos.y) > 5) continue; const d = Math.hypot(c.x - b.pos.x, c.z - b.pos.z); if (d < bd) { bd = d; best = { kind: 'chest', ref: c }; } }
-  for (const L of loot) { if (!L.alive || L.item.kind !== 'weapon' || L.claimed && L.claimed !== b) continue; if (b.slots.some((x) => x && x.id === L.item.id)) continue; const d = Math.hypot(L.pos.x - b.pos.x, L.pos.z - b.pos.z); if (d < bd) { bd = d; best = { kind: 'loot', ref: L }; } }
+  for (const L of loot) {
+    if (!L.alive || L.item.kind !== 'weapon' || L.claimed && L.claimed !== b) continue;
+    if (Math.abs(L.pos.y - b.pos.y) > 3 || b.slots.some((x) => x && x.id === L.item.id)) continue;
+    const dist = Math.hypot(L.pos.x - b.pos.x, L.pos.z - b.pos.z);
+    if (dist > (b.armed ? 22 : 45)) continue;
+    const score = dist * (L.item.id === profileOf(b).weapon ? 0.65 : 1);
+    if (score < bd) { bd = score; best = { kind: 'loot', ref: L }; }
+  }
   if (!best) return;
   const r = best.ref;
   if (best.kind === 'loot') r.claimed = b;
@@ -5178,9 +5162,13 @@ window.advanceTime = (ms) => { const n = Math.ceil(ms / 16.67); for (let i = 0; 
 window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
+  botProfiles: Object.fromEntries(BOT_PROFILE_IDS.map((id) => [id, bots.filter((b) => b.profile === id && b.alive).length])),
+  nearbyBots: bots.filter((b) => b.alive && player && b.pos.distanceToSquared(player.pos) < 6400).slice(0, 8).map((b) => ({ name: b.name, profile: b.profile, tactic: b.tactic, hp: Math.round(b.hp), pos: b.pos.toArray().map((v) => +v.toFixed(1)) })),
+  agencyVault: (() => { const v = vaults.find((v) => v.poi.key === 'agency'); return v && { pos: [v.x, v.y, v.z], open: v.open, interior: true }; })(),
 });
 window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
-  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
+  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; },
+  agencyLayout, profileOf, preferredDistance, combatIntent, botThink };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built
