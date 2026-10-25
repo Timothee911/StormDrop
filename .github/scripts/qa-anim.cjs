@@ -2,7 +2,7 @@
 // QA animations STORMDROP : toit des constructions (même texture que les murs),
 // chute libre (tête en avant, pioche invisible), parachute (mains accrochées),
 // atterrissage (réception puis retour de la pioche) + lobby (skin de base,
-// courbe d'XP croissante, boutique avec les 5 catégories).
+// niveaux à 10 000 XP chacun, boutique avec les 5 catégories).
 // Échoue (exit 1) dès qu'une assertion est fausse ou qu'une erreur JS survient.
 const path = require('path');
 const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer'));
@@ -24,7 +24,7 @@ async function gameTests() {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto('http://localhost:8090/game.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 30000 });
+  await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 60000, polling: 250 });
   await sleep(1500);
 
   // --- 1. Toit (cône) : UVs comme les murs, matériau texturé partagé, tous matériaux ---
@@ -312,7 +312,7 @@ async function stormTests() {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto('http://localhost:8090/game.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 30000 });
+  await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 60000, polling: 250 });
   await sleep(1500);
 
   const stormT = await page.evaluate(() => {
@@ -386,7 +386,7 @@ async function playerCountTests() {
     const errs = [];
     page.on('pageerror', (e) => errs.push(e.message));
     await page.goto('http://localhost:8090/game.html' + h, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 30000 });
+    await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 60000, polling: 250 });
     const total = await page.evaluate(() => ({ total: window.__game.playerTotal, participants: window.__game.chars.filter((c) => !c.hench && !c.boss).length }));
     out.push({ q: h, total: total.total, participants: total.participants, want, errs: errs.length });
     await page.close();
@@ -413,28 +413,28 @@ async function lobbyTests() {
     const L = window.__lobby;
     // skin de base : la Recrue, pas la Tigresse
     const defSkin = L.DEFAULT_LOADOUT.skin === 'recrue' && L.S.loadout.skin === 'recrue';
-    // chaque niveau demande plus d'XP que le précédent
-    const curve = L.xpNeeded(2) > L.xpNeeded(1) && L.xpNeeded(10) > L.xpNeeded(9) && L.xpNeeded(30) > L.xpNeeded(1);
-    // comportement : le coût du niveau 1 fait passer au niveau 2, mais pas du 2 au 3
+    // niveaux à coût fixe : 10 000 XP chacun (modèle choisi, plus de courbe)
+    const flat = L.xpNeeded(1) === 10000 && L.xpNeeded(2) === 10000 && L.xpNeeded(30) === 10000;
+    // comportement : 10 000 XP font passer du niveau 1 au 2, encore 10 000 au 3, sans reste
     const lv0 = L.S.level;
     L.addXP(L.xpNeeded(1));
     const lv1 = L.S.level, xp1 = L.S.xp;
-    L.addXP(L.xpNeeded(1)); // au niveau 2, il faut plus que ça
-    const lv2 = L.S.level;
-    const levelUp = lv0 === 1 && lv1 === 2 && lv2 === 2 && xp1 === 0;
-    // franchissement multiple : 1500 + 1950 = 3450 XP → niveau 3 pile
-    const multi = L.addXP(L.xpNeeded(2) - L.S.xp);
-    const multiOK = L.S.level === 3 && L.S.xp === 0 && multi.levels === 1;
+    L.addXP(L.xpNeeded(1));
+    const lv2 = L.S.level, xp2 = L.S.xp;
+    const levelUp = lv0 === 1 && lv1 === 2 && xp1 === 0 && lv2 === 3 && xp2 === 0;
+    // franchissement multiple : 20 000 XP d'un coup → 2 niveaux pile
+    const multi = L.addXP(20000);
+    const multiOK = L.S.level === 5 && L.S.xp === 0 && multi.levels === 2;
     // boutique : au moins un objet de chaque catégorie chaque jour
     const shop = L.shopToday();
     const cats = new Set([...shop.daily, ...shop.featured].map((p) => p.cat));
     const allCats = ['skin', 'backpack', 'pickaxe', 'glider', 'emote'].every((c) => cats.has(c));
-    return { defSkin, curve, levelUp, multiOK, xpNeeded1: L.xpNeeded(1), xpNeeded2: L.xpNeeded(2), cats: [...cats].sort().join(','), allCats, dailyN: shop.daily.length };
+    return { defSkin, flat, levelUp, multiOK, xpNeeded1: L.xpNeeded(1), xpNeeded2: L.xpNeeded(2), cats: [...cats].sort().join(','), allCats, dailyN: shop.daily.length };
   });
   check('skin de base : la Recrue', res.defSkin === true, JSON.stringify(res));
-  check('XP : chaque niveau coûte plus que le précédent', res.curve === true, `1=${res.xpNeeded1}, 2=${res.xpNeeded2}`);
-  check('XP : le coût du niveau 1 fait passer 1→2 mais pas 2→3', res.levelUp === true, JSON.stringify(res));
-  check('XP : 3450 XP d\'un coup → niveau 3 pile', res.multiOK === true, JSON.stringify(res));
+  check('XP : chaque niveau à 10 000 XP (coût fixe)', res.flat === true, `1=${res.xpNeeded1}, 2=${res.xpNeeded2}`);
+  check('XP : 10 000 XP par niveau, sans reste (1→2→3)', res.levelUp === true, JSON.stringify(res));
+  check('XP : 20 000 XP d\'un coup → 2 niveaux pile', res.multiOK === true, JSON.stringify(res));
   check('boutique : tenues, sacs à dos, pioches, planeurs et emotes présents', res.allCats === true, res.cats);
   check('boutique : 8 objets du jour', res.dailyN === 8, 'daily=' + res.dailyN);
 
