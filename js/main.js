@@ -489,49 +489,83 @@ const PRISM_GEO = (() => {
 const CYL_GEO = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
 
 // =====================================================================
-// Grass tufts and flowers (instanced, swaying in the wind)
+// Grass : touffes de fines lames courbes (dégradé sombre -> clair), très nombreuses, qui ondulent au vent
 {
-  const N = LOWQ ? 2500 : HIGHQ ? 12000 : 7000;
+  const N = LOWQ ? 7000 : HIGHQ ? 46000 : 28000;
+  const gr = mulberry32(90210); // générateur local : ne modifie pas la génération du reste du monde
+  const rr = (a, b) => a + (b - a) * gr();
+  // une touffe = 9 lames : chacune a un pied large, un segment médian et une pointe, penchée vers l'extérieur
   const tuft = (() => {
-    const parts = [];
-    for (let k = 0; k < 3; k++) { const g = new THREE.ConeGeometry(0.09, 0.62 + k * 0.08, 3, 1, true); g.translate(Math.cos(k * 2.1) * 0.12, 0.31, Math.sin(k * 2.1) * 0.12); g.rotateZ((k - 1) * 0.25); parts.push(g); }
-    return mergeGeometries(parts);
+    const pos = [], col = [], nor = [], idx = [];
+    const NB = 9;
+    for (let i = 0; i < NB; i++) {
+      const ang = gr() * 6.283, rad = Math.sqrt(gr()) * 0.2, bx = Math.cos(ang) * rad, bz = Math.sin(ang) * rad;
+      const yaw = ang + rr(-0.9, 0.9), lean = rr(0.12, 0.55) * (0.6 + rad * 2.5);
+      const h = rr(0.3, 0.68) * (i < 3 ? 1.0 : 0.8), w = rr(0.03, 0.05);
+      const dx = Math.sin(yaw), dz = Math.cos(yaw); // direction de la penche
+      const wx = Math.cos(yaw), wz = -Math.sin(yaw); // largeur de la lame
+      const rows = [[0, w, 0.0, 0.34], [0.52, w * 0.72, lean * 0.45, 0.72], [1.0, 0.0, lean * 1.15, 1.0]];
+      const base = pos.length / 3;
+      for (const [t, ww, off, br] of rows) {
+        const y = t * h, cx = bx + dx * off * h, cz = bz + dz * off * h, yy = y - off * off * h * 0.25;
+        if (ww > 0) {
+          pos.push(cx - wx * ww, yy, cz - wz * ww, cx + wx * ww, yy, cz + wz * ww); col.push(br, br, br, br, br, br); nor.push(0, 1, 0, 0, 1, 0);
+        } else { pos.push(cx, yy, cz); col.push(br, br, br); nor.push(0, 1, 0); }
+      }
+      idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2, base + 2, base + 3, base + 4);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setIndex(idx);
+    return g;
   })();
   const flower = (() => {
-    const st = new THREE.CylinderGeometry(0.025, 0.025, 0.5, 4); st.translate(0, 0.25, 0); st.deleteAttribute('uv');
-    const hd = new THREE.IcosahedronGeometry(0.12, 0); hd.translate(0, 0.55, 0); hd.deleteAttribute('uv');
-    // stems are green, heads use the instance colour: encode with a vertex attribute
-    const a = new Float32Array(st.attributes.position.count).fill(0), b = new Float32Array(hd.attributes.position.count).fill(1);
-    st.setAttribute('head', new THREE.BufferAttribute(a, 1)); hd.setAttribute('head', new THREE.BufferAttribute(b, 1));
-    return mergeGeometries([st.toNonIndexed(), hd.index ? hd.toNonIndexed() : hd]);
+    const st = new THREE.CylinderGeometry(0.02, 0.025, 0.5, 4); st.translate(0, 0.25, 0); st.deleteAttribute('uv');
+    const hd = new THREE.IcosahedronGeometry(0.1, 0); hd.translate(0, 0.54, 0); hd.deleteAttribute('uv');
+    const ct = new THREE.IcosahedronGeometry(0.045, 0); ct.translate(0, 0.62, 0); ct.deleteAttribute('uv');
+    // tiges vertes, têtes à la couleur de l'instance, coeur jaune
+    const mk = (g, v) => { const gg = g.index ? g.toNonIndexed() : g; gg.setAttribute('head', new THREE.BufferAttribute(new Float32Array(gg.attributes.position.count).fill(v), 1)); return gg; };
+    return mergeGeometries([mk(st, 0), mk(hd, 1), mk(ct, 2)]);
   })();
   const sway = (sh, isFlower) => {
     sh.uniforms.uWind = windT;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uWind;' + (isFlower ? '\nattribute float head; varying float vHead;' : ''))
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
-        float sw = sin(uWind * 1.8 + ip.x * 0.15 + ip.z * 0.11) * 0.5 + sin(uWind * 3.1 + ip.x * 0.4) * 0.2;
-        transformed.x += sw * position.y * 0.32; transformed.z += sw * position.y * 0.18;` + (isFlower ? '\nvHead = head;' : ''));
-    if (isFlower) sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vHead;').replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(vec3(0.22, 0.55, 0.2), diffuseColor.rgb, vHead);');
+        float sw = sin(uWind * 1.6 + ip.x * 0.13 + ip.z * 0.09) * 0.5 + sin(uWind * 2.9 + ip.x * 0.37 + ip.z * 0.21) * 0.22 + sin(uWind * 0.6 + ip.x * 0.03) * 0.3;
+        float fl = sin(uWind * 5.0 + position.x * 18.0 + position.z * 14.0 + ip.x) * 0.025;
+        transformed.x += (sw * 0.34 + fl) * position.y * position.y * 1.4; transformed.z += (sw * 0.2 + fl) * position.y * position.y * 1.4;` + (isFlower ? '\nvHead = head;' : ''));
+    if (isFlower) sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vHead;').replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(vec3(0.2, 0.5, 0.18), diffuseColor.rgb, step(0.5, vHead)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.82, 0.2), step(1.5, vHead));');
+    else sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal *= faceDirection; // éclairage identique sur les deux faces des lames');
   };
-  const gm = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }); gm.onBeforeCompile = (sh) => sway(sh, false);
+  const gm = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, vertexColors: true }); gm.onBeforeCompile = (sh) => sway(sh, false);
   const fm = new THREE.MeshLambertMaterial({ flatShading: true }); fm.onBeforeCompile = (sh) => sway(sh, true);
-  const grass = new THREE.InstancedMesh(tuft, gm, N), flowers = new THREE.InstancedMesh(flower, fm, Math.floor(N / 4));
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
-  const GR = [0x5cbf3c, 0x7bd44a, 0x48a838, 0x8fdc55], FL = [0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff, 0xa98bff, 0xff8a3d];
+  const NF = Math.floor(N / 5);
+  const grass = new THREE.InstancedMesh(tuft, gm, N), flowers = new THREE.InstancedMesh(flower, fm, NF);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color(), col2 = new THREE.Color();
+  const GR = [0x6fcf45, 0x86dc50, 0x55b83c, 0x9be35c, 0x62c447], DRY = new THREE.Color(0xc6c85a), DARK = new THREE.Color(0x2f8a3a);
+  const FL = [0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff, 0xa98bff, 0xff8a3d, 0x5ac8ff];
   let ng = 0, nf = 0, guard = 0;
-  while ((ng < N || nf < flowers.count) && guard++ < N * 12) {
-    const a = R() * 6.283, r = Math.sqrt(R()) * ISLAND_R * 0.95, x = Math.cos(a) * r, z = Math.sin(a) * r, h = terrainH(x, z);
-    if (h < 2.3 || h > 24) continue;
+  while ((ng < N || nf < NF) && guard++ < N * 14) {
+    const a = gr() * 6.283, r = Math.sqrt(gr()) * ISLAND_R * 0.95, x = Math.cos(a) * r, z = Math.sin(a) * r, h = terrainH(x, z);
+    if (h < 2.3 || h > 26) continue;
     const bw = biomeW(x, z); if (bw.snow > 0.35 || bw.desert > 0.35) continue;
-    if (Math.abs(terrainH(x + 1.2, z) - h) + Math.abs(terrainH(x, z + 1.2) - h) > 1.1) continue;
+    if (Math.abs(terrainH(x + 1.2, z) - h) + Math.abs(terrainH(x, z + 1.2) - h) > 1.7) continue;
     if (inPOI(x, z, -2)) continue;
-    const isF = nf < flowers.count && R() < 0.22 && bw.forest < 0.5;
+    const patch = fbm(x * 0.045 + 7, z * 0.045 - 3); // zones denses / clairsemées
+    const isF = nf < NF && gr() < 0.2 && bw.forest < 0.5 && patch > 0.4;
     if (!isF && ng >= N) continue;
-    q.setFromAxisAngle(up, R() * 6.283); const k = 0.65 + R() * 0.5; sc.set(k * 1.2, k * (0.7 + R() * 0.4), k * 1.2);
-    m4.compose(ps.set(x, h - 0.05, z), q, sc);
-    if (isF) { flowers.setMatrixAt(nf, m4); flowers.setColorAt(nf, col.setHex(FL[(R() * FL.length) | 0])); nf++; }
-    else { grass.setMatrixAt(ng, m4); grass.setColorAt(ng, col.setHex(GR[(R() * GR.length) | 0]).lerp(col.clone().setHex(0x2f8a3a), bw.forest * 0.5)); ng++; }
+    if (!isF && patch < 0.3 && gr() < 0.5) continue;
+    q.setFromAxisAngle(up, gr() * 6.283);
+    if (isF) { const k = 0.8 + gr() * 0.6; sc.set(k, k, k); m4.compose(ps.set(x, h - 0.05, z), q, sc); flowers.setMatrixAt(nf, m4); flowers.setColorAt(nf, col.setHex(FL[(gr() * FL.length) | 0])); nf++; }
+    else {
+      const tall = gr() < 0.1 ? 1.4 : 1, k = (0.75 + gr() * 0.5) * tall;
+      sc.set(k, k * (0.85 + gr() * 0.5), k); m4.compose(ps.set(x, h - 0.04, z), q, sc);
+      grass.setMatrixAt(ng, m4);
+      col.setHex(GR[(gr() * GR.length) | 0]).lerp(DARK, bw.forest * 0.55);
+      col.lerp(DRY, Math.max(0, 0.5 - patch) * 0.9 * (1 - bw.forest)); // quelques zones d'herbe sèche
+      grass.setColorAt(ng, col); ng++;
+    }
   }
   grass.count = ng; flowers.count = nf;
   for (const im of [grass, flowers]) { im.frustumCulled = false; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; scene.add(im); }
@@ -2339,7 +2373,13 @@ function onAction(code) {
   if (is('map')) { bigmapOpen = !bigmapOpen; document.getElementById('bigmap').classList.toggle('hidden', !bigmapOpen); if (bigmapOpen && lockApi) lockApi.unlock(); else tryLock(); }
   if (!player.alive) return;
   if (player.mode === 'drive') { if (is('interact')) exitVehicle(player); if (is('jump') && player.vehicle) sfx('horn', 0.6); return; }
-  if (is('jump')) { if (player.mode === 'bus') jumpFromBus(player); else if (player.mode === 'fall') deployGlider(player); }
+  if (is('jump')) {
+    if (player.mode === 'bus') jumpFromBus(player);
+    else if (player.mode === 'fall') deployGlider(player);
+    else if (player.mode === 'glide') closeGlider(player);
+    else if (player.mode === 'ground' && !player.grounded && !player.inWater && player.pos.y - groundBelow(player) > 2.5) deployGlider(player); // planeur à volonté, dès qu'on est en l'air
+    else if (player.mode === 'ground') player.jumpBuf = 0.14; // saut mémorisé : déclenché dès qu'on touche le sol
+  }
   if (is('buildToggle')) { if (editing) cancelEdit(); setBuildMode(!buildMode); }
   if (is('wall')) { cancelEdit(); buildPiece = 'wall'; setBuildMode(true); }
   if (is('floor')) { cancelEdit(); buildPiece = 'floor'; setBuildMode(true); }
@@ -2978,10 +3018,15 @@ function jumpFromBus(ch) {
     sfx('whoosh', 0.6); stopMusic(); document.getElementById('busHint').style.display = 'none'; showCenter('', IS_TOUCH ? 'Regarde vers le bas pour plonger · SAUT ouvre le parachute' : `Plonge en regardant vers le bas · <kbd>${keyLabel(BIND.back)}</kbd> pour freiner · <kbd>${keyLabel(BIND.jump)}</kbd> ouvre le planeur`, 4); }
 }
 function deployGlider(ch) {
-  if (ch.mode !== 'fall') return;
-  const h = ch.pos.y - Math.max(0, terrainH(ch.pos.x, ch.pos.z));
-  if (ch.isPlayer && h > 95) { showCenter('', 'Trop haut pour ouvrir le planeur', 0.8); return; }
-  ch.mode = 'glide'; ch.parts.glider.visible = true; if (ch.isPlayer) { sfx('chute', 0.6); sfx('glide', 0.4); }
+  if (ch.mode !== 'fall' && !(ch.mode === 'ground' && !ch.grounded)) return;
+  if (ch.mode === 'ground' && ch.isPlayer) { setBuildModeOff(); cancelEdit(); ch.using = null; ch.reloading = 0; ch.emoting = null; }
+  ch.mode = 'glide'; ch.manualFall = false; ch.parts.glider.visible = true; if (ch.isPlayer) { sfx('chute', 0.6); sfx('glide', 0.4); }
+}
+// referme le planeur à volonté : retour en chute libre (sans réouverture automatique près du sol)
+function closeGlider(ch) {
+  if (ch.mode !== 'glide') return;
+  ch.mode = 'fall'; ch.manualFall = true; ch.parts.glider.visible = false;
+  if (ch.isPlayer) sfx('whoosh', 0.4);
 }
 function groundBelow(ch) {
   let g = Math.max(terrainH(ch.pos.x, ch.pos.z), -0.9);
@@ -3005,7 +3050,7 @@ function airControl(ch, wish, dt) {
     ch.vel.x = lerp(ch.vel.x, wish.x * sp, Math.min(1, dt * 2)); ch.vel.z = lerp(ch.vel.z, wish.z * sp, Math.min(1, dt * 2));
     const descending = ch.vel.y < 0 && !(ch.launchT > 0);
     if (!ch.isPlayer && descending && h < (ch.deployH || 40)) deployGlider(ch);
-    if (descending && h < 16) deployGlider(ch); // auto-deploy
+    if (descending && h < 16 && !ch.manualFall) deployGlider(ch); // auto-deploy (sauf si le joueur l'a refermé lui-même)
     ch.windT = (ch.windT || 0) - dt; if (ch.isPlayer && ch.windT <= 0) { ch.windT = 1.1; sfx('whoosh', 0.25 + Math.max(0, dive) * 0.3); }
   } else if (ch.mode === 'glide') {
     const fwdK = ch.isPlayer ? (down('forward') ? 1 : down('back') ? -1 : 0) : 0.5;
@@ -4043,7 +4088,7 @@ function updatePlayer(dt) {
   if (p.mode === 'drive') { driveVehicle(p, dt); return; }
   if (p.mode === 'fall' || p.mode === 'glide') {
     airControl(p, wish, dt); physics(p, dt);
-    if (p.grounded) { p.mode = 'ground'; p.parts.glider.visible = false; p.landT = 0.5; p.cool = Math.max(p.cool, 0.3); p.vel.y = 0; sfx('land', 0.6); const poi = inPOI(p.pos.x, p.pos.z, 10); showCenter(poi ? poi.name.toUpperCase() : '', 'Fouille les maisons et les coffres', 2.2); }
+    if (p.grounded) { p.mode = 'ground'; p.manualFall = false; p.parts.glider.visible = false; p.landT = 0.5; p.cool = Math.max(p.cool, 0.3); p.vel.y = 0; sfx('land', 0.6); const poi = inPOI(p.pos.x, p.pos.z, 10); showCenter(poi ? poi.name.toUpperCase() : '', 'Fouille les maisons et les coffres', 2.2); }
     return;
   }
   const W = weaponOf(p);
@@ -4070,7 +4115,10 @@ function updatePlayer(dt) {
     p.vel.x = lerp(p.vel.x, wish.x * speed, Math.min(1, acc * dt));
     p.vel.z = lerp(p.vel.z, wish.z * speed, Math.min(1, acc * dt));
   }
-  if (down('jump') && p.grounded && !p.inWater && !blocked) { p.vel.y = JUMP_V * (sliding ? 1.08 : 1); p.grounded = false; p.crouchToggle = false; p.slideT = 0; }
+  // saut : tenu, mémorisé 0,14 s avant l'atterrissage, et toléré 0,12 s après avoir quitté le sol (même en courant)
+  p.coyote = p.grounded ? 0.12 : Math.max(0, (p.coyote || 0) - dt);
+  p.jumpBuf = Math.max(0, (p.jumpBuf || 0) - dt);
+  if ((down('jump') || p.jumpBuf > 0) && (p.grounded || p.coyote > 0) && p.vel.y <= 2 && !p.inWater && !blocked) { p.vel.y = JUMP_V * (sliding ? 1.08 : 1); p.grounded = false; p.coyote = 0; p.jumpBuf = 0; p.crouchToggle = false; p.slideT = 0; }
   p.vel.y -= GRAV * dt;
   physics(p, dt);
   if (p.landV > 26 && !p.noFall) { const d = (p.landV - 26) * 6; damageChar(p, d, null, false, 'chute'); }
@@ -4305,14 +4353,28 @@ function animateChar(ch, dt) {
   const it = ch.item;
   const aimP = ch.isPlayer ? ch.pitch * 0.8 : 0;
   if (it && it.kind === 'weapon' && it.id === 'pickaxe') {
+    // PIOCHE : portée le manche incliné vers l'avant et le haut, tête devant ; le coup part en diagonale
+    // (de l'épaule droite, en haut, vers la hanche gauche, en bas) avec rotation du buste et fouetté du poignet.
     const s = ch.swing;
-    // après l'atterrissage, le bras remonte de la position basse (2.3) vers le port (0.6)
     const eq = ch.equipT > 0 ? clamp(ch.equipT / (ch.equipDur || 0.3), 0, 1) : 0;
-    const ang = s > 0 ? lerp(-0.3, 2.6, s * s) : lerp(0.6 + sw * 0.3, 2.3, eq);
-    // coude plié à l'armé, qui se déplie au moment de l'impact (fouetté)
-    const el = s > 0 ? 0.2 + 0.8 * Math.sin(s * Math.PI) : 0.5;
-    P.shR.rotation.set(ang - el * 0.5, 0, 0.06); P.elR.rotation.set(el, 0, 0);
+    let ang, roll, el, tilt, hroll = 0.5, twist = 0;
+    if (s > 0) {
+      const k = 1 - s;                       // 0 = début du coup, 1 = fin
+      const wind = Math.min(1, k / 0.22);    // armé (0 -> 1) puis frappe
+      const hit = clamp((k - 0.18) / 0.5, 0, 1), eh = hit * hit * (3 - 2 * hit), rec = clamp((k - 0.68) / 0.32, 0, 1);
+      ang = lerp(lerp(0.55, 2.5, wind), 0.3, eh); ang = lerp(ang, 0.55, rec);
+      roll = lerp(lerp(0.12, 0.75, wind), -0.7, eh); roll = lerp(roll, 0.12, rec);
+      el = lerp(lerp(0.4, 1.3, wind), 0.1, eh); el = lerp(el, 0.4, rec);
+      tilt = lerp(lerp(2.0, 2.9, wind), 1.15, eh); tilt = lerp(tilt, 2.0, rec);
+      hroll = lerp(lerp(0.5, 0.9, wind), 1.35, eh); hroll = lerp(hroll, 0.5, rec); // le manche bascule : tête en haut puis en bas à gauche
+      twist = lerp(lerp(0, 0.45, wind), -0.5, eh); twist = lerp(twist, 0, rec);
+    } else {
+      ang = lerp(0.55 + sw * 0.25, 2.3, eq); roll = 0.12; el = 0.4; tilt = 2.0;
+    }
+    P.shR.rotation.set(ang - el * 0.4, 0, roll); P.elR.rotation.set(el, 0, 0);
     P.shL.rotation.set(-ap * armA, 0, -armOut); P.elL.rotation.set(elBase + Math.max(0, -ap) * 0.45 * amp, 0, 0);
+    if (ch.held) ch.held.rotation.set(tilt, 0, hroll); // hroll : la tête de la pioche penche en diagonale
+    if (twist) P.torso.rotation.y += twist;
   } else if (it && it.kind === 'weapon') {
     let rel = 0, tilt = 0, low = 0, k = 0, eq = 0;
     if (ch.reloading > 0) { const tot = WEAPONS[it.id].reload * RAR[it.rarity].reload; const rp = 1 - ch.reloading / tot; k = Math.sin(clamp(rp, 0, 1) * Math.PI); rel = k * 0.35; tilt = k * 0.9; }
