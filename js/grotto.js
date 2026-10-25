@@ -17,6 +17,9 @@ export function buildGrotto(p, api) {
   const detail = (geo, color, x, cy, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) =>
     deco(geo, color, p.x + x, cy, p.z + z, sx, sy, sz, rx, ry, rz);
   const rock = (x, cy, z, sx, sy, sz, a) => {
+    // Keep the entire rocky shell below the grass cap. Coplanar wall tops
+    // otherwise create grey triangular z-fighting seams in the surface hill.
+    cy = Math.min(cy, top - 2.05 - Math.max(sx, sy, sz));
     const d = detail(R, stone, x, cy, z, sx, sy, sz, .16, a, .13);
     if (d) d.surface = SURFACE.STONE;
   };
@@ -117,11 +120,11 @@ export function buildGrotto(p, api) {
 
   // Sealed, dry floor and irregular wall massing stay below the surface.
   solid(0, y - .4, 0, m.x1 - m.x0 + 1, .4, m.z1 - m.z0 + 1, 0x526472);
-  solid(-31, y, 0, 3.5, 14, 55, stone);
-  solid(31, y, 0, 3.5, 14, 55, stone);
-  solid(0, y, -26, 64, 14, 3, stone);
-  solid(7, y, 26, 44, 14, 3, stone);
-  solid(-29.2, y, 26, 4, 14, 3, stone);
+  solid(-31, y, 0, 3.5, 12, 55, stone);
+  solid(31, y, 0, 3.5, 12, 55, stone);
+  solid(0, y, -26, 64, 12, 3, stone);
+  solid(7, y, 26, 44, 12, 3, stone);
+  solid(-29.2, y, 26, 4, 12, 3, stone);
   for (let i = 0; i < 12; i++) {
     const z = -23 + i * 4.2;
     for (const s of [-1, 1]) rock(s * 30.1, y + 7 + Math.sin(i * 2) * 1.4, z, 2.7 + i % 3 * .3, 6.7, 3.5, i * .61);
