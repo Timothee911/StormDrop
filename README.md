@@ -8,6 +8,15 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 ## Contenu
 
+- Textures originales des bâtiments : bois peint, briques, enduit, pierre claire de l'Agence, toitures et surfaces techniques. Les matériaux sont attribués explicitement et restent corrects après destruction d'un mur.
+- Herbe retravaillée : grain de brins visible à courte distance, petites variations de teinte et zones plus sèches, avec détails atténués au loin. Les biomes sableux et enneigés conservent leur aspect.
+- Arbres et rochers détaillés : quatre branches en volume, écorce rainurée, aiguilles de pin et larges arbres feuillus à couronnes arrondies, en plusieurs touffes. Les feuillus sont mélangés aux sapins dans les régions tempérées ; les zones enneigées gardent leurs sapins et le désert ses cactus. Les rochers ont du grain minéral et de grandes fissures ramifiées. Quatre textures procédurales partagées ; feuillages regroupés par espèce pour limiter les appels de dessin, avec récolte et collisions des troncs.
+
+- Bots à cinq profils tactiques : assaut, sniper, constructeur, prudent et flanqueur. Distances, armes recherchées, rafales, repli et construction varient selon le profil ; la zone et le regroupement restent prioritaires.
+- Agence reconstruite : ailes en pierre claire, bastions arrondis, fenêtres verticales, drapeaux bleus, hall sur deux niveaux et étages accessibles. Son coffre-fort est dans un sous-sol fermé accessible par l'escalier intérieur à gauche du hall ; la carte de Midas reste nécessaire.
+- Deux niveaux souterrains : sécurité et salle du coffre en B1, générateurs et chaudières en B2. L'escalier à l'est du B1 dessert le B2 ; conduites colorées, vannes, gaines, plafonds métalliques et panneaux guident l'exploration.
+- Salle du coffre refaite : porte circulaire épaisse, lecteur de carte latéral, volant, verrous rétractables et ouverture sur charnières en plusieurs étapes. Le battant reste visible et solide après ouverture ; les coffres, munitions et armes restent verrouillés jusqu'à la fin de la séquence.
+
 - Construction sur grille (bois / pierre / métal) à 5 matériaux, édition 3x3 (toit de la même texture que les murs), tir ADS, 6 raretés d'armes dont la mythique, tempête en phases, bus de combat, planeur, véhicules, trampolines et cheminées d'air.
 - Physique sur tous les objets : mobilier, coffres, caisses de munitions, largages, pads, cheminées d'air et décor des POI sont solides (murs fins infranchissables même à grande vitesse grâce aux sous-pas).
 - La zone apparaît 1 min après la fin du bus, bouge pour la première fois 2 min après son activation et se referme bien plus lentement ; dégâts 1, puis 2 à la moitié des joueurs, 5 au quart, 15 à 5 survivants.

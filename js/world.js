@@ -55,7 +55,7 @@ export const POIS = [
   { name: "L'Agence", key: 'agency', spy: true, x: 0, z: 0, r: 42, style: 'agency' },
   { name: 'Le Requin', key: 'shark', spy: true, x: -292, z: -246, r: 31, style: 'shark' },
   { name: 'Le Yacht', key: 'yacht', spy: true, x: 412, z: -82, r: 24, style: 'yacht' },
-  { name: 'La Grotte', key: 'grotto', spy: true, x: 292, z: 169, r: 34, style: 'grotto' },
+  { name: 'La Grotte', key: 'grotto', spy: true, x: 228, z: 170, r: 46, style: 'grotto' },
   { name: 'La Plateforme', key: 'rig', spy: true, x: -356, z: 192, r: 30, style: 'rig' },
   { name: 'Bois-Joli', x: -164, z: -132, r: 34, style: 'wood' },
   { name: 'Port-Rouillé', x: 219, z: 87, r: 37, style: 'brick' },
@@ -68,7 +68,36 @@ export const POIS = [
   { name: 'Mont Grêle', x: 160, z: 247, r: 28, style: 'chalet' },
   { name: 'Chalets Givrés', x: 41, z: 256, r: 28, style: 'chalet' },
 ];
-for (const p of POIS) p.h = Math.max(2.5, rawH(p.x, p.z));
+// The headquarters sits on a raised foundation, keeping its lower storey above sea level.
+for (const p of POIS) p.h = Math.max(p.key === 'agency' ? 6.5 : p.key === 'grotto' ? 16 : 2.5, rawH(p.x, p.z));
+
+// Grid-aligned excavation. A separate pierced roof supplies the surface
+// and ceiling: a heightfield alone cannot represent underground rooms.
+const gp = POIS.find(p => p.key === 'grotto');
+const grid = (WORLD_R * 2 + 120) / 220, origin = -(WORLD_R * 2 + 120) / 2;
+const snap = (v, upper) => origin + Math[upper ? 'ceil' : 'floor']((v - origin) / grid) * grid;
+export const GROTTO = {
+  x: gp.x, z: gp.z, surfaceY: gp.h, floorY: gp.h - 14,
+  main: { x0: snap(gp.x - 31), x1: snap(gp.x + 31, true), z0: snap(gp.z - 27), z1: snap(gp.z + 27, true) },
+  entry: { x0: snap(gp.x - 28), x1: snap(gp.x - 16, true), z0: gp.z + 24, z1: snap(gp.z + 42, true) },
+  shaft: { x: gp.x + 6, z: gp.z - 3, r: 10.5 },
+  vent: { x: gp.x - 15, z: gp.z - 12, r: 3 },
+  stairs: { x: gp.x - 22, z0: gp.z + 4, z1: gp.z + 40, width: 7.5 },
+};
+export function grottoCutContains(x, z, margin = 0) {
+  const inside = b => x > b.x0 - margin && x < b.x1 + margin && z > b.z0 - margin && z < b.z1 + margin;
+  return inside(GROTTO.main) || inside(GROTTO.entry);
+}
+export function grottoRoofContains(x, z) {
+  if (!grottoCutContains(x, z)) return false;
+  if (x > gp.x - 27 && x < gp.x - 17 && z > gp.z + 24) return false;
+  return [GROTTO.shaft, GROTTO.vent].every(s => Math.hypot(x - s.x, z - s.z) >= s.r);
+}
+
+function grottoEdgeDistance(x, z) {
+  const distance = b => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.z0 - z, 0, z - b.z1));
+  return Math.min(distance(GROTTO.main), distance(GROTTO.entry));
+}
 
 export function terrainH(x, z) {
   let h = rawH(x, z);
@@ -81,6 +110,17 @@ export function terrainH(x, z) {
       h += (p.h - h) * t;
     }
   }
+  // Match the roof rim exactly and ease back into the surrounding hillside.
+  // A nearby town's flattening must not pull down individual border vertices.
+  if (Math.abs(x - gp.x) < 65 && Math.abs(z - gp.z) < 65) {
+    const d = grottoEdgeDistance(x, z);
+    if (d < 12) h += (gp.h - h) * (1 - smooth(0, 12, d));
+  }
+  // Excavate the Agency foundation only inside its sealed basement footprint.
+  // Rendering, hitscan and character physics all use the same ground function.
+  const agency = POIS[0];
+  if (Math.abs(x - agency.x) < 19.7 && Math.abs(z - agency.z) < 14.7) return agency.h - 8.5;
+  if (grottoCutContains(x, z)) return GROTTO.floorY - 0.3;
   return h;
 }
 
@@ -92,7 +132,11 @@ export function inPOI(x, z, pad = 0) {
 // Biomes: snow (south-east hills), desert (north-east), forest (west), plains, beach (coast)
 export function biomeW(x, z) {
   const n = (vnoise(x * 0.02 + 50, z * 0.02 + 9) - 0.5) * 30;
-  const snow = smooth(40, 75, z + n) * smooth(-25, 5, x + n);
+  let snow = smooth(40, 75, z + n) * smooth(-25, 5, x + n);
+  // Temperate grass on this POI's hill, with a soft transition back to the
+  // existing snowy south-east. Other mountains and snowy pines stay intact.
+  if (Math.abs(x - gp.x) < 65 && Math.abs(z - gp.z) < 65)
+    snow *= smooth(gp.r, gp.r + 16, Math.hypot(x - gp.x, z - gp.z));
   const desert = smooth(-40, -70, z + n) * smooth(-5, 25, x - n);
   const forest = smooth(-30, -60, x + n) * (1 - snow) * (1 - desert);
   return { snow, desert, forest };

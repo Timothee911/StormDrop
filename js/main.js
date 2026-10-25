@@ -1,10 +1,16 @@
 import * as THREE from 'three';
-import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES } from './world.js';
+import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, grottoCutContains } from './world.js';
 import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
+import { BOT_PROFILE_IDS, profileOf, preferredDistance, combatIntent } from './bot-profiles.js';
+import { buildAgency } from './agency.js';
+import { buildAgencyVault } from './agency-vault.js';
+import { buildGrotto } from './grotto.js';
+import { createBranchedTrunk, createBroadleafCanopy, treeSpeciesAt } from './tree-geometry.js';
+import { SURFACE, surfaceForStyle, createSurfaceLibrary, installTerrainSurface, installBuildingSurface, createNatureLibrary, installNatureSurface } from './surface-materials.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
 
 // =====================================================================
@@ -156,6 +162,8 @@ const SUN_OFF = new THREE.Vector3(70, 120, 50);
 // =====================================================================
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 const matCache = new Map();
+const surfaceLibrary = createSurfaceLibrary(THREE);
+const natureLibrary = createNatureLibrary(THREE);
 function matC(color, opts = {}) {
   const k = color + JSON.stringify(opts);
   if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.0, ...opts }));
@@ -211,6 +219,7 @@ const GHOST_BAD = new THREE.MeshBasicMaterial({ color: 0xff4d6a, transparent: tr
 // =====================================================================
 // Terrain & water
 const waterT = { value: 0 }, windT = { value: 0 };
+let terrainMaterial;
 // =====================================================================
 const TERRAIN_SIZE = WORLD_R * 2 + 120;
 {
@@ -219,13 +228,14 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const cols = new Float32Array(pos.count * 3);
+  const visibleH = (x, z) => grottoCutContains(x, z, .05) ? GROTTO.surfaceY : terrainH(x, z);
   const c = new THREE.Color();
-  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x76cc4a), g2 = new THREE.Color(0x4fae3f), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0xb59262), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x2f8a3a), snowDirt = new THREE.Color(0xc9d3dc);
+  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x78b94d), g2 = new THREE.Color(0x4e983e), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0xb59262), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x377f3d), snowDirt = new THREE.Color(0xc9d3dc);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
-    const h = terrainH(x, z);
+    const h = visibleH(x, z);
     pos.setY(i, h);
-    const sl = Math.abs(terrainH(x + 1.5, z) - h) + Math.abs(terrainH(x, z + 1.5) - h);
+    const sl = Math.abs(visibleH(x + 1.5, z) - h) + Math.abs(visibleH(x, z + 1.5) - h);
     const n = fbm(x * 0.05, z * 0.05);
     if (h < 1.4) c.copy(h < -1 ? deep : sand);
     else { c.copy(g1).lerp(g2, n); if (h < 2.2) c.lerp(sand, (2.2 - h) / 0.8); }
@@ -236,37 +246,31 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
     if (h > 40) c.lerp(snow, clamp((h - 40) / 4, 0, 1));
     cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
   }
+  const indices = [];
+  for (let i = 0; i < geo.index.count; i += 3) {
+    const a = geo.index.getX(i), b = geo.index.getX(i + 1), c = geo.index.getX(i + 2);
+    if (!grottoCutContains((pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3, (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3)) indices.push(a, b, c);
+  }
+  geo.setIndex(indices);
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.computeVertexNormals();
   const tmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
-  // per-pixel detail on top of the vertex colours (one vertex every ~3 m): grass patches, fine grain,
-  // darker steep slopes and an animated foam line where the island meets the sea
-  tmat.onBeforeCompile = (sh) => {
-    sh.uniforms.uT = waterT;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vWP; uniform float uT;
-      float th(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float tn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(th(i), th(i + vec2(1.0, 0.0)), f.x), mix(th(i + vec2(0.0, 1.0)), th(i + vec2(1.0, 1.0)), f.x), f.y); }`)
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        float patches = tn(vWP.xz * 0.16) * 0.65 + tn(vWP.xz * 0.43 + 17.0) * 0.35;
-        float grain = tn(vWP.xz * 2.1 + 3.0);
-        diffuseColor.rgb *= 0.84 + patches * 0.27 + (grain - 0.5) * 0.08;
-        // drier, yellower grass in large patches (only where the ground is green)
-        float dry = smoothstep(0.5, 0.8, tn(vWP.xz * 0.045 + 40.0)) * step(diffuseColor.r * 1.15, diffuseColor.g);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.18, 1.02, 0.62), dry * 0.55);
-        vec3 fn = normalize(cross(dFdx(vWP), dFdy(vWP)));
-        diffuseColor.rgb *= mix(0.84, 1.0, smoothstep(0.62, 0.92, abs(fn.y)));
-        float wl = -0.08 + 0.12 * sin(uT * 1.3 + vWP.x * 0.07 + vWP.z * 0.05);
-        float foam = smoothstep(0.32, 0.04, abs(vWP.y - wl)) * (0.75 + 0.25 * tn(vWP.xz * 1.3 + uT * 0.6));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.97, 0.99, 1.0), foam * 0.8);`);
-  };
+  installTerrainSurface(tmat, surfaceLibrary, waterT);
+  terrainMaterial = tmat;
   const terrain = new THREE.Mesh(geo, tmat);
   terrain.receiveShadow = true;
   scene.add(terrain);
 
-  const wg = new THREE.PlaneGeometry(3000, 3000, 1, 1); wg.rotateX(-Math.PI / 2);
+  // A geometric hole, not only fragment discard: transparent sea surfaces must
+  // never cross the sealed basement, including on software WebGL renderers.
+  const sea = new THREE.Shape();
+  sea.moveTo(-1500, -1500); sea.lineTo(1500, -1500);
+  sea.lineTo(1500, 1500); sea.lineTo(-1500, 1500); sea.closePath();
+  const dry = new THREE.Path(), ax = POIS[0].x, az = -POIS[0].z;
+  dry.moveTo(ax - 19.7, az - 14.7); dry.lineTo(ax - 19.7, az + 14.7);
+  dry.lineTo(ax + 19.7, az + 14.7); dry.lineTo(ax + 19.7, az - 14.7); dry.closePath();
+  sea.holes.push(dry);
+  const wg = new THREE.ShapeGeometry(sea); wg.rotateX(-Math.PI / 2);
   const wmat = new THREE.MeshStandardMaterial({ color: 0x23a3e0, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.84 });
   // animated ripples + sparkles: the normal is perturbed in the fragment shader from the world position
   wmat.onBeforeCompile = (sh) => {
@@ -277,7 +281,9 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
         float w1 = sin(vWP.x * 0.31 + uT * 1.4) + sin(vWP.z * 0.27 - uT * 1.1) + 0.6 * sin((vWP.x + vWP.z) * 0.62 + uT * 2.3);
         float w2 = cos(vWP.z * 0.33 + uT * 1.2) + cos(vWP.x * 0.24 + uT * 0.9) + 0.6 * cos((vWP.x - vWP.z) * 0.55 - uT * 2.0);
         normal = normalize(normal + (viewMatrix * vec4(w1 * 0.05, 0.0, w2 * 0.05, 0.0)).xyz);`)
-      .replace('#include <opaque_fragment>', `float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
+      .replace('#include <opaque_fragment>', `// The sealed underground Agency is dry below sea level.
+        if (abs(vWP.x - ${POIS[0].x.toFixed(2)}) < 19.7 && abs(vWP.z - ${POIS[0].z.toFixed(2)}) < 14.7) discard;
+        float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
         float distF = clamp(length(vWP.xz) / 230.0, 0.0, 1.0);
         outgoingLight = mix(outgoingLight, vec3(0.03, 0.32, 0.62), 0.28); outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.55, 0.75, 1.0), smoothstep(0.75, 1.0, distF)) + vec3(sparkle * 0.5);
         #include <opaque_fragment>`);
@@ -350,6 +356,10 @@ function makeStructBox(x, y, z, w, h, d, mat, o = {}) {
   if (curHouse) { m.updateMatrixWorld(true); } else scene.add(m);
   const col = addCollider({ type: 'box', minX: x - w / 2, maxX: x + w / 2, minY: y, maxY: y + h, minZ: z - d / 2, maxZ: z + d / 2 });
   col.mesh = m; col.hp = col.maxHp = o.hp || 200; col.mat = o.mat || 'wood'; col.indestructible = !!o.indestructible; col.kind = 'house';
+  col.surface = o.surface ?? (h <= 0.45 && w > 1.5 && d > 1.5 ? SURFACE.CONCRETE
+    : col.mat === 'wood' && !o.indestructible ? SURFACE.WOOD
+    : Math.min(mat.color.r, mat.color.g, mat.color.b) > 0.57 ? SURFACE.STONE
+    : col.mat === 'metal' ? SURFACE.METAL : SURFACE.CONCRETE);
   m.userData.struct = col;
   addTarget(m); structs.push(col);
   if (curHouse) { col.house = curHouse; col.chunk = chunkOfY(y + h / 2); curHouse.boxes.push(col); }
@@ -359,94 +369,15 @@ function makeStructBox(x, y, z, w, h, d, mat, o = {}) {
 // (walls + decorations). Destroying a wall rebuilds that building's mesh only.
 let curHouse = null;
 const HOUSE_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.06 });
-// Rendu réaliste style Fortnite Chapitre 2 : bardage bois en lattes (siding), joints de brique,
-// tuiles d'ardoise sur les toits, reflets bleutés sur vitres, et dorures étincelantes des agents.
-HOUSE_MAT.onBeforeCompile = (sh) => {
-  sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vNorm;')
-    .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvNorm = normalize((modelMatrix * vec4(normal, 0.0)).xyz);');
-
-  sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>
-      varying vec3 vWP;
-      varying vec3 vNorm;
-      float bHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float bNoise(vec2 p) {
-        vec2 i = floor(p), f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(bHash(i), bHash(i + vec2(1.0, 0.0)), f.x), mix(bHash(i + vec2(0.0, 1.0)), bHash(i + vec2(1.0, 1.0)), f.x), f.y);
-      }`)
-    .replace('#include <color_fragment>', `#include <color_fragment>
-      vec3 fn = normalize(cross(dFdx(vWP), dFdy(vWP)));
-      float isVert = smoothstep(0.35, 0.12, abs(fn.y));
-      float isRoof = smoothstep(0.18, 0.45, fn.y) * smoothstep(0.96, 0.82, fn.y);
-
-      // Détection des types de surfaces d'après leur teinte
-      float isGlass = step(0.1, diffuseColor.b - diffuseColor.r) * step(0.4, diffuseColor.b + diffuseColor.g);
-      float isDarkGlass = step(0.05, diffuseColor.b - diffuseColor.r) * step(length(diffuseColor.rgb), 0.35);
-      float isGold = step(0.65, diffuseColor.r) * step(0.48, diffuseColor.g) * step(diffuseColor.b, 0.28);
-      float isWhiteMarble = step(0.82, diffuseColor.r) * step(0.82, diffuseColor.g) * step(0.78, diffuseColor.b);
-      float isBrickOrStone = step(0.3, diffuseColor.r) * step(abs(diffuseColor.r - diffuseColor.g), 0.25) * (1.0 - isGold);
-
-      // 1. MURS VERTICAUX : BARDAGE BOIS & BRIQUES FORTNITE
-      if (isVert > 0.1 && (isGlass + isDarkGlass) < 0.5) {
-        // Bardage en lattes horizontales réaliste (siding Fortnite ~0.38 m par planche)
-        float plankY = mod(vWP.y, 0.38);
-        float groove = smoothstep(0.0, 0.035, plankY) * (1.0 - smoothstep(0.345, 0.38, plankY));
-        float siding = 0.92 + groove * 0.14 + smoothstep(0.035, 0.12, plankY) * 0.05;
-
-        // Briques et pierres appareillées pour les façades de ville / brique
-        if (isBrickOrStone > 0.5 && isWhiteMarble < 0.5) {
-          float bRow = floor(vWP.y / 0.28);
-          float coordX = abs(fn.x) > 0.5 ? vWP.z : vWP.x;
-          float bCol = mod(coordX + bRow * 0.44, 0.88);
-          float mortar = smoothstep(0.0, 0.035, mod(vWP.y, 0.28)) * smoothstep(0.0, 0.045, bCol);
-          diffuseColor.rgb *= 0.86 + 0.18 * mortar;
-        } else if (isWhiteMarble > 0.5) {
-          // Marbre blanc lisse de l'Agence avec joints subtils de blocs impériaux (1.5 m)
-          float pY = smoothstep(0.0, 0.03, mod(vWP.y, 1.5)) * (1.0 - smoothstep(1.47, 1.5, mod(vWP.y, 1.5)));
-          float pX = smoothstep(0.0, 0.03, mod(vWP.x + vWP.z, 2.0)) * (1.0 - smoothstep(1.97, 2.0, mod(vWP.x + vWP.z, 2.0)));
-          diffuseColor.rgb *= 0.94 + 0.06 * (pY * pX);
-        } else {
-          // Bois peint style Pleasant Park
-          float grain = (bNoise(vWP.xz * 1.8 + vWP.y * 0.5) - 0.5) * 0.06;
-          diffuseColor.rgb *= (siding + grain);
-        }
-
-        // Occlusion ambiante de contact au bas des murs (base ancrée dans le terrain)
-        float contactAO = smoothstep(0.0, 1.1, mod(vWP.y + 0.1, 4.0));
-        diffuseColor.rgb *= 0.87 + 0.13 * contactAO;
-      }
-
-      // 2. VITRES & BAIES VITRÉES : REFLETS DYNA-CYAN STYLE FORTNITE
-      if (isGlass > 0.5 || isDarkGlass > 0.5) {
-        float glGleam = pow(max(0.0, sin((vWP.x + vWP.z) * 0.65 + vWP.y * 1.1)), 10.0) * 0.4;
-        vec3 tint = isDarkGlass > 0.5 ? vec3(0.35, 0.5, 0.65) : vec3(0.82, 0.93, 1.0);
-        diffuseColor.rgb = mix(diffuseColor.rgb, tint, glGleam * 0.8);
-      }
-
-      // 3. TOITURES : STRATES DE TUILES ET BARDEAUX D'ARDOISE
-      if (isRoof > 0.2) {
-        float shingleY = mod(vWP.y, 0.26);
-        float shStep = 0.88 + smoothstep(0.0, 0.03, shingleY) * 0.22;
-        float shRow = floor(vWP.y / 0.26);
-        float tone = 0.95 + 0.1 * fract(sin(shRow * 91.13) * 43758.5453);
-        diffuseColor.rgb *= shStep * tone;
-      }
-
-      // 4. DORURES & MÉTAL PRÉCIEUX DES AGENTS (Midas, coffre, yacht, agence)
-      if (isGold > 0.5) {
-        float shine = pow(max(0.0, sin((vWP.x + vWP.y + vWP.z) * 1.8)), 8.0) * 0.45;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.96, 0.7), shine);
-      }
-    `);
-};
+installBuildingSurface(HOUSE_MAT, surfaceLibrary);
 const _hcCache = new Map();
 function hcol(hex) { let c = _hcCache.get(hex); if (!c) { c = new THREE.Color(hex); _hcCache.set(hex, c); } return c; }
-function colorize(g, c) {
+function colorize(g, c, surface = SURFACE.PLAIN) {
   const n = g.attributes.position.count, a = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
-  g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g;
+  g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  g.setAttribute('surfaceKind', new THREE.BufferAttribute(new Float32Array(n).fill(surface), 1));
+  return g;
 }
 const chunkOfY = (y) => Math.floor((y + 1) / 4);
 function rebuildHouse(H, only) {
@@ -456,8 +387,8 @@ function rebuildHouse(H, only) {
   for (const k of keys) {
     const old = H.chunks.get(k); if (old) { scene.remove(old); old.geometry.dispose(); H.chunks.delete(k); }
     const geos = [];
-    for (const c of H.boxes) if (c.chunk === k && c.alive) geos.push(colorize(BOX.clone().applyMatrix4(c.mesh.matrixWorld), c.mesh.material.color));
-    for (const e of H.deco) if (e.chunk === k && (!e.parent || e.parent.alive)) geos.push(colorize(e.geo.clone().applyMatrix4(e.m), e.color));
+    for (const c of H.boxes) if (c.chunk === k && c.alive) geos.push(colorize(BOX.clone().applyMatrix4(c.mesh.matrixWorld), c.mesh.material.color, c.surface));
+    for (const e of H.deco) if (e.chunk === k && (!e.parent || e.parent.alive)) geos.push(colorize(e.geo.clone().applyMatrix4(e.m), e.color, e.surface ?? (e.geo === PRISM_GEO ? SURFACE.ROOF : SURFACE.PLAIN)));
     if (!geos.length) continue;
     const g = mergeGeometries(geos); geos.forEach((x) => x.dispose());
     const m = new THREE.Mesh(g, HOUSE_MAT); m.castShadow = true; m.receiveShadow = true; scene.add(m); H.chunks.set(k, m);
@@ -469,7 +400,9 @@ function finishHouse(H) { rebuildHouse(H); }
 const _dm = new THREE.Matrix4(), _dq = new THREE.Quaternion(), _de = new THREE.Euler(), _dp = new THREE.Vector3(), _ds = new THREE.Vector3();
 function hdeco(geo, hex, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, parent = null, order = 'XYZ') {
   _de.set(rx, ry, rz, order); _dq.setFromEuler(_de); _dm.compose(_dp.set(x, y, z), _dq, _ds.set(sx, sy, sz));
-  curHouse.deco.push({ geo, color: hcol(hex), m: _dm.clone(), parent, chunk: parent ? parent.chunk : chunkOfY(y) });
+  const entry = { geo, color: hcol(hex), m: _dm.clone(), parent, chunk: parent ? parent.chunk : chunkOfY(y) };
+  curHouse.deco.push(entry);
+  return entry;
 }
 // box whose bottom is at y
 function hbox(hex, x, y, z, w, h, d, parent = null, ry = 0) { hdeco(BOX, hex, x, y + h / 2, z, w, h, d, 0, ry, 0, parent); }
@@ -543,7 +476,7 @@ const CYL_GEO = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
   const NF = Math.floor(N / 5);
   const grass = new THREE.InstancedMesh(tuft, gm, N), flowers = new THREE.InstancedMesh(flower, fm, NF);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color(), col2 = new THREE.Color();
-  const GR = [0x6fcf45, 0x86dc50, 0x55b83c, 0x9be35c, 0x62c447], DRY = new THREE.Color(0xc6c85a), DARK = new THREE.Color(0x2f8a3a);
+  const GR = [0x70b749, 0x85c055, 0x529d3f, 0x94c461, 0x65ad47], DRY = new THREE.Color(0xb4b86a), DARK = new THREE.Color(0x377f3d);
   const FL = [0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff, 0xa98bff, 0xff8a3d, 0x5ac8ff];
   let ng = 0, nf = 0, guard = 0;
   while ((ng < N || nf < NF) && guard++ < N * 14) {
@@ -575,7 +508,7 @@ const CYL_GEO = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
 const trees = [], rocks = [], cacti = [];
 const dummy = new THREE.Object3D();
 const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
-let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
+let trunkIM, leafIM, leaf2IM, broadLeafIM, broadCrownIM, rockIM, cactusIM;
 {
   const pts = [], cpts = [];
   let tries = 0;
@@ -591,28 +524,53 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
     if (dens < 0.42 - bw.forest * 0.25 && R() < 0.8 - bw.forest * 0.4) continue; // forests clustered
     pts.push({ x, z, h, snow: bw.snow });
   }
-  const trunkG = new THREE.CylinderGeometry(0.28, 0.42, 1, 6); trunkG.translate(0, 0.5, 0);
+  const trunkG = createBranchedTrunk(THREE, mergeGeometries);
   const leafG = new THREE.ConeGeometry(1, 1, 7); leafG.translate(0, 0.5, 0);
-  trunkIM = new THREE.InstancedMesh(trunkG, matC(0x7a4a26), pts.length);
-  leafIM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
-  leaf2IM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
+  const broadG = createBroadleafCanopy(THREE, mergeGeometries);
+  for (const p of pts) p.species = treeSpeciesAt(p.x, p.z, p.snow);
+  const pineTrees = [], broadleafTrees = [];
+  const broadCount = pts.filter(p => p.species === 'broadleaf').length, pineCount = pts.length - broadCount;
+  const barkMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0x986039, roughness: .96, flatShading: true }), natureLibrary, 'bark');
+  const foliageMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .9, flatShading: true }), natureLibrary, 'foliage');
+  const broadMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0xd3e6c2, roughness: .92, flatShading: true }), natureLibrary, 'broadleaf');
+  trunkIM = new THREE.InstancedMesh(trunkG, barkMat, pts.length);
+  leafIM = new THREE.InstancedMesh(leafG, foliageMat, Math.max(1, pineCount));
+  leaf2IM = new THREE.InstancedMesh(leafG, foliageMat, Math.max(1, pineCount));
+  broadLeafIM = new THREE.InstancedMesh(broadG.lower, broadMat, Math.max(1, broadCount));
+  broadCrownIM = new THREE.InstancedMesh(broadG.upper, broadMat, Math.max(1, broadCount));
+  leafIM.count = leaf2IM.count = pineCount; broadLeafIM.count = broadCrownIM.count = broadCount;
   const lc = new THREE.Color(), snowC = new THREE.Color(0xeef6ff);
   pts.forEach((p, i) => {
-    const s = rand(0.85, 1.35);
-    const tree = { i, x: p.x, z: p.z, y: p.h - 0.2, s, hp: 150, alive: true, ims: null };
-    dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(s, 2.8 * s, s); dummy.updateMatrix();
+    const s = rand(0.85, 1.35), broad = p.species === 'broadleaf';
+    const list = broad ? broadleafTrees : pineTrees, leafI = list.length;
+    const lower = broad ? broadLeafIM : leafIM, upper = broad ? broadCrownIM : leaf2IM;
+    const tree = { i, x: p.x, z: p.z, y: p.h - 0.2, s, snow: p.snow, species: p.species,
+      hp: 150, alive: true, ims: [trunkIM, lower, upper], instanceIndices: [i, leafI, leafI] };
+    list.push(tree);
+    dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0);
+    dummy.scale.set((broad ? 1.18 : 1) * s, (broad ? 3.5 : 2.8) * s, (broad ? 1.18 : 1) * s); dummy.updateMatrix();
     trunkIM.setMatrixAt(i, dummy.matrix);
-    dummy.position.set(p.x, tree.y + 2.0 * s, p.z); dummy.scale.set(2.6 * s, 4.2 * s, 2.6 * s); dummy.updateMatrix(); leafIM.setMatrixAt(i, dummy.matrix);
-    dummy.position.set(p.x, tree.y + 4.3 * s, p.z); dummy.scale.set(1.8 * s, 3.2 * s, 1.8 * s); dummy.updateMatrix(); leaf2IM.setMatrixAt(i, dummy.matrix);
+    dummy.position.set(p.x, tree.y + (broad ? 3.7 : 2.0) * s, p.z);
+    dummy.scale.set((broad ? 1 : 2.6) * s, (broad ? 1 : 4.2) * s, (broad ? 1 : 2.6) * s);
+    dummy.updateMatrix(); lower.setMatrixAt(leafI, dummy.matrix);
+    dummy.position.set(p.x, tree.y + (broad ? 4.5 : 4.3) * s, p.z);
+    dummy.scale.set((broad ? 1 : 1.8) * s, (broad ? 1 : 3.2) * s, (broad ? 1 : 1.8) * s);
+    dummy.updateMatrix(); upper.setMatrixAt(leafI, dummy.matrix);
     lc.setHSL(0.27 + rand(-0.04, 0.05), 0.55 + rand(0.15), 0.32 + rand(0.1));
-    if (p.snow > 0.3) { lc.setHSL(0.36, 0.35, 0.28); leafIM.setColorAt(i, lc); leaf2IM.setColorAt(i, lc.lerp(snowC, 0.75 * p.snow)); }
-    else { leafIM.setColorAt(i, lc); lc.offsetHSL(0.01, 0, 0.05); leaf2IM.setColorAt(i, lc); }
-    tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + 3.2 * s });
+    if (p.snow > 0.3) { lc.setHSL(0.36, 0.35, 0.28); lower.setColorAt(leafI, lc); upper.setColorAt(leafI, lc.lerp(snowC, 0.75 * p.snow)); }
+    else {
+      if (broad) lc.offsetHSL(.015, -.05, -.035);
+      lower.setColorAt(leafI, lc); lc.offsetHSL(broad ? -.005 : .01, 0, broad ? .04 : .05); upper.setColorAt(leafI, lc);
+    }
+    const radius = (broad ? .6 : .5) * s;
+    tree.col = addCollider({ type: 'box', minX: p.x - radius, maxX: p.x + radius, minZ: p.z - radius, maxZ: p.z + radius, minY: tree.y, maxY: tree.y + (broad ? 3.8 : 3.2) * s });
     tree.col.tree = tree;
     trees.push(tree);
   });
-  for (const t of trees) t.ims = [trunkIM, leafIM, leaf2IM];
-  for (const im of [trunkIM, leafIM, leaf2IM]) { im.castShadow = true; im.receiveShadow = true; im.userData.treeIM = true; im.userData.list = trees; scene.add(im); addTarget(im); }
+  for (const [im, list] of [[trunkIM, trees], [leafIM, pineTrees], [leaf2IM, pineTrees], [broadLeafIM, broadleafTrees], [broadCrownIM, broadleafTrees]]) {
+    im.castShadow = true; im.receiveShadow = true; im.userData.treeIM = true; im.userData.list = list;
+    scene.add(im); addTarget(im);
+  }
   // Cacti (desert)
   const cacG = mergeGeometries([
     new THREE.CylinderGeometry(0.42, 0.48, 3.4, 8).translate(0, 1.7, 0),
@@ -643,7 +601,8 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
     if (h < 1.2 || inPOI(x, z, 4)) continue;
     rpts.push({ x, z, h });
   }
-  rockIM = new THREE.InstancedMesh(rg, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), rpts.length);
+  const rockMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), natureLibrary, 'rock');
+  rockIM = new THREE.InstancedMesh(rg, rockMat, rpts.length);
   rpts.forEach((p, i) => {
     const s = rand(0.9, 2.4);
     dummy.position.set(p.x, p.h + s * 0.25, p.z); dummy.rotation.set(rand(3), rand(3), rand(3)); dummy.scale.set(s * 1.2, s * 0.9, s); dummy.updateMatrix();
@@ -935,7 +894,7 @@ function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
   const mat = ST.mat;
   const twoStory = (style === 'brick' || style === 'wood' || style === 'adobe') && w >= 10 && R() < 0.45;
   const H = twoStory ? 4 : 4.2, T = 0.35, levels = twoStory ? 2 : 1;
-  const o = { hp: ST.hp, mat };
+  const o = { hp: ST.hp, mat, surface: surfaceForStyle(style) };
   // foundation + floor
   makeStructBox(cx, baseY - 3, cz, w + 0.6, 3.15, d + 0.6, matC(style === 'beach' ? 0xc49a62 : 0x8d8a84), { indestructible: true });
   hbox(style === 'adobe' ? 0xc8a070 : 0xb98a5a, cx, baseY + 0.15, cz, w - 0.3, 0.03, d - 0.3);
@@ -1533,9 +1492,19 @@ function physics(ch, dt) {
   const disp = Math.hypot(ch.vel.x, ch.vel.z) * dt;
   const nSub = Math.max(1, Math.min(8, Math.ceil(disp / 0.12)));
   for (let sub = 0; sub < nSub; sub++) {
+    const previousX = ch.pos.x, previousZ = ch.pos.z;
     ch.pos.x += ch.vel.x * dt / nSub;
     ch.pos.z += ch.vel.z * dt / nSub;
     for (const c of tmpCols) {
+      if (c.type === 'cavernRoof') {
+        // The shaft lip is solid from the side too: do not let a character
+        // leave the ventilation tube halfway through the rock ceiling.
+        if (oldY + CH_H <= c.minY || oldY + STEP >= c.maxY) continue;
+        if ([[0,0],[CH_R,0],[-CH_R,0],[0,CH_R],[0,-CH_R]].some(([x,z]) => c.contains(ch.pos.x+x,ch.pos.z+z))) {
+          ch.pos.x = previousX; ch.pos.z = previousZ; ch.blocked = true;
+        }
+        continue;
+      }
       if (c.type !== 'box' || c.passable) continue;
       if (oldY + CH_H <= c.minY || oldY + STEP >= c.maxY) continue;
       const px = clamp(ch.pos.x, c.minX, c.maxX), pz = clamp(ch.pos.z, c.minZ, c.maxZ);
@@ -1558,7 +1527,8 @@ function physics(ch, dt) {
   for (const c of tmpCols) {
     if (!c.alive) continue;
     if (ch.pos.x < c.minX - tol || ch.pos.x > c.maxX + tol || ch.pos.z < c.minZ - tol || ch.pos.z > c.maxZ + tol) continue;
-    if (c.type === 'box') {
+    if (c.type === 'box' || c.type === 'cavernRoof') {
+      if (c.type === 'cavernRoof' && !c.contains(ch.pos.x, ch.pos.z)) continue;
       if (c.maxY <= oldY + STEP && c.maxY > ground) { ground = c.maxY; onTerrain = false; gcol = c; }
       else if (ch.vel.y > 0 && oldY + CH_H <= c.minY + 0.15 && ch.pos.y + CH_H > c.minY) { ch.pos.y = c.minY - CH_H; ch.vel.y = 0; }
     } else if (c.type === 'ramp' || c.type === 'cone') {
@@ -2645,7 +2615,9 @@ function harvestTree(t, ch, crit) {
   t.shake = 0.25;
   if (t.hp <= 0) {
     t.alive = false; removeCollider(t.col);
-    for (const im of t.ims) { im.setMatrixAt(t.i, ZERO_M); im.instanceMatrix.needsUpdate = true; }
+    for (let j = 0; j < t.ims.length; j++) {
+      const im = t.ims[j]; im.setMatrixAt(t.instanceIndices?.[j] ?? t.i, ZERO_M); im.instanceMatrix.needsUpdate = true;
+    }
     burst(_v1.set(t.x, t.y + 3, t.z), 0x4caf50, 22, 6, 0.4, 0.7, 1.2);
     sfxAt('break', _v1, 0.8);
   }
@@ -2744,15 +2716,17 @@ const bots = [];
 function onBotDamaged(b, attacker) {
   if (!attacker || attacker === b) return;
   if (b.hench) { alertHenchmen(b.henchPoi, attacker); return; } // pas de construction, juste l'alerte
+  if (attacker.team === b.team) return;
+  const profile = profileOf(b);
   if (!b.target || !b.target.alive || MR() < 0.5) { b.target = attacker; b.react = 0.15; }
   // Les bots construisent peu : cooldown long, faible probabilité, et une pièce à la fois.
-  if (b.mode === 'ground' && b.grounded && b.buildCd <= 0 && !(b.buildQ && b.buildQ.length) && MR() < 0.1 + b.skill * 0.1 * DIFF.aim) {
-    b.buildCd = rand(10, 20) / DIFF.aim;
+  if (b.mode === 'ground' && b.grounded && b.buildCd <= 0 && !(b.buildQ && b.buildQ.length) && MR() < profile.build) {
+    b.buildCd = rand(10, 20) / (DIFF.aim * (b.profile === 'constructeur' ? 2 : 1));
     const mat = botMat(b, 40);
     if (!mat) return;
     const yaw = Math.atan2(-(attacker.pos.x - b.pos.x), -(attacker.pos.z - b.pos.z));
     const fake = { pos: b.pos, yaw };
-    if (b.hp + b.shield < 60 && MR() < 0.5) botBox(b, mat, attacker); // box complète seulement en grand danger
+    if (b.hp + b.shield < profile.retreat + 20 && MR() < 0.6) botBox(b, mat, attacker);
     else {
       const t = computeTarget(fake, 'wall', 0); queueBuild(b, 'wall', t.cx, t.cz, t.y, t.d, mat);
       if (MR() < 0.25) { b.rampRush = rand(1.5, 2.5); }
@@ -2830,6 +2804,7 @@ function canSee(a, b) {
   return h && h.type === 'char' && h.char === b;
 }
 function botThink(b, dt) {
+  const profile = profileOf(b);
   b.think -= dt; b.buildCd -= dt; b.react -= dt;
   if (b.think <= 0) {
     b.think = rand(0.3, 0.6);
@@ -2846,7 +2821,7 @@ function botThink(b, dt) {
         if (d < d1) { c3 = c2; d3 = d2; c2 = c1; d2 = d1; c1 = c; d1 = d; } else if (d < d2) { c3 = c2; d3 = d2; c2 = c; d2 = d; } else if (d < d3) { c3 = c; d3 = d; }
       }
       const best = c1 && canSee(b, c1) ? c1 : c2 && canSee(b, c2) ? c2 : c3 && canSee(b, c3) ? c3 : null;
-      if (best) { b.target = best; b.react = rand(0.8, 1.6) * DIFF.react; }
+      if (best) { b.target = best; b.seeing = true; b.react = rand(0.8, 1.6) * DIFF.react; }
     } else {
       b.seeing = canSee(b, b.target);
       if (!b.seeing) b.lostT += 0.45; else b.lostT = 0;
@@ -2866,7 +2841,7 @@ function botThink(b, dt) {
     // pick weapon by distance
     if (b.target) {
       const d = b.target.pos.distanceTo(b.pos);
-      let want = d < 12 ? 'shotgun' : d < 30 ? 'smg' : d > 55 ? 'sniper' : 'ar';
+      let want = d < 10 ? 'shotgun' : b.profile === 'sniper' && d > 28 ? 'sniper' : d < 30 ? profile.weapon : d > 55 ? 'sniper' : 'ar';
       let idx = b.slots.findIndex((s) => s && s.id === want);
       if (idx < 0) idx = b.slots.findIndex((s, i) => i > 0 && s && s.kind === 'weapon');
       if (idx > 0 && idx !== b.cur) { b.cur = idx; b.cool = 0.3; }
@@ -2876,7 +2851,10 @@ function botThink(b, dt) {
   }
   // movement
   const wish = _bw.set(0, 0, 0);
-  let speed = RUN * 0.92;
+  let speed = RUN * 0.92 * profile.speed;
+  b.tactic = 'patrouille';
+  const stormUrgent = storm.phase >= 0 && Math.hypot(b.pos.x - storm.cx, b.pos.z - storm.cz) > storm.r - 6;
+  const regroup = b.mate && player.alive && b.pos.distanceTo(player.pos) > 35;
   if (b.boxedT > 0) {
     b.boxedT -= dt;
     if (b.boxedT > 0 && b.heals > 0 && b.shield < 100 && !b.healing) { b.healing = 2.5; }
@@ -2884,25 +2862,35 @@ function botThink(b, dt) {
   }
   botBuildQueue(b, dt); botBoxEdit(b, dt);
   if (b.rampRush > 0 && b.target && b.target.alive) { botRampStep(b, dt); }
-  else if (b.target && b.target.alive && b.mode === 'ground' && b.buildCd <= 0 && b.target.pos.y > b.pos.y + 3 && b.target.pos.distanceTo(b.pos) < 40 && MR() < dt * 0.25 * DIFF.aim) { b.rampRush = rand(1.5, 3); b.buildCd = rand(8, 14); }
-  if (b.target && b.target.alive && b.seeing !== false) {
+  else if (b.profile === 'constructeur' && b.target && b.target.alive && b.mode === 'ground' && b.buildCd <= 0 && b.target.pos.y > b.pos.y + 3 && b.target.pos.distanceTo(b.pos) < 40 && MR() < dt * 0.5 * DIFF.aim) { b.rampRush = rand(1.5, 3); b.buildCd = rand(8, 14); }
+  if (stormUrgent || regroup) { b.boxedT = 0; b.buildQ = []; b.rampRush = 0; }
+  if (b.target && b.target.alive && b.seeing !== false && !stormUrgent && !regroup) {
     const tp = b.target.pos;
     const dx = tp.x - b.pos.x, dz = tp.z - b.pos.z, d = Math.hypot(dx, dz);
     b.yaw = lerpAngle(b.yaw, Math.atan2(-dx, -dz), Math.min(1, dt * 8));
     const W = weaponOf(b);
-    const pref = !W || W.melee ? 2 : W === WEAPONS.shotgun ? 6 : W === WEAPONS.sniper ? 50 : W === WEAPONS.smg ? 14 : 24;
+    const pref = preferredDistance(profile, b.item && b.item.id);
+    const intent = combatIntent(profile, d, pref, b.hp + b.shield, b.reloading > 0);
     const nx = dx / (d || 1), nz = dz / (d || 1);
-    let approach = d > pref + 4 ? 1 : d < pref - 3 ? -0.7 : 0;
+    let approach = intent.approach;
+    b.tactic = intent.retreat ? 'repli' : profile.flank && d > 12 ? 'contournement' : 'combat';
+    if (intent.retreat && b.heals > 0 && b.buildCd <= 0 && b.grounded && b.profile === 'constructeur') {
+      const mat = botMat(b, 40);
+      if (mat) { botBox(b, mat, b.target); b.buildCd = 10; }
+    }
     if (b.rampRush > 0) approach = 1;
     if (b.boxedT > 0) approach = 0;
     b.strafeT -= dt; if (b.strafeT <= 0) { b.strafe = MR() < 0.5 ? -1 : 1; b.strafeT = rand(0.5, 1.6); }
-    const strafeK = b.rampRush > 0 || b.boxedT > 0 ? 0 : 0.8;
-    wish.set(nx * approach - nz * b.strafe * strafeK, 0, nz * approach + nx * b.strafe * strafeK);
-    if (b.grounded && MR() < dt * 0.6) b.vel.y = JUMP_V;
+    const strafeK = b.rampRush > 0 || b.boxedT > 0 ? 0 : intent.strafe;
+    const lateral = b.strafe * strafeK + (b.rampRush > 0 || b.boxedT > 0 || d <= 12 ? 0 : b.flankSide * intent.flank);
+    wish.set(nx * approach - nz * lateral, 0, nz * approach + nx * lateral);
+    if (b.profile === 'sniper') b.crouch = d >= pref - 3 && d <= pref + 4 && !intent.retreat;
+    else b.crouch = false;
+    if (b.grounded && !b.crouch && MR() < dt * profile.jump) b.vel.y = JUMP_V;
     // aim & shoot
     if (b.react <= 0 && W) {
       b.burst -= dt;
-      if (b.burst < -rand(1.2, 2.4) * DIFF.react) b.burst = rand(0.5, 1.1);
+      if (b.burst < -rand(1.2, 2.4) * DIFF.react / profile.burst) b.burst = rand(0.5, 1.1) * profile.burst;
       if (b.burst > 0 || W.melee) {
         _o.copy(b.pos); _o.y += 1.55;
         _v3.copy(tp); _v3.y += rand(0.9, 1.7);
@@ -2916,6 +2904,9 @@ function botThink(b, dt) {
     }
     if (b.reloading <= 0 && b.item && b.item.kind === 'weapon' && b.item.mag === 0) startReload(b);
   } else if (b.wp && !(b.boxedT > 0)) {
+    b.crouch = false;
+    b.tactic = stormUrgent ? 'zone' : regroup ? 'regroupement' : b.wpKind;
+    if (regroup && !stormUrgent) b.wp = player.pos;
     const dx = b.wp.x - b.pos.x, dz = b.wp.z - b.pos.z, d = Math.hypot(dx, dz);
     if (d > 0.5) { wish.set(dx / d, 0, dz / d); b.yaw = lerpAngle(b.yaw, Math.atan2(-dx, -dz), Math.min(1, dt * 5)); }
   }
@@ -2931,9 +2922,12 @@ function botThink(b, dt) {
         const r = computeTarget(b, 'ramp', 0); placeBuild(b, 'ramp', r.cx, r.cz, r.y, r.d, 'wood');
       }
       if (b.stuckN > 4) { b.wp = randomLandPoint(b.pos.x, b.pos.z, 30); b.stuckN = 0; }
+      if (b.profile === 'flanqueur') b.flankSide *= -1;
     } else b.stuckN = 0;
     b.lastP.copy(b.pos); b.stuckT = 0;
   }
+  if (wish.lengthSq() > 1) wish.normalize();
+  if (b.crouch) speed *= 0.55;
   if (b.inWater) speed *= 0.55;
   const acc = b.grounded ? 12 : 3;
   b.vel.x = lerp(b.vel.x, wish.x * speed, Math.min(1, acc * dt));
@@ -3041,7 +3035,7 @@ function closeGlider(ch) {
 function groundBelow(ch) {
   let g = Math.max(terrainH(ch.pos.x, ch.pos.z), -0.9);
   queryCols(ch.pos.x, ch.pos.z, 1, tmpCols);
-  for (const c of tmpCols) if (c.alive && c.maxY < ch.pos.y && c.maxY > g && ch.pos.x > c.minX && ch.pos.x < c.maxX && ch.pos.z > c.minZ && ch.pos.z < c.maxZ) g = c.maxY;
+  for (const c of tmpCols) if (c.alive && c.maxY < ch.pos.y && c.maxY > g && ch.pos.x > c.minX && ch.pos.x < c.maxX && ch.pos.z > c.minZ && ch.pos.z < c.maxZ && (c.type !== 'cavernRoof' || c.contains(ch.pos.x, ch.pos.z))) g = c.maxY;
   return g;
 }
 function airControl(ch, wish, dt) {
@@ -3224,6 +3218,14 @@ function placePad(x, z) {
 }
 function updateMovers(ch, dt) {
   if (ch.mode !== 'ground' && ch.mode !== 'glide' && ch.mode !== 'fall') return;
+  // A local physical exit; the ordinary staircase works in both directions.
+  if (ch.isPlayer && grottoLayout) {
+    const v = GROTTO.vent;
+    if (Math.hypot(ch.pos.x - v.x, ch.pos.z - v.z) < v.r - .5 && ch.pos.y >= GROTTO.floorY - .2 && ch.pos.y < GROTTO.surfaceY + 3) {
+      ch.vel.y = Math.max(ch.vel.y, 19); ch.grounded = false;
+      ch.mode = 'fall'; ch.manualFall = true; ch.noFall = true; ch.parts.glider.visible = false;
+    }
+  }
   for (const p of pads) {
     if (ch.mode !== 'ground') break;
     const dx = ch.pos.x - p.x, dz = ch.pos.z - p.z;
@@ -3267,13 +3269,25 @@ function buildVault(p, at) {
   let vx, vz, vy;
   if (at) { vx = at.x; vz = at.z; vy = at.y; }
   else { const s = vaultSpot(p); vx = s.x; vz = s.z; vy = Math.max(terrainH(vx, vz), 2.4); }
+  if (p.key === 'agency' || p.key === 'grotto') {
+    curHouse = { boxes: [], deco: [], mesh: null };
+    const v = buildAgencyVault(p, { x: vx, y: vy, z: vz }, {
+      THREE, scene, box: makeStructBox, mat: matC, collider: addCollider, removeCollider,
+      target: addTarget, chest: spawnChest,
+      ammo: (x, y, z) => { const c = spawnAmmoBox(x, y, z); ammoBoxes.push(c); return c; },
+      chests, spawnLoot,
+      weapon: randWeaponItem, ammoFor,
+      sound: (name, vault) => sfxAt(name, _v1.set(vault.x, vault.y + 1.5, vault.z + 3.5), 0.8),
+    });
+    const H = curHouse; curHouse = null; finishHouse(H); vaults.push(v); return;
+  }
   curHouse = { boxes: [], deco: [], mesh: null };
   const wallM = matC(0x5a616c, { metalness: 0.4, roughness: 0.6 });
   makeStructBox(vx, vy - 0.35, vz, 7, 0.4, 7, wallM, { indestructible: true });
   makeStructBox(vx, vy, vz - 3.3, 7, 4, 0.6, wallM, { indestructible: true });
   makeStructBox(vx - 3.3, vy, vz, 0.6, 4, 7, wallM, { indestructible: true });
   makeStructBox(vx + 3.3, vy, vz, 0.6, 4, 7, wallM, { indestructible: true });
-  makeStructBox(vx, vy + 4, vz, 7.4, 0.6, 7.4, wallM, { indestructible: true });
+  makeStructBox(vx, vy + (p.key === 'agency' ? 3.6 : 4), vz, 7.4, 0.35, 7.4, wallM, { indestructible: true });
   makeStructBox(vx - 2.4, vy, vz + 3.3, 2.6, 4, 0.6, wallM, { indestructible: true });
   makeStructBox(vx + 2.4, vy, vz + 3.3, 2.6, 4, 0.6, wallM, { indestructible: true });
   const door = makeStructBox(vx, vy, vz + 3.3, 2.2, 3.6, 0.5, matC(0xffc400, { metalness: 0.75, roughness: 0.25 }), { indestructible: true });
@@ -3319,74 +3333,19 @@ function buildPhoneBooth(p, at) {
   col.indestructible = true;
   booths.push({ x: bx, y: by, z: bz, mesh: g, col });
 }
-const AGENCY_PAL = { wall: 0xe0ded6, trim: 0xffc400, accent: 0xffc400 };
+let agencyLayout = null, grottoLayout = null;
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
-    buildTower(p.x, p.z, p.h, 18, 18, 5, 0, AGENCY_PAL);
-    // Grand parvis de l'Agence : colonnade majestueuse en marbre blanc & or
     curHouse = { boxes: [], deco: [], mesh: null };
-    // Colonnade d'entrée néoclassique (4 imposantes colonnes avec chapiteaux dorés)
-    for (let c = -2; c <= 2; c++) {
-      if (c === 0) continue;
-      const colX = p.x + c * 3.2, colZ = p.z + 10.4;
-      hdeco(CYL_GEO, 0xf4f1ea, colX, p.h + 5.5, colZ, 1.1, 11, 1.1);
-      hdeco(BOX, 0xffc400, colX, p.h + 11.2, colZ, 1.5, 0.5, 1.5); // chapiteau or
-      hdeco(BOX, 0x3a404c, colX, p.h + 0.25, colZ, 1.6, 0.5, 1.6); // base
-      propBox(colX, p.h, colZ, 0.8, 0.8, 11.4); // colonne solide
-    }
-    // Fronton d'entrée art-déco avec aigle/blason d'or
-    hdeco(BOX, 0xf4f1ea, p.x, p.h + 11.8, p.z + 10.4, 16, 1.0, 2.2);
-    hdeco(BOX, 0xffc400, p.x, p.h + 12.5, p.z + 10.8, 14, 0.35, 0.4);
-    hdeco(CYL_GEO, 0xffc400, p.x, p.h + 12.8, p.z + 11.2, 1.6, 0.25, 1.6, Math.PI / 2, 0, 0); // médaillon central
-    // Caméras de surveillance avec LED rouge clignotante aux 4 coins
-    for (const [cx2, cz2] of [[-9.4, -9.4], [9.4, -9.4], [-9.4, 9.4], [9.4, 9.4]]) {
-      hdeco(BOX, 0x1a1a22, p.x + cx2, p.h + 20, p.z + cz2, 0.5, 0.4, 0.8);
-      hdeco(BOX, 0xff1e42, p.x + cx2, p.h + 20, p.z + cz2 + (cz2 > 0 ? 0.42 : -0.42), 0.18, 0.18, 0.18);
-      propBox(p.x + cx2, p.h + 19.8, p.z + cz2, 0.3, 0.42, 0.4); // caméra : solide
-    }
-    // Dôme verrière centrale sur le toit de l'Agence (atrium de verre)
-    hdeco(CYL_GEO, 0x1f2430, p.x, p.h + 20.6, p.z, 7.5, 0.6, 7.5);
-    hdeco(CYL_GEO, 0x6fd0ff, p.x, p.h + 22.0, p.z, 6.4, 2.4, 6.4);
-    // dôme vitré de l'atrium : collision à la taille réelle du modèle (socle rond 7,5 m, dôme 6,4 m), plus de toit invisible autour
-    propDisc(p.x, p.h + 20.0, p.z, 3.75, 0.9);
-    propDisc(p.x, p.h + 20.9, p.z, 3.2, 2.4);
-    hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 7.0, 0.3, 0.3);
-    hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 0.3, 0.3, 7.0);
-
-    // Statue dorée de Midas sur le parvis
-    const sx = p.x + 14, sz = p.z - 8;
-    hdeco(BOX, 0x39404c, sx, p.h, sz, 3.2, 0.5, 3.2);
-    hdeco(BOX, 0x2c313c, sx, p.h + 0.5, sz, 2.4, 0.6, 2.4);
-    hdeco(BOX, 0xffc400, sx, p.h + 1.1, sz, 0.9, 1.7, 0.5);
-    hdeco(BOX, 0xffc400, sx, p.h + 2.8, sz, 0.6, 0.6, 0.6);
-    hdeco(BOX, 0x3fa9ff, sx, p.h + 3.7, sz, 1.1, 1.1, 1.1);
-    // Projecteurs au sol braqués vers la façade
-    for (const [px3, pz3] of [[-10, 15], [10, 15]]) {
-      hdeco(BOX, 0x2c313c, p.x + px3, p.h, p.z + pz3, 0.8, 0.6, 0.8);
-      hdeco(CYL_GEO, 0xffe89e, p.x + px3, p.h + 0.6, p.z + pz3, 0.35, 0.4, 0.35, -Math.PI / 4, 0, 0);
-    }
+    agencyLayout = buildAgency(p, {
+      THREE, box: makeStructBox, deco: hdeco, mat: matC, collider: addCollider,
+      sides: footprintSides, wall: wallWithOpenings, frame: windowFrame,
+      chest: spawnChest, ammo: (x, y, z) => { const c = spawnAmmoBox(x, y, z); ammoBoxes.push(c); return c; },
+      lootSpots, disc: propDisc, scene,
+    });
     { const H = curHouse; curHouse = null; finishHouse(H); }
-    // hélipad
-    curHouse = { boxes: [], deco: [], mesh: null };
-    hdeco(CYL_GEO, 0x2c313c, p.x - 15, p.h + 0.06, p.z + 13, 9, 0.12, 9);
-    hdeco(BOX, 0xffc400, p.x - 15, p.h + 0.14, p.z + 13, 3.4, 0.06, 0.8);
-    hdeco(BOX, 0xffc400, p.x - 15, p.h + 0.14, p.z + 13, 0.8, 0.06, 3.4);
-    { const H = curHouse; curHouse = null; finishHouse(H); }
-    buildHouse(p.x - 18, p.z + 16, p.h, 10, 9, 1, 'agency');
-    buildHouse(p.x + 9, p.z + 19, p.h, 9, 8, 2, 'agency');
-    // drapeaux GHOST bleus sur la tour + emblème doré sur la façade
-    curHouse = { boxes: [], deco: [], mesh: null };
-    for (const [fx, fz] of [[-8.4, -8.4], [8.4, -8.4], [-8.4, 8.4], [8.4, 8.4]]) {
-      hdeco(BOX, 0x8d929a, p.x + fx, p.h + 22, p.z + fz, 0.22, 4, 0.22);
-      propBox(p.x + fx, p.h + 20, p.z + fz, 0.16, 0.16, 4.4); // mât de drapeau : solide sur sa hauteur visible seulement
-      hdeco(BOX, 0x1f3a8a, p.x + fx + 1.1, p.h + 23.4, p.z + fz, 2.2, 1.4, 0.08);
-      propBox(p.x + fx + 1.1, p.h + 22.7, p.z + fz, 1.1, 0.05, 1.4); // toile de drapeau : solide
-      hdeco(BOX, 0xffffff, p.x + fx + 1.1, p.h + 23.4, p.z + fz + 0.05, 0.7, 0.7, 0.02);
-    }
-    hdeco(CYL_GEO, 0xf2efe6, p.x, p.h + 13, p.z + 9.25, 3.2, 0.25, 3.2, Math.PI / 2, 0, 0, null, 'YXZ');
-    hdeco(CYL_GEO, 0xffc400, p.x, p.h + 13, p.z + 9.3, 2.2, 0.25, 2.2, Math.PI / 2, 0, 0, null, 'YXZ');
-    hdeco(BOX, 0x1f3a8a, p.x, p.h + 13, p.z + 9.35, 1.1, 1.1, 0.06);
-    { const H = curHouse; curHouse = null; finishHouse(H); }
+    buildVault(p, agencyLayout.vault);
+    buildPhoneBooth(p, { x: p.x + 26, y: p.h, z: p.z - 13 });
   } else if (p.key === 'shark') {
     // manoir moderne blanc à toits plats (la Sky Villa) : rez creux + terrasse
     curHouse = { boxes: [], deco: [], mesh: null };
@@ -3515,55 +3474,15 @@ function buildSpyPOI(p) {
     buildVault(p, { x: p.x - 9, y: y + 1.4, z: p.z });
     buildPhoneBooth(p, { x: p.x + 2, y: y + 1.4, z: p.z + 3 });
   } else if (p.key === 'grotto') {
-    buildHouse(p.x, p.z, p.h, 14, 12, 1, 'bunker');
-    buildHouse(p.x - 13, p.z + 8, p.h, 10, 9, 2, 'bunker');
-    buildHouse(p.x + 12, p.z - 9, p.h, 10, 8, 0, 'bunker');
-    // anneau rocheux : dôme ouvert en ciel (puits de lumière) avec deux entrées
     curHouse = { boxes: [], deco: [], mesh: null };
-    const RR = p.r * 1.05;
-    const rock = (cx2, cz2, w, h2, d2) => makeStructBox(cx2, Math.max(terrainH(cx2, cz2), 2.4) - 0.7, cz2, w, h2, d2, matC(0x59606c, { roughness: 0.95 }), { indestructible: true });
-    rock(p.x - RR * 0.55, p.z - RR, RR * 0.9, 5.4, 2.4); rock(p.x + RR * 0.55, p.z - RR, RR * 0.9, 6.6, 2.4);
-    rock(p.x - RR * 0.55, p.z + RR, RR * 0.9, 6.2, 2.4); rock(p.x + RR * 0.55, p.z + RR, RR * 0.9, 5, 2.4);
-    rock(p.x - RR, p.z - RR * 0.5, 2.4, 4.6, RR); rock(p.x - RR, p.z + RR * 0.5, 2.4, 5.8, RR);
-    rock(p.x + RR, p.z - RR * 0.5, 2.4, 6.4, RR); rock(p.x + RR, p.z + RR * 0.5, 2.4, 4.8, RR);
-    // moellons irréguliers par-dessus l'anneau
-    for (const [rx, rz, rs, ry2] of [[-RR * 0.5, -RR - 0.6, 3, 0.3], [RR * 0.6, -RR - 0.5, 2.4, -0.2], [-RR * 0.4, RR + 0.4, 2.6, 0.5], [RR * 0.5, RR + 0.5, 3.2, 0.1], [-RR + 0.4, -RR * 0.3, 2.6, 0.4], [-RR - 0.4, RR * 0.4, 2.2, -0.3], [RR + 0.4, -RR * 0.4, 2.8, 0.2], [RR - 0.3, RR * 0.5, 2.4, -0.4]]) {
-      hdeco(BOX, 0x6b7380, p.x + rx, p.h + 4.2, p.z + rz, rs, rs * 0.9, rs * 1.4, 0.15, ry2, 0.25);
-    }
-    // porte blindée à l'entrée sud : chambranle béton + vantail or, veilleuses rouges
-    {
-      const dx = p.x, dz = p.z + RR;
-      makeStructBox(dx - 4.4, p.h, dz, 1.6, 6, 2.6, matC(0x707684, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx + 4.4, p.h, dz, 1.6, 6, 2.6, matC(0x707684, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx, p.h + 6, dz, 10.4, 1.2, 2.8, matC(0x5d6370, { roughness: 0.8 }), { indestructible: true });
-      makeStructBox(dx, p.h, dz, 7.6, 5.2, 1, matC(0xffc400, { metalness: 0.75, roughness: 0.25 }), { hp: 900, mat: 'metal' });
-      // Bandes de danger jaunes & noires (hazard stripes) style base militaire Shadow
-      for (let s = 0; s < 7; s++) {
-        hdeco(BOX, s % 2 === 0 ? 0xf1c40f : 0x14141c, dx - 3.0 + s * 1.0, p.h + 5.0, dz + 0.55, 0.95, 0.5, 0.08);
-        hdeco(BOX, s % 2 === 0 ? 0xf1c40f : 0x14141c, dx - 3.0 + s * 1.0, p.h + 0.3, dz + 0.55, 0.95, 0.5, 0.08);
-      }
-      // Pistons hydrauliques d'ouverture de porte blindée
-      hdeco(CYL_GEO, 0x8a929e, dx - 3.4, p.h + 2.6, dz - 0.6, 0.35, 4.5, 0.35);
-      hdeco(CYL_GEO, 0x8a929e, dx + 3.4, p.h + 2.6, dz - 0.6, 0.35, 4.5, 0.35);
-      hdeco(BOX, 0x39ff88, dx, p.h + 5.7, dz - 0.6, 4, 0.25, 0.15);
-      hdeco(BOX, 0xff2e4d, dx - 4.2, p.h + 4.6, dz - 1.5, 0.4, 0.4, 0.4);
-      hdeco(BOX, 0xff2e4d, dx + 4.2, p.h + 4.6, dz - 1.5, 0.4, 0.4, 0.4);
-      // Projecteur industriel jaune au-dessus de l'entrée
-      hdeco(BOX, 0xf1c40f, dx, p.h + 6.8, dz + 1.2, 1.4, 0.8, 1.2);
-      hdeco(CYL_GEO, 0xfff6bd, dx, p.h + 6.8, dz + 1.8, 0.5, 0.2, 0.5, Math.PI / 2, 0, 0);
-    }
-    // cuves à carburant, conteneurs et tour de contrôle
-    hdeco(CYL_GEO, 0xe8e6df, p.x - 9, p.h + 1.5, p.z - 8, 2, 3, 2);
-    hdeco(CYL_GEO, 0xd2483a, p.x - 9, p.h + 2.6, p.z - 8, 2.1, 0.3, 2.1);
-    hdeco(CYL_GEO, 0xe8e6df, p.x - 6.5, p.h + 1.5, p.z - 9.5, 1.6, 3, 1.6);
-    const CC2 = [0xc0392b, 0x2980b9, 0x27ae60];
-    for (let k = 0; k < 3; k++) makeStructBox(p.x + 5 + k * 3.4, p.h, p.z - 7, 3, 2.6, 2.4, matC(CC2[k], { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
-    makeStructBox(p.x + 10, p.h, p.z + 7, 1.6, 5.2, 1.6, matC(0x707684, { roughness: 0.7 }), { indestructible: true });
-    makeStructBox(p.x + 10, p.h + 5.2, p.z + 7, 4.4, 2.6, 4, matC(0x5d6370, { roughness: 0.6, metalness: 0.2 }), { hp: 500, mat: 'stone' });
-    hdeco(BOX, 0x39ff88, p.x + 10, p.h + 6.4, p.z + 5.05, 3.8, 1, 0.08);
-    // veilleuses cyan sur l'anneau
-    for (const [lx2, lz2] of [[-RR * 0.5, -RR + 1.5], [RR * 0.5, -RR + 1.5], [-RR * 0.5, RR - 1.5], [RR * 0.5, RR - 1.5]]) hdeco(BOX, 0x39ff88, p.x + lx2, p.h + 4.6, p.z + lz2, 0.35, 0.35, 0.35);
+    grottoLayout = buildGrotto(p, {
+      THREE, scene, box: makeStructBox, deco: hdeco, mat: matC, collider: addCollider, target: addTarget,
+      surfaceLibrary, time: waterT,
+      chest: spawnChest, ammo: (x, y, z) => { const c = spawnAmmoBox(x, y, z); ammoBoxes.push(c); return c; }, lootSpots,
+    });
     { const H = curHouse; curHouse = null; finishHouse(H); }
+    buildVault(p, grottoLayout.vault);
+    buildPhoneBooth(p, { x: p.x - 13, y: p.h, z: p.z + 34 });
   } else if (p.key === 'rig') {
     // Plateforme pétrolière : coque gris-bleu à bandes jaunes, grues rouges,
     // hélipad jaune en porte-à-faux, passerelle vers la station satellite.
@@ -3638,7 +3557,7 @@ function buildSpyPOI(p) {
     placePad(p.x + 16, p.z);
     placePad(p.x - 16, p.z);
   }
-  if (p.key !== 'yacht' && p.key !== 'rig') { buildVault(p); buildPhoneBooth(p); }
+  if (!['agency', 'grotto', 'yacht', 'rig'].includes(p.key)) { buildVault(p); buildPhoneBooth(p); }
   if (p.key === 'agency') placePad(p.x - 22, p.z + 8);
 }
 const spySpot0 = lootSpots.length;
@@ -3723,6 +3642,8 @@ function startGame() {
     let nm = pick(allNames), k = 0; while (used.has(nm) && k++ < 40) nm = pick(allNames); if (used.has(nm)) nm = pick(allNames) + randi(2, 99); used.add(nm);
     if (Math.floor((i + 1) / TEAM_SIZE) === 0 && LOAD.mateNames && LOAD.mateNames[i]) { nm = String(LOAD.mateNames[i]).slice(0, 16); used.add(nm); }
     const b = new Char(nm, false, randomLoadout());
+    b.profile = BOT_PROFILE_IDS[i % BOT_PROFILE_IDS.length];
+    b.flankSide = i % 2 ? -1 : 1;
     // teams: first (TEAM_SIZE-1) bots are the player's squad mates
     b.team = Math.floor((i + 1) / TEAM_SIZE);
     b.mate = b.team === 0;
@@ -3740,6 +3661,8 @@ function startGame() {
     let sx, sy, sz, wpBox = null;
     if (p.key === 'yacht') { const yd = Math.max(terrainH(p.x, p.z), 2.4); sy = yd + 1.5; sx = p.x + rand(-10, 10); sz = p.z + rand(-3, 3); wpBox = { x: p.x, z: p.z, hx: 11, hz: 3.5 }; }
     else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; sx = p.x + rand(-8, 8); sz = p.z + rand(-6, 6); wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
+    else if (p.key === 'agency' && agencyLayout) { sx = p.x; sz = p.z + 1; sy = agencyLayout.lobbyY; wpBox = agencyLayout.patrol; }
+    else if (p.key === 'grotto' && grottoLayout) { ({ x: sx, y: sy, z: sz } = grottoLayout.boss); wpBox = grottoLayout.patrol; }
     else { const bp = randomLandPoint(p.x, p.z, p.r * 0.3); sx = bp.x; sz = bp.z; sy = Math.max(terrainH(sx, sz), 2.4) + 0.1; }
     const boss = new Char(cfg.boss, false, { skin: cfg.skin, backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
     boss.hench = true; boss.boss = true; boss.bossPoi = p; boss.henchPoi = p; boss.wpBox = wpBox;
@@ -3756,7 +3679,18 @@ function startGame() {
       h.hench = true; h.henchPoi = p; h.bossRef = boss; h.wpBox = wpBox;
       const hx2 = wpBox ? wpBox.x + rand(-wpBox.hx, wpBox.hx) : null;
       const hz2 = wpBox ? wpBox.z + rand(-wpBox.hz, wpBox.hz) : null;
-      if (wpBox) h.pos.set(hx2, sy, hz2);
+      if (p.key === 'agency' && agencyLayout) {
+        const posts = [[10, 1], [-10, 4], [0, -10], [24, 18], [-24, 18]];
+        const [ox, oz] = posts[i % posts.length];
+        h.pos.set(p.x + ox, i % posts.length < 3 ? sy : p.h, p.z + oz);
+        h.wpBox = { x: h.pos.x, z: h.pos.z, hx: 2, hz: 2 };
+      }
+      else if (p.key === 'grotto' && grottoLayout) {
+        const [x, z, hx, hz, level = grottoLayout.floorY] = grottoLayout.posts[i % grottoLayout.posts.length];
+        h.pos.set(p.x + x, level, p.z + z);
+        h.wpBox = { x: h.pos.x, z: h.pos.z, hx, hz };
+      }
+      else if (wpBox) h.pos.set(hx2, sy, hz2);
       else { const hp2 = randomLandPoint(p.x, p.z, p.r * 0.8); h.pos.set(hp2.x, Math.max(terrainH(hp2.x, hp2.z), 2.4) + 0.1, hp2.z); }
       h.mode = 'ground'; h.grounded = true; h.mesh.visible = true;
       h.hp = 100; h.shield = 50; h.heals = 1;
@@ -3895,8 +3829,13 @@ function nearestInteract() {
   }
   for (const c of chests) { if (c.opened) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd + 0.3) { bd = d; best = { type: 'chest', c }; } }
   for (const c of drops) { if (!c.landed || c.opened) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd + 0.6) { bd = d; best = { type: 'drop', c }; } }
-  for (const c of ammoBoxes) { if (c.opened) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd) { bd = d; best = { type: 'ammo', c }; } }
-  for (const v of vaults) { if (v.open) continue; const d = Math.hypot(v.x - player.pos.x, (v.z + 3.6) - player.pos.z) + Math.abs(v.y - player.pos.y) * 0.5; if (d < 3.2 && d < bd) { bd = d; best = { type: 'vault', v }; } }
+  for (const c of ammoBoxes) { if (c.opened || (c.vaultRef && !c.vaultRef.open)) continue; const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z) + Math.abs(c.y - player.pos.y) * 0.5; if (d < bd) { bd = d; best = { type: 'ammo', c }; } }
+  for (const v of vaults) {
+    if (v.open) continue;
+    const tx = v.terminal ? v.terminal.x : v.x, tz = v.terminal ? v.terminal.z : v.z + 3.6;
+    const d = Math.hypot(tx - player.pos.x, tz - player.pos.z) + Math.abs(v.y - player.pos.y) * 0.5;
+    if (d < 3.2 && d < bd) { bd = d; best = { type: 'vault', v }; }
+  }
   for (const b of booths) { const d = Math.hypot(b.x - player.pos.x, b.z - player.pos.z) + Math.abs(b.y - player.pos.y) * 0.5; if (d < 2.8 && d < bd) { bd = d; best = { type: 'booth', b }; } }
   for (const dr of doors) { if (dr.broken || matchOver) continue; const d = Math.hypot(dr.hx - player.pos.x, dr.hz - player.pos.z) + Math.abs(dr.ly - player.pos.y) * 0.5; if (d < 2.4 && d < bd) { bd = d; best = { type: 'door', dr }; } }
   if (!best) for (const v of vehicles) { if (v.driver) continue; const d = Math.hypot(v.pos.x - player.pos.x, v.pos.z - player.pos.z) + Math.abs(v.pos.y - player.pos.y) * 0.3; if (d < 3.6) { best = { type: 'vehicle', v }; break; } }
@@ -3935,17 +3874,29 @@ function openChest(c, by = player) {
   }
 }
 function openVault(v) {
+  if (v.open || (v.mechanism && v.state !== 'locked')) return;
   if (!(player.keycards && player.keycards[v.poi.key])) {
     sfx('warn', 0.6);
     showCenter('COFFRE-FORT VERROUILLÉ', `Élimine le boss de ${v.poi.name} pour sa carte d'accès`, 2.4);
     return;
   }
-  v.open = true;
+  if (v.mechanism) {
+    v.mechanism.begin(); sfx('vaultscan', 0.75);
+    showCenter(`CARTE ${(SPY_STAFF[v.poi.key]?.boss || "D'ACCÈS").toUpperCase()} VALIDÉE`, 'Déverrouillage du mécanisme…', 2);
+    return;
+  }
+  v.open = true; v.state = 'open';
   if (v.door && v.door.alive) {
     removeCollider(v.door); v.door.alive = false;
     scene.remove(v.door.mesh); removeTarget(v.door.mesh);
     if (v.door.house) rebuildHouse(v.door.house);
   }
+  completeVault(v);
+}
+function completeVault(v) {
+  if (v.rewarded) return;
+  v.rewarded = true;
+  if (v.seedLoot) v.seedLoot();
   burst(_v1.set(v.x, v.y + 2.2, v.z + 3), 0xffc400, 26, 6, 0.22, 0.5, 1);
   sfxAt('break', _v1, 1); sfx('chest', 0.9);
   addXP('Coffre-fort ouvert', 300);
@@ -4032,7 +3983,14 @@ function botPickGoal(b) {
   if (b.armed && (free < 3 || storm.stage === 'shrink')) return;
   let best = null, bd = b.armed ? 22 : 45;
   for (const c of chests) { if (c.opened || Math.abs(c.y - b.pos.y) > 5) continue; const d = Math.hypot(c.x - b.pos.x, c.z - b.pos.z); if (d < bd) { bd = d; best = { kind: 'chest', ref: c }; } }
-  for (const L of loot) { if (!L.alive || L.item.kind !== 'weapon' || L.claimed && L.claimed !== b) continue; if (b.slots.some((x) => x && x.id === L.item.id)) continue; const d = Math.hypot(L.pos.x - b.pos.x, L.pos.z - b.pos.z); if (d < bd) { bd = d; best = { kind: 'loot', ref: L }; } }
+  for (const L of loot) {
+    if (!L.alive || L.item.kind !== 'weapon' || L.claimed && L.claimed !== b) continue;
+    if (Math.abs(L.pos.y - b.pos.y) > 3 || b.slots.some((x) => x && x.id === L.item.id)) continue;
+    const dist = Math.hypot(L.pos.x - b.pos.x, L.pos.z - b.pos.z);
+    if (dist > (b.armed ? 22 : 45)) continue;
+    const score = dist * (L.item.id === profileOf(b).weapon ? 0.65 : 1);
+    if (score < bd) { bd = score; best = { kind: 'loot', ref: L }; }
+  }
   if (!best) return;
   const r = best.ref;
   if (best.kind === 'loot') r.claimed = b;
@@ -4684,7 +4642,7 @@ function updateHUD(dt) {
   const pr = $('prompt');
   if (player.alive && player.mode === 'ground') {
     const t = nearestInteract();
-    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (player.keycards && player.keycards[t.v.poi.key] ? 'Ouvrir le coffre-fort' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
+    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (t.v.mechanism && t.v.state !== 'locked' ? 'Ouverture mécanique en cours…' : player.keycards && player.keycards[t.v.poi.key] ? 'Scanner la carte d’accès' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
     else pr.style.display = 'none';
   } else if (player.alive && player.mode === 'drive') { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> Descendre · ${Math.round(Math.abs(player.vehicle.speed) * 3.6)} km/h`; }
   else pr.style.display = 'none';
@@ -4816,7 +4774,7 @@ function updateWorld(dt) {
       L.vel.y -= 20 * dt; L.pos.addScaledVector(L.vel, dt);
       let gy = terrainH(L.pos.x, L.pos.z);
       queryCols(L.pos.x, L.pos.z, 0.5, tmpCols);
-      for (const c of tmpCols) if (c.type === 'box' && L.pos.x > c.minX && L.pos.x < c.maxX && L.pos.z > c.minZ && L.pos.z < c.maxZ && c.maxY <= L.pos.y + 0.5 && c.maxY > gy) gy = c.maxY;
+      for (const c of tmpCols) if ((c.type === 'box' || (c.type === 'cavernRoof' && c.contains(L.pos.x, L.pos.z))) && L.pos.x > c.minX && L.pos.x < c.maxX && L.pos.z > c.minZ && L.pos.z < c.maxZ && c.maxY <= L.pos.y + 0.5 && c.maxY > gy) gy = c.maxY;
       if (L.pos.y <= gy) { L.pos.y = gy; L.vel.set(0, 0, 0); }
     }
     L.model.rotation.y += dt * 1.4;
@@ -4876,7 +4834,11 @@ function updateLightPool() {
   const pp = player ? player.pos : camera.position;
   for (const c of chests) if (!c.opened && c.light.intensity > 0) _lc.push(c.light);
   for (const d of drops) if (!d.opened && d.light.intensity > 0) _lc.push(d.light);
-  for (const v of _lc) { const o = v.obj.position; v.d2 = (o.x - pp.x) ** 2 + (o.z - pp.z) ** 2; }
+  if (agencyLayout && pp.y < agencyLayout.lobbyY - 1.5 && Math.abs(pp.x - POIS[0].x) < 20 && Math.abs(pp.z - POIS[0].z) < 15) {
+    for (const l of agencyLayout.lights) _lc.push(l);
+  }
+  if (grottoLayout && pp.y < grottoLayout.surfaceY && Math.abs(pp.x - GROTTO.x) < 35 && Math.abs(pp.z - GROTTO.z) < 46) _lc.push(...grottoLayout.lights);
+  for (const v of _lc) { const o = v.obj.position; v.d2 = (o.x - pp.x) ** 2 + (o.z - pp.z) ** 2 + ((o.y + v.y) - pp.y) ** 2 * 4; }
   _lc.sort((a, b) => a.d2 - b.d2);
   for (let i = 0; i < LIGHT_POOL.length; i++) {
     const L = LIGHT_POOL[i], v = _lc[i];
@@ -4895,7 +4857,7 @@ function updateDrops(dt) {
       for (const c of tmpCols) {
         if (!c.alive) continue;
         if (d.x <= c.minX || d.x >= c.maxX || d.z <= c.minZ || d.z >= c.maxZ) continue;
-        if (c.type === 'box') { if (c.maxY > gy && c.maxY < d.y + 0.5) { gy = c.maxY; sup = c; sl = null; } }
+        if (c.type === 'box' || (c.type === 'cavernRoof' && c.contains(d.x, d.z))) { if (c.maxY > gy && c.maxY < d.y + 0.5) { gy = c.maxY; sup = c; sl = null; } }
         else if (c.type === 'slope') {
           // toit à deux pentants : la caisse se pose sur la pente, pas dans la toiture
           const h = slopeH(c, d.x, d.z);
@@ -5116,6 +5078,7 @@ function step(dt) {
   if (player.mode === 'bus' && bus.active) { player.pos.copy(bus.pos); }
   updatePlayer(dt);
   updateDoors(dt);
+  for (const v of vaults) if (v.mechanism && v.mechanism.update(dt)) completeVault(v);
   frameN++;
   for (const c of chars) {
     const cp = camera.position, dx = c.pos.x - cp.x, dz = c.pos.z - cp.z;
@@ -5178,9 +5141,18 @@ window.advanceTime = (ms) => { const n = Math.ceil(ms / 16.67); for (let i = 0; 
 window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
+  botProfiles: Object.fromEntries(BOT_PROFILE_IDS.map((id) => [id, bots.filter((b) => b.profile === id && b.alive).length])),
+  nearbyBots: bots.filter((b) => b.alive && player && b.pos.distanceToSquared(player.pos) < 6400).slice(0, 8).map((b) => ({ name: b.name, profile: b.profile, tactic: b.tactic, hp: Math.round(b.hp), pos: b.pos.toArray().map((v) => +v.toFixed(1)) })),
+  agencyVault: (() => { const v = vaults.find((v) => v.poi.key === 'agency'); return v && { pos: [v.x, v.y, v.z], open: v.open, state: v.state, angle: v.mechanism?.hinge.rotation.y, interior: true }; })(),
+  agencyUnderground: agencyLayout && { levels: [agencyLayout.basementY, agencyLayout.lowerY], pipes: agencyLayout.pipeRuns, valves: agencyLayout.valves },
+  grotto: grottoLayout && { surfaceY: GROTTO.surfaceY, floorY: GROTTO.floorY, shaft: GROTTO.shaft, vaultInside: true, version: grottoLayout.version },
 });
 window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
-  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
+  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; },
+  agencyLayout, grottoLayout, profileOf, preferredDistance, combatIntent, botThink,
+  surfaces: { library: surfaceLibrary, buildings: HOUSE_MAT, get terrain() { return terrainMaterial; } },
+  nature: { library: natureLibrary, trees, rocks,
+    meshes: { trunk: trunkIM, foliage: leafIM, crown: leaf2IM, broadFoliage: broadLeafIM, broadCrown: broadCrownIM, rock: rockIM } } };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built
