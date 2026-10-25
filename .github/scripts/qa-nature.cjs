@@ -27,6 +27,12 @@ const puppeteer = require('puppeteer');
           return h >>> 0;
         };
         const deterministic = kinds.every(k => hash(N.library[k]) === hash(second[k]));
+        const rockPixels = N.library.rock.image.getContext('2d').getImageData(0, 0, 512, 512).data;
+        let crackPixels = 0, clearPixels = 0;
+        for (let i = 3; i < rockPixels.length; i += 4) {
+          if (rockPixels[i] > 210) crackPixels++;
+          if (rockPixels[i] === 128) clearPixels++;
+        }
         const distinct = new Set(kinds.map(k => hash(N.library[k]))).size;
         const sizes = kinds.map(k => [N.library[k].image.width, N.library[k].image.height]);
         kinds.forEach(k => second[k].dispose());
@@ -45,7 +51,24 @@ const puppeteer = require('puppeteer');
           for (let i = 0; i < 4; i++) { p.cool = 0; G.fire(p, origin, dir, false); }
           return { hp, after: resource.hp, alive: resource.alive, colliderAlive: resource.col.alive };
         };
-        const t = N.trees.find(t => t.i > 0 && t.y > 3);
+        // Stage on level ground: a branch pointing into a steep bank is correctly
+        // occluded by terrain, which should not make this picking test random.
+        const t = N.trees.find(t => t.i > 0 && t.y > 3 &&
+          [[2.4, 0], [-2.4, 0], [0, 2.4], [0, -2.4]].every(([x, z]) =>
+            Math.abs(G.terrainH(t.x + x, t.z + z) - t.y - .2) < .35));
+        const geo = N.meshes.trunk.geometry, instance = new G.THREE.Matrix4();
+        N.meshes.trunk.getMatrixAt(t.i, instance);
+        const branchPoint = new G.THREE.Vector3().fromArray(geo.userData.branchSamples[0]).applyMatrix4(instance);
+        G.camera.parent.updateMatrixWorld(true);
+        const branchHit = G.castRay(branchPoint.clone().add(new G.THREE.Vector3(0, -.45, 0)), new G.THREE.Vector3(0, 1, 0), 1, p);
+        const branchPicked = branchHit?.type === 'tree' && branchHit.tree === t;
+        const branchOrigin = branchPoint.clone().add(new G.THREE.Vector3(0, -.45, 0));
+        p.pos.copy(branchOrigin); p.cool = 0;
+        G.fire(p, branchOrigin, new G.THREE.Vector3(0, 1, 0), false);
+        const branchHarvested = t.hp === 100 && p.mats.wood === 14;
+        const branchGeometry = { count: geo.userData.branchCount, segments: geo.userData.branchSegments,
+          vertices: geo.attributes.position.count, finite: [...geo.attributes.position.array].every(Number.isFinite),
+          reach: geo.boundingBox.max.x - geo.boundingBox.min.x };
         const neighbour = N.trees[(t.i + 1) % N.trees.length];
         const tree = hitResource(t, 'tree');
         const hiddenTree = t.ims.every(im => {
@@ -57,13 +80,21 @@ const puppeteer = require('puppeteer');
         const matrix = new G.THREE.Matrix4(); N.meshes.rock.getMatrixAt(r.i, matrix);
         const hiddenRock = matrix.elements[0] === 0 && matrix.elements[5] === 0 && matrix.elements[10] === 0;
         p.pos.set(-60, G.terrainH(-60, 32), 32); p.vel.set(0, 0, 0); G.setCam(0, .15); advanceTime(500);
-        return { deterministic, distinct, sizes, tree, rock, hiddenTree, hiddenRock, neighbour: neighbour.alive,
+        return { version: N.library.version, deterministic, distinct, sizes, tree, rock, hiddenTree, hiddenRock, neighbour: neighbour.alive,
+          branchPicked, branchHarvested, branchGeometry, crackPixels, clearPixels, fractureChains: N.library.rock.userData.fractureChains,
           wood: p.mats.wood, stone: p.mats.stone, counts: [N.trees.length, N.rocks.length],
           sharedFoliage: N.meshes.foliage.material === N.meshes.crown.material,
           materials: Object.values(N.meshes).map(im => im.material.userData.natureSurface),
           instanced: Object.values(N.meshes).every(im => im.isInstancedMesh) };
       });
       assert(result.deterministic); assert.equal(result.distinct, 3);
+      assert.equal(result.version, 2);
+      assert(result.branchPicked, 'The new branch must pick the same harvestable tree');
+      assert(result.branchHarvested, 'Hitting a branch must damage its parent tree and give wood');
+      assert.equal(result.branchGeometry.count, 4); assert.equal(result.branchGeometry.segments, 12);
+      assert(result.branchGeometry.finite && result.branchGeometry.vertices > 400 && result.branchGeometry.reach > 3);
+      assert(result.crackPixels > 5000 && result.clearPixels > 100000, 'Strong fissures remain distinct from intact stone');
+      assert.equal(result.fractureChains, 61);
       assert.deepEqual(result.sizes, [[512, 512], [512, 512], [512, 512]]);
       assert(result.hiddenTree && result.hiddenRock && result.neighbour);
       assert(!result.tree.alive && !result.rock.alive);

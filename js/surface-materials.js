@@ -3,14 +3,14 @@ export const SURFACE = Object.freeze({ PLAIN: 0, WOOD: 1, BRICK: 2, STONE: 3, PL
 
 // Shared instanced nature materials. The generators never consume the map RNG.
 export function createNatureLibrary(THREE) {
-  const library = { version: 1 };
+  const library = { version: 2 };
   for (const [kind, seed, base] of [['bark', 7731, 166], ['foliage', 7732, 159], ['rock', 7733, 189]]) {
     const s = 512, c = canvas(s), g = c.getContext('2d'), r = random(seed);
     grain(g, s, seed, base, kind === 'rock' ? 28 : 18);
     // Draw a toroidal tile: strokes crossing an edge continue at the opposite edge.
-    const wrap = (draw) => {
+    const wrap = (draw, context = g) => {
       for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) {
-        g.save(); g.translate(dx, dy); draw(); g.restore();
+        context.save(); context.translate(dx, dy); draw(); context.restore();
       }
     };
     if (kind === 'bark') {
@@ -60,7 +60,7 @@ export function createNatureLibrary(THREE) {
           g.lineTo(x + w * .65, y + h); g.lineTo(x - w * .2, y + h * .7); g.fill();
         });
       }
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 40; i++) {
         const points = [[r() * s, r() * s]], count = 3 + (r() * 5 | 0);
         for (let j = 0; j < count; j++) {
           const p = points[points.length - 1]; points.push([p[0] + 4 + r() * 20, p[1] - 12 + r() * 27]);
@@ -74,12 +74,44 @@ export function createNatureLibrary(THREE) {
       for (let i = 0; i < 4500; i++) {
         g.fillStyle = gray(110 + r() * 140); g.fillRect(r() * s, r() * s, .7 + r() * 1.6, .7 + r() * 1.6);
       }
+      // Broad, angular fracture networks over the fine grain. Pack depth in alpha,
+      // preserving RGB with alpha >= 128 (canvas premultiplication would erase RGB at 0).
+      const mask = canvas(s), m = mask.getContext('2d');
+      m.fillStyle = '#000'; m.fillRect(0, 0, s, s);
+      const fracture = (start, angle, length, width) => {
+        const points = [start], count = 5;
+        for (let j = 1; j <= count; j++) {
+          const bend = angle + (r() - .5) * 1.1, p = points[points.length - 1];
+          points.push([p[0] + Math.cos(bend) * length / count, p[1] + Math.sin(bend) * length / count]);
+        }
+        const path = ctx => {
+          ctx.beginPath(); points.forEach(([x, y], j) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+          ctx.lineJoin = 'bevel'; ctx.lineCap = 'round';
+        };
+        wrap(() => {
+          path(g); g.strokeStyle = gray(121); g.lineWidth = width + 4; g.stroke();
+          g.strokeStyle = gray(48); g.lineWidth = width; g.stroke();
+          g.translate(-1.2, -1.6); g.strokeStyle = 'rgba(255,255,255,.48)'; g.lineWidth = 1.1; g.stroke();
+        });
+        wrap(() => { path(m); m.strokeStyle = '#fff'; m.lineWidth = width; m.stroke(); }, m);
+        return points;
+      };
+      for (let i = 0; i < 7; i++) {
+        const angle = r() * Math.PI * 2;
+        const points = fracture([r() * s, r() * s], angle, 170 + r() * 170, 3.5 + r() * 3);
+        fracture(points[2], angle + .85, 65 + r() * 80, 1.8 + r() * 1.2);
+        fracture(points[4], angle - .95, 50 + r() * 75, 1.6 + r());
+      }
+      const pixels = g.getImageData(0, 0, s, s), depth = m.getImageData(0, 0, s, s).data;
+      for (let i = 0; i < depth.length; i += 4) pixels.data[i + 3] = 128 + Math.round(depth[i] * 127 / 255);
+      g.putImageData(pixels, 0, 0);
     }
     const texture = new THREE.CanvasTexture(c);
     texture.name = `StormDrop ${kind} detail`;
     texture.colorSpace = THREE.NoColorSpace;
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.anisotropy = 4;
+    if (kind === 'rock') texture.userData.fractureChains = 61;
     library[kind] = texture;
   }
   return library;
@@ -88,7 +120,7 @@ export function createNatureLibrary(THREE) {
 export function installNatureSurface(material, library, kind) {
   if (!['bark', 'foliage', 'rock'].includes(kind)) throw new Error(`Unknown nature surface: ${kind}`);
   material.userData.natureSurface = kind;
-  material.customProgramCacheKey = () => `stormdrop-nature-v1-${kind}`;
+  material.customProgramCacheKey = () => `stormdrop-nature-v2-${kind}`;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.natureDetail = { value: library[kind] };
     const varyings = 'varying vec3 vNatureP; varying vec3 vNatureWorld; varying vec2 vNatureUV; varying vec2 vNaturePhase;';
@@ -114,14 +146,17 @@ export function installNatureSurface(material, library, kind) {
         ${kind === 'bark' ? `
           float natureRelief=texture2D(natureDetail,vNatureUV*vec2(1.6,.62)+vNaturePhase).r;
         ` : `
-          vec3 natureCoord=vNatureP*${kind === 'rock' ? '.72' : '.48'};
-          float natureRelief=texture2D(natureDetail,natureCoord.yz+vNaturePhase).r*natureWeights.x
-            +texture2D(natureDetail,natureCoord.xz+vNaturePhase).r*natureWeights.y
-            +texture2D(natureDetail,natureCoord.xy+vNaturePhase).r*natureWeights.z;
+          vec3 natureCoord=vNatureP*${kind === 'rock' ? '.44' : '.48'};
+          vec4 natureSample=texture2D(natureDetail,natureCoord.yz+vNaturePhase)*natureWeights.x
+            +texture2D(natureDetail,natureCoord.xz+vNaturePhase)*natureWeights.y
+            +texture2D(natureDetail,natureCoord.xy+vNaturePhase)*natureWeights.z;
+          float natureRelief=natureSample.r;
         `}
         float natureNear=1.0-smoothstep(30.0,95.0,length(vViewPosition));
         diffuseColor.rgb*=mix(1.0,${kind === 'foliage' ? '.36+.85' : kind === 'bark' ? '.30+1.10' : '.40+.83'}*natureRelief,natureNear);
         ${kind === 'rock' ? `
+          float natureCrack=smoothstep(.05,.55,(natureSample.a-.502)*2.0);
+          diffuseColor.rgb*=1.0-.48*natureCrack*natureNear;
           vec3 natureUp=normalize(cross(dFdx(vNatureWorld),dFdy(vNatureWorld)));
           float natureMoss=smoothstep(.25,.8,natureUp.y)*smoothstep(.64,.83,natureRelief);
           diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.78,1.06,.63),natureMoss*.45*natureNear);

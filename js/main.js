@@ -8,6 +8,7 @@ import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { BOT_PROFILE_IDS, profileOf, preferredDistance, combatIntent } from './bot-profiles.js';
 import { buildAgency } from './agency.js';
 import { buildAgencyVault } from './agency-vault.js';
+import { createBranchedTrunk } from './tree-geometry.js';
 import { SURFACE, surfaceForStyle, createSurfaceLibrary, installTerrainSurface, installBuildingSurface, createNatureLibrary, installNatureSurface } from './surface-materials.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
 
@@ -515,7 +516,7 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
     if (dens < 0.42 - bw.forest * 0.25 && R() < 0.8 - bw.forest * 0.4) continue; // forests clustered
     pts.push({ x, z, h, snow: bw.snow });
   }
-  const trunkG = new THREE.CylinderGeometry(0.28, 0.42, 1, 6); trunkG.translate(0, 0.5, 0);
+  const trunkG = createBranchedTrunk(THREE, mergeGeometries);
   const leafG = new THREE.ConeGeometry(1, 1, 7); leafG.translate(0, 0.5, 0);
   const barkMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0x986039, roughness: .96, flatShading: true }), natureLibrary, 'bark');
   const foliageMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .9, flatShading: true }), natureLibrary, 'foliage');

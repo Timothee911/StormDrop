@@ -67,3 +67,13 @@ Original prompt: Ajoute des bots aux comportements variés. Refait l'agence pour
 - Fixed both texture QA loaders to reload the document when switching quality (a fragment-only navigation does not reinitialize Three.js).
 - Validation: nature, building/grass, Agency/bots, complete C2S2 and bot/vault unit suites pass. Real mouse/keyboard harvesting grants wood and stone and removes the hit instances; no console/shader errors.
 - Inspected close-up foliage/bark, rock and snowy crown screenshots. Desktop/375px resize renders the new surfaces; existing narrow-screen HUD overlaps are unchanged and are not part of this texture change.
+
+## Sculpted branches and stronger rock fissures
+- Request: « Ajoute des branches aux arbres et davantage de fissures aux rochers pour devenir plus proche de Fortnite ».
+- Four asymmetrical crooked/forked branches (12 tapered segments) merged into the reusable trunk geometry, with its bark material. Existing instance transforms, map RNG, tree IDs and three-mesh harvesting pipeline retained; no extra draw calls.
+- Branches participate in the existing tree ray picking and disappear with their parent tree. Root colliders remain narrow to avoid large invisible movement blockers beneath the canopy.
+- Rock detail expanded to 40 fine fracture chains plus seven broad jagged cracks with two offshoots each (61 chains total), dark interiors and highlighted edges.
+- Fissure depth packed in the existing rock texture's alpha channel, preserving RGB at alpha >= 128; triplanar sampling reuses the same texture reads. Larger pattern scale and extra groove contrast make fractures readable from normal play distance.
+- Nature library/shader v2; offline cache v33 includes the new tree geometry module. Added branch picking, geometry bounds, finite vertices, fracture mask coverage and destruction checks to the low/high regression.
+- Low/high nature regression passes: 448 vertices per shared trunk, four branch groups, 12 tapered segments, branch-targeted melee grants wood, tree and rock destruction/collider removal remain correct. Intact-stone/fissure mask coverage verified; no shader/console errors.
+- Agency/bots, building/grass, full C2S2 gameplay and pure bot/vault regression suites pass. Real mouse harvesting removes all trunk/branch/foliage instances and grants wood; screenshots of green/snowy trees, fissured rocks and 375px resize inspected. Existing narrow-screen HUD overlaps unchanged.
