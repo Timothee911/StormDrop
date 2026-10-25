@@ -914,6 +914,16 @@ function removePropCol(c) {
   const i = propCols.indexOf(c); if (i >= 0) propCols.splice(i, 1);
 }
 // AABB englobant un rectangle tourné (coffres, caisses orientés)
+// Collision circulaire (cylindre) faite de bandes de boîtes : suit exactement un socle ou un dôme rond, sans coins invisibles
+function propDisc(x, y, z, r, h, n = 10) {
+  const cols = [], w = (2 * r) / n;
+  for (let i = 0; i < n; i++) {
+    const x0 = -r + i * w, x1 = x0 + w, far = Math.max(Math.abs(x0), Math.abs(x1)); // bord le plus éloigné : la bande reste dans le cercle
+    const hz = Math.sqrt(Math.max(0, r * r - far * far)); if (hz < 0.1) continue;
+    cols.push(propBox(x + (x0 + x1) / 2, y, z, w / 2, hz, h));
+  }
+  return cols;
+}
 function propBoxRot(x, y, z, hx, hz, h, a) {
   const ca = Math.abs(Math.cos(a)), sa = Math.abs(Math.sin(a));
   return propBox(x, y, z, hx * ca + hz * sa, hx * sa + hz * ca, h);
@@ -3338,8 +3348,8 @@ function buildSpyPOI(p) {
     hdeco(CYL_GEO, 0x1f2430, p.x, p.h + 20.6, p.z, 7.5, 0.6, 7.5);
     hdeco(CYL_GEO, 0x6fd0ff, p.x, p.h + 22.0, p.z, 6.4, 2.4, 6.4);
     // dôme vitré de l'atrium : collision à la taille réelle du modèle (socle rond 7,5 m, dôme 6,4 m), plus de toit invisible autour
-    propBox(p.x, p.h + 20.0, p.z, 3.75, 3.75, 0.9);
-    propBox(p.x, p.h + 20.9, p.z, 3.2, 3.2, 2.4);
+    propDisc(p.x, p.h + 20.0, p.z, 3.75, 0.9);
+    propDisc(p.x, p.h + 20.9, p.z, 3.2, 2.4);
     hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 7.0, 0.3, 0.3);
     hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 0.3, 0.3, 7.0);
 

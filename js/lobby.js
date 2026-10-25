@@ -6,11 +6,10 @@ import { initAudio, playMusic, stopMusic, setVolumes, sfx } from './audio.js';
 import { RARITIES, SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, CATS, DEFAULT_LOADOUT, makeCharMesh, makePickaxe, makeGlider, makeParachute, poseEmote, poseIdle, mat } from './cosmetics.js';
 
 const $ = (id) => document.getElementById(id);
-const XP_PER_LEVEL = 1500;
+const XP_PER_LEVEL = 10000;
 const MAX_TIER = 30;
-// Chaque niveau demande plus d'XP que le précédent (+450 par niveau) :
-// niveau 1 = 1500 XP, niveau 2 = 1950, niveau 3 = 2400…
-function xpNeeded(level) { return XP_PER_LEVEL + (Math.max(1, level) - 1) * 450; }
+// Chaque niveau demande exactement 10 000 XP.
+function xpNeeded() { return XP_PER_LEVEL; }
 
 // ---------------------------------------------------------------------------
 // Player profile (kept in memory for this page session)
