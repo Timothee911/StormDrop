@@ -7,7 +7,7 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 (async () => {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+  const browser = await puppeteer.launch({ headless: true, protocolTimeout: 600000, args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
