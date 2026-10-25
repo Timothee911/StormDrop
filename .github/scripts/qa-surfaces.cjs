@@ -12,7 +12,7 @@ const puppeteer = require('puppeteer');
     const base = process.env.QA_URL || 'http://127.0.0.1:8090';
     const load = async (quality) => {
       const hash = encodeURIComponent(JSON.stringify({ settings: { quality, outline: 0 } }));
-      await page.goto(`${base}/game.html#${hash}`, { waitUntil: 'load', timeout: 120000 });
+      await page.goto(`${base}/game.html?qa_quality=${quality}#${hash}`, { waitUntil: 'load', timeout: 120000 });
       await page.waitForFunction(() => window.__game?.player, { polling: 100, timeout: 120000 });
     };
     await load('basse');

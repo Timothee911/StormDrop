@@ -1,5 +1,141 @@
 // Original, deterministic, seamless detail textures. No network assets or world RNG.
 export const SURFACE = Object.freeze({ PLAIN: 0, WOOD: 1, BRICK: 2, STONE: 3, PLASTER: 4, ROOF: 5, METAL: 6, CONCRETE: 7 });
+
+// Shared instanced nature materials. The generators never consume the map RNG.
+export function createNatureLibrary(THREE) {
+  const library = { version: 1 };
+  for (const [kind, seed, base] of [['bark', 7731, 166], ['foliage', 7732, 159], ['rock', 7733, 189]]) {
+    const s = 512, c = canvas(s), g = c.getContext('2d'), r = random(seed);
+    grain(g, s, seed, base, kind === 'rock' ? 28 : 18);
+    // Draw a toroidal tile: strokes crossing an edge continue at the opposite edge.
+    const wrap = (draw) => {
+      for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) {
+        g.save(); g.translate(dx, dy); draw(); g.restore();
+      }
+    };
+    if (kind === 'bark') {
+      for (let i = 0; i < 70; i++) {
+        const x = r() * s, y = r() * s, len = 50 + r() * 250, w = 1 + r() * 5;
+        wrap(() => {
+          g.beginPath(); g.moveTo(x, y);
+          g.bezierCurveTo(x - 9, y + len * .3, x + 8, y + len * .7, x + 2, y + len);
+          g.strokeStyle = gray(65 + (i % 7) * 10); g.lineWidth = w; g.stroke();
+          g.translate(w + 1, 0); g.strokeStyle = 'rgba(255,255,255,.27)'; g.lineWidth = 1; g.stroke();
+        });
+      }
+      for (let i = 0; i < 8; i++) {
+        const x = r() * s, y = r() * s, w = 5 + r() * 5, h = 14 + r() * 13;
+        wrap(() => {
+          for (let ring = 1; ring <= 4; ring++) {
+            g.beginPath(); g.ellipse(x, y, w * ring / 2, h * ring / 2, .12, 0, Math.PI * 2);
+            g.strokeStyle = gray(75 + ring * 17); g.lineWidth = 1.4; g.stroke();
+          }
+        });
+      }
+    } else if (kind === 'foliage') {
+      // Layered sprigs instead of a flat fill. Original instance colours tint these needles.
+      for (let i = 0; i < 650; i++) {
+        const x = r() * s, y = r() * s, angle = r() * Math.PI * 2;
+        const size = 15 + r() * 31, shade = 55 + r() * 190;
+        wrap(() => {
+          g.translate(x, y); g.rotate(angle);
+          g.strokeStyle = gray(shade * .8); g.lineWidth = 1;
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -size); g.stroke();
+          for (let j = 0; j < 5; j++) {
+            const h = size * j / 5, spread = size * .36 * (1 - j / 6);
+            g.strokeStyle = gray(shade + j * 2); g.lineWidth = 1.8;
+            g.beginPath(); g.moveTo(-spread, -h - size * .25); g.lineTo(0, -h);
+            g.lineTo(spread, -h - size * .25); g.stroke();
+          }
+        });
+      }
+    } else {
+      // Angular mineral inclusions, hairline fractures and small aggregate.
+      for (let i = 0; i < 150; i++) {
+        const x = r() * s, y = r() * s, w = 3 + r() * 27, h = 2 + r() * 17;
+        const shade = 115 + r() * 120;
+        wrap(() => {
+          g.fillStyle = gray(shade); g.globalAlpha = .55;
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + w, y + h * .2);
+          g.lineTo(x + w * .65, y + h); g.lineTo(x - w * .2, y + h * .7); g.fill();
+        });
+      }
+      for (let i = 0; i < 25; i++) {
+        const points = [[r() * s, r() * s]], count = 3 + (r() * 5 | 0);
+        for (let j = 0; j < count; j++) {
+          const p = points[points.length - 1]; points.push([p[0] + 4 + r() * 20, p[1] - 12 + r() * 27]);
+        }
+        wrap(() => {
+          g.beginPath(); points.forEach(([x, y], j) => j ? g.lineTo(x, y) : g.moveTo(x, y));
+          g.strokeStyle = gray(70 + i % 5 * 10); g.lineWidth = 1.1 + i % 3 * .4; g.stroke();
+          g.translate(0, 1.4); g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = .7; g.stroke();
+        });
+      }
+      for (let i = 0; i < 4500; i++) {
+        g.fillStyle = gray(110 + r() * 140); g.fillRect(r() * s, r() * s, .7 + r() * 1.6, .7 + r() * 1.6);
+      }
+    }
+    const texture = new THREE.CanvasTexture(c);
+    texture.name = `StormDrop ${kind} detail`;
+    texture.colorSpace = THREE.NoColorSpace;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = 4;
+    library[kind] = texture;
+  }
+  return library;
+}
+
+export function installNatureSurface(material, library, kind) {
+  if (!['bark', 'foliage', 'rock'].includes(kind)) throw new Error(`Unknown nature surface: ${kind}`);
+  material.userData.natureSurface = kind;
+  material.customProgramCacheKey = () => `stormdrop-nature-v1-${kind}`;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.natureDetail = { value: library[kind] };
+    const varyings = 'varying vec3 vNatureP; varying vec3 vNatureWorld; varying vec2 vNatureUV; varying vec2 vNaturePhase;';
+    shader.vertexShader = `${varyings}\n${shader.vertexShader}`.replace('#include <begin_vertex>', `#include <begin_vertex>
+      // Instance transforms matter: tree height/radius and rotated rock scales are non-uniform.
+      #ifdef USE_INSTANCING
+        vec3 natureScale=vec3(length(instanceMatrix[0].xyz),length(instanceMatrix[1].xyz),length(instanceMatrix[2].xyz));
+        vNatureP=transformed*natureScale;
+        vNatureWorld=(modelMatrix*instanceMatrix*vec4(transformed,1.0)).xyz;
+        vNatureUV=uv*vec2(natureScale.x,natureScale.y);
+        vNaturePhase=fract(instanceMatrix[3].xz*vec2(.137,.173))*13.0;
+      #else
+        vNatureP=transformed;
+        vNatureWorld=(modelMatrix*vec4(transformed,1.0)).xyz;
+        vNatureUV=uv; vNaturePhase=vec2(0.0);
+      #endif
+    `);
+    shader.fragmentShader = `uniform sampler2D natureDetail;\n${varyings}\n${shader.fragmentShader}`
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec3 natureFace=normalize(cross(dFdx(vNatureP),dFdy(vNatureP)));
+        vec3 natureWeights=pow(abs(natureFace),vec3(5.0));
+        natureWeights/=max(dot(natureWeights,vec3(1.0)),.0001);
+        ${kind === 'bark' ? `
+          float natureRelief=texture2D(natureDetail,vNatureUV*vec2(1.6,.62)+vNaturePhase).r;
+        ` : `
+          vec3 natureCoord=vNatureP*${kind === 'rock' ? '.72' : '.48'};
+          float natureRelief=texture2D(natureDetail,natureCoord.yz+vNaturePhase).r*natureWeights.x
+            +texture2D(natureDetail,natureCoord.xz+vNaturePhase).r*natureWeights.y
+            +texture2D(natureDetail,natureCoord.xy+vNaturePhase).r*natureWeights.z;
+        `}
+        float natureNear=1.0-smoothstep(30.0,95.0,length(vViewPosition));
+        diffuseColor.rgb*=mix(1.0,${kind === 'foliage' ? '.36+.85' : kind === 'bark' ? '.30+1.10' : '.40+.83'}*natureRelief,natureNear);
+        ${kind === 'rock' ? `
+          vec3 natureUp=normalize(cross(dFdx(vNatureWorld),dFdy(vNatureWorld)));
+          float natureMoss=smoothstep(.25,.8,natureUp.y)*smoothstep(.64,.83,natureRelief);
+          diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.78,1.06,.63),natureMoss*.45*natureNear);
+        ` : ''}
+      `)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        vec3 nq0=dFdx(-vViewPosition),nq1=dFdy(-vViewPosition);
+        vec3 nr1=cross(nq1,normal),nr2=cross(normal,nq0); float ndet=dot(nq0,nr1);
+        normal=normalize(abs(ndet)*normal-sign(ndet)*${kind === 'foliage' ? '.012' : '.028'}*natureNear
+          *(dFdx(natureRelief)*nr1+dFdy(natureRelief)*nr2));
+      `);
+  };
+  return material;
+}
 export function surfaceForStyle(style) {
   return ({ brick: 2, city: 4, adobe: 4, agency: 3, bunker: 7, wood: 1, beach: 1, chalet: 1 })[style] ?? 4;
 }

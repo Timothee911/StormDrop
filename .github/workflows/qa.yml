@@ -150,6 +150,7 @@ jobs:
           sleep 2
           node .github/scripts/qa-agency-bots.cjs || STATUS=1
           node .github/scripts/qa-surfaces.cjs || STATUS=1
+          node .github/scripts/qa-nature.cjs || STATUS=1
           pkill -f "http.server 8090" 2>/dev/null || true
           exit $STATUS
 

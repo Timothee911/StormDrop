@@ -8,7 +8,7 @@ import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { BOT_PROFILE_IDS, profileOf, preferredDistance, combatIntent } from './bot-profiles.js';
 import { buildAgency } from './agency.js';
 import { buildAgencyVault } from './agency-vault.js';
-import { SURFACE, surfaceForStyle, createSurfaceLibrary, installTerrainSurface, installBuildingSurface } from './surface-materials.js';
+import { SURFACE, surfaceForStyle, createSurfaceLibrary, installTerrainSurface, installBuildingSurface, createNatureLibrary, installNatureSurface } from './surface-materials.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
 
 // =====================================================================
@@ -161,6 +161,7 @@ const SUN_OFF = new THREE.Vector3(70, 120, 50);
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 const matCache = new Map();
 const surfaceLibrary = createSurfaceLibrary(THREE);
+const natureLibrary = createNatureLibrary(THREE);
 function matC(color, opts = {}) {
   const k = color + JSON.stringify(opts);
   if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.0, ...opts }));
@@ -516,9 +517,11 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
   }
   const trunkG = new THREE.CylinderGeometry(0.28, 0.42, 1, 6); trunkG.translate(0, 0.5, 0);
   const leafG = new THREE.ConeGeometry(1, 1, 7); leafG.translate(0, 0.5, 0);
-  trunkIM = new THREE.InstancedMesh(trunkG, matC(0x7a4a26), pts.length);
-  leafIM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
-  leaf2IM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
+  const barkMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0x986039, roughness: .96, flatShading: true }), natureLibrary, 'bark');
+  const foliageMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .9, flatShading: true }), natureLibrary, 'foliage');
+  trunkIM = new THREE.InstancedMesh(trunkG, barkMat, pts.length);
+  leafIM = new THREE.InstancedMesh(leafG, foliageMat, pts.length);
+  leaf2IM = new THREE.InstancedMesh(leafG, foliageMat, pts.length);
   const lc = new THREE.Color(), snowC = new THREE.Color(0xeef6ff);
   pts.forEach((p, i) => {
     const s = rand(0.85, 1.35);
@@ -566,7 +569,8 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
     if (h < 1.2 || inPOI(x, z, 4)) continue;
     rpts.push({ x, z, h });
   }
-  rockIM = new THREE.InstancedMesh(rg, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), rpts.length);
+  const rockMat = installNatureSurface(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), natureLibrary, 'rock');
+  rockIM = new THREE.InstancedMesh(rg, rockMat, rpts.length);
   rpts.forEach((p, i) => {
     const s = rand(0.9, 2.4);
     dummy.position.set(p.x, p.h + s * 0.25, p.z); dummy.rotation.set(rand(3), rand(3), rand(3)); dummy.scale.set(s * 1.2, s * 0.9, s); dummy.updateMatrix();
@@ -5125,7 +5129,8 @@ window.render_game_to_text = () => JSON.stringify({
 window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; },
   agencyLayout, profileOf, preferredDistance, combatIntent, botThink,
-  surfaces: { library: surfaceLibrary, buildings: HOUSE_MAT, get terrain() { return terrainMaterial; } } };
+  surfaces: { library: surfaceLibrary, buildings: HOUSE_MAT, get terrain() { return terrainMaterial; } },
+  nature: { library: natureLibrary, trees, rocks, meshes: { trunk: trunkIM, foliage: leafIM, crown: leaf2IM, rock: rockIM } } };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built

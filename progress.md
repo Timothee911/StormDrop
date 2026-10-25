@@ -56,3 +56,14 @@ Original prompt: Ajoute des bots aux comportements variés. Refait l'agence pour
 - No extra scene meshes or draw calls for surface detail. Two shared detail textures, cached by service-worker v31; legacy build-piece textures and all gameplay geometry remain unchanged.
 - Added browser regression for deterministic pixels, distinct atlas tiles/orientation, material IDs, blue timber, Agency stone, rebatching after damage, walking and low/high shader compilation.
 - Validation: texture regression, Agency/B1/B2/vault/bot regression, full C2S2 gameplay regression and pure bot/vault units pass. No shader compilation or console errors; syntax and diff checks pass.
+
+## Tree and rock detail textures
+- Request: « Ajoute des textures plus détaillées aux arbres et aux rochers ».
+- Three original deterministic 512×512 repeating canvas detail maps: grooved/knotted bark, layered pine sprigs, mineral aggregate and fine fractures.
+- Dedicated instanced materials use instance scale and rotation correctly; cylindrical bark and triplanar foliage/stone avoid stretched rock UVs. Original snowy crown instance colours are retained.
+- Slight surface relief, rock-top moss tint and distance fade. Crown/lower foliage share one material; no extra meshes or draw calls, no world RNG consumption and no external downloads.
+- Original tree/rock geometry, instance IDs, placement, collision and harvesting logic are unchanged. Cacti are outside this texture refresh.
+- Service worker v32 invalidates cached modules. Added low/high nature regression to CI: deterministic pixels, material sharing, instancing, ray picking, wood/stone gains and hiding a harvested non-first instance without hiding its neighbour.
+- Fixed both texture QA loaders to reload the document when switching quality (a fragment-only navigation does not reinitialize Three.js).
+- Validation: nature, building/grass, Agency/bots, complete C2S2 and bot/vault unit suites pass. Real mouse/keyboard harvesting grants wood and stone and removes the hit instances; no console/shader errors.
+- Inspected close-up foliage/bark, rock and snowy crown screenshots. Desktop/375px resize renders the new surfaces; existing narrow-screen HUD overlaps are unchanged and are not part of this texture change.
