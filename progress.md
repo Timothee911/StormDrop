@@ -46,3 +46,13 @@ Original prompt: Ajoute des bots aux comportements variés. Refait l'agence pour
 - The legacy test now controls RAF and advances simulation without hundreds of redundant renders during landing. Production frame scheduling is unchanged.
 - Deployed preview checked in a fresh context: lobby navigation and launch, 35 pipe runs / 16 valves, B2 geometry, card input and a fully opened vault whose hinged leaf remains visible and solid.
 - References: https://www.thegamer.com/fortnites-chapter-2-season-2-vault-locations-unlock-guide/ and https://screenrant.com/fortnite-vault-key-cards-chapter-2-season-2/
+
+## Building and grass textures
+- Request: « Refait la texture des bâtiments et de l'herbe ».
+- Original deterministic canvas atlas (1024×512) and seamless grass detail (512×512), generated locally without external assets or consuming the world's RNG.
+- Explicit per-vertex material IDs survive static batching and wall destruction. Pastel blue timber is no longer classified as glass; Agency limestone is not misclassified as brick. Curved bastions and stone mouldings are included.
+- World-space wood siding, staggered bricks, ashlar, plaster, roof tiles, metal panels and concrete; subtle relief/roughness and metre-scale repeats.
+- Meadow palette and grass instances harmonized; near-field blade detail fades at distance and is masked away from sand/snow/rock.
+- No extra scene meshes or draw calls for surface detail. Two shared detail textures, cached by service-worker v31; legacy build-piece textures and all gameplay geometry remain unchanged.
+- Added browser regression for deterministic pixels, distinct atlas tiles/orientation, material IDs, blue timber, Agency stone, rebatching after damage, walking and low/high shader compilation.
+- Validation: texture regression, Agency/B1/B2/vault/bot regression, full C2S2 gameplay regression and pure bot/vault units pass. No shader compilation or console errors; syntax and diff checks pass.

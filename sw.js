@@ -1,5 +1,5 @@
 // STORMDROP service worker: the game works offline once it has been opened one time.
-const VERSION = 'stormdrop-v30';
+const VERSION = 'stormdrop-v31';
 const CORE = [
   './',
   './game.html',
@@ -16,6 +16,7 @@ const CORE = [
   './js/agency-underground.js',
   './js/agency-vault.js',
   './js/vault-mechanism.js',
+  './js/surface-materials.js',
   './js/cosmetics.js',
   './js/lobby.js',
   './js/lock.js',

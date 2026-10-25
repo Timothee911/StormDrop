@@ -96,7 +96,7 @@ jobs:
           SERVER_PID=$!
           sleep 2
           STATUS=0
-          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/agency.js js/agency-underground.js js/agency-vault.js js/vault-mechanism.js js/bot-profiles.js js/outline.js js/weapons.js style.css lobby.css; do
+          for path in index.html game.html manifest.webmanifest js/main.js js/lobby.js js/settings.js js/audio.js js/cosmetics.js js/world.js js/agency.js js/agency-underground.js js/agency-vault.js js/vault-mechanism.js js/surface-materials.js js/bot-profiles.js js/outline.js js/weapons.js style.css lobby.css; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/$path)
             if [ "$CODE" != "200" ]; then
               echo "::error file=$path::HTTP $CODE lors du chargement de /$path"
@@ -141,7 +141,7 @@ jobs:
           pkill -f "http.server 8090" 2>/dev/null || true
           exit $STATUS
 
-      - name: Test Agence intérieure et bots tactiques
+      - name: Test Agence, bots tactiques et textures
         id: agence
         run: |
           set -e
@@ -149,6 +149,7 @@ jobs:
           nohup python3 -m http.server 8090 > /tmp/server-agency.log 2>&1 &
           sleep 2
           node .github/scripts/qa-agency-bots.cjs || STATUS=1
+          node .github/scripts/qa-surfaces.cjs || STATUS=1
           pkill -f "http.server 8090" 2>/dev/null || true
           exit $STATUS
 

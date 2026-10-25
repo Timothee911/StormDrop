@@ -8,6 +8,9 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 ## Contenu
 
+- Textures originales des bâtiments : bois peint, briques, enduit, pierre claire de l'Agence, toitures et surfaces techniques. Les matériaux sont attribués explicitement et restent corrects après destruction d'un mur.
+- Herbe retravaillée : grain de brins visible à courte distance, petites variations de teinte et zones plus sèches, avec détails atténués au loin. Les biomes sableux et enneigés conservent leur aspect.
+
 - Bots à cinq profils tactiques : assaut, sniper, constructeur, prudent et flanqueur. Distances, armes recherchées, rafales, repli et construction varient selon le profil ; la zone et le regroupement restent prioritaires.
 - Agence reconstruite : ailes en pierre claire, bastions arrondis, fenêtres verticales, drapeaux bleus, hall sur deux niveaux et étages accessibles. Son coffre-fort est dans un sous-sol fermé accessible par l'escalier intérieur à gauche du hall ; la carte de Midas reste nécessaire.
 - Deux niveaux souterrains : sécurité et salle du coffre en B1, générateurs et chaudières en B2. L'escalier à l'est du B1 dessert le B2 ; conduites colorées, vannes, gaines, plafonds métalliques et panneaux guident l'exploration.

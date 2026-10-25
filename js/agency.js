@@ -1,4 +1,5 @@
 import { buildUnderground } from './agency-underground.js';
+import { SURFACE } from './surface-materials.js';
 // Bespoke Agency headquarters. All dimensions are in metres relative to the POI.
 // Reference silhouette: pale limestone, stepped wings, round bastions and blue GHOST flags.
 export function buildAgency(p, api) {
@@ -7,12 +8,17 @@ export function buildAgency(p, api) {
   const g = p.h + 0.2, basement = p.h - 4;
   const BOX = new THREE.BoxGeometry(1, 1, 1);
   const CYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 40);
+  const stoneDetail = (geo, color, ...transform) => {
+    const entry = deco(geo, color, ...transform);
+    if (entry && [C.stone, C.trim, C.seam].includes(color)) entry.surface = SURFACE.STONE;
+    return entry;
+  };
   const solid = (x, y, z, w, h, d, color = C.stone, fixed = false) =>
     box(p.x + x, y, p.z + z, w, h, d, mat(color), { hp: 350, mat: 'stone', indestructible: fixed });
   const detail = (x, y, z, w, h, d, color = C.trim, ry = 0, rz = 0) =>
-    deco(BOX, color, p.x + x, y + h / 2, p.z + z, w, h, d, 0, ry, rz);
+    stoneDetail(BOX, color, p.x + x, y + h / 2, p.z + z, w, h, d, 0, ry, rz);
   const cylinder = (x, y, z, diameter, h, color) =>
-    deco(CYL, color, p.x + x, y + h / 2, p.z + z, diameter, h, diameter);
+    stoneDetail(CYL, color, p.x + x, y + h / 2, p.z + z, diameter, h, diameter);
 
   // Slabs are split around real stairwells, never covered by an invisible floor.
   function slab(y, x0, x1, z0, z1, holes = [], floorColor = C.floor) {

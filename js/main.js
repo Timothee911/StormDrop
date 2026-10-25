@@ -8,6 +8,7 @@ import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { BOT_PROFILE_IDS, profileOf, preferredDistance, combatIntent } from './bot-profiles.js';
 import { buildAgency } from './agency.js';
 import { buildAgencyVault } from './agency-vault.js';
+import { SURFACE, surfaceForStyle, createSurfaceLibrary, installTerrainSurface, installBuildingSurface } from './surface-materials.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
 
 // =====================================================================
@@ -159,6 +160,7 @@ const SUN_OFF = new THREE.Vector3(70, 120, 50);
 // =====================================================================
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 const matCache = new Map();
+const surfaceLibrary = createSurfaceLibrary(THREE);
 function matC(color, opts = {}) {
   const k = color + JSON.stringify(opts);
   if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.0, ...opts }));
@@ -214,6 +216,7 @@ const GHOST_BAD = new THREE.MeshBasicMaterial({ color: 0xff4d6a, transparent: tr
 // =====================================================================
 // Terrain & water
 const waterT = { value: 0 }, windT = { value: 0 };
+let terrainMaterial;
 // =====================================================================
 const TERRAIN_SIZE = WORLD_R * 2 + 120;
 {
@@ -223,7 +226,7 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
   const pos = geo.attributes.position;
   const cols = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
-  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x76cc4a), g2 = new THREE.Color(0x4fae3f), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0xb59262), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x2f8a3a), snowDirt = new THREE.Color(0xc9d3dc);
+  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x78b94d), g2 = new THREE.Color(0x4e983e), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0xb59262), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x377f3d), snowDirt = new THREE.Color(0xc9d3dc);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const h = terrainH(x, z);
@@ -242,29 +245,8 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.computeVertexNormals();
   const tmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
-  // per-pixel detail on top of the vertex colours (one vertex every ~3 m): grass patches, fine grain,
-  // darker steep slopes and an animated foam line where the island meets the sea
-  tmat.onBeforeCompile = (sh) => {
-    sh.uniforms.uT = waterT;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vWP; uniform float uT;
-      float th(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float tn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(th(i), th(i + vec2(1.0, 0.0)), f.x), mix(th(i + vec2(0.0, 1.0)), th(i + vec2(1.0, 1.0)), f.x), f.y); }`)
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        float patches = tn(vWP.xz * 0.16) * 0.65 + tn(vWP.xz * 0.43 + 17.0) * 0.35;
-        float grain = tn(vWP.xz * 2.1 + 3.0);
-        diffuseColor.rgb *= 0.84 + patches * 0.27 + (grain - 0.5) * 0.08;
-        // drier, yellower grass in large patches (only where the ground is green)
-        float dry = smoothstep(0.5, 0.8, tn(vWP.xz * 0.045 + 40.0)) * step(diffuseColor.r * 1.15, diffuseColor.g);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.18, 1.02, 0.62), dry * 0.55);
-        vec3 fn = normalize(cross(dFdx(vWP), dFdy(vWP)));
-        diffuseColor.rgb *= mix(0.84, 1.0, smoothstep(0.62, 0.92, abs(fn.y)));
-        float wl = -0.08 + 0.12 * sin(uT * 1.3 + vWP.x * 0.07 + vWP.z * 0.05);
-        float foam = smoothstep(0.32, 0.04, abs(vWP.y - wl)) * (0.75 + 0.25 * tn(vWP.xz * 1.3 + uT * 0.6));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.97, 0.99, 1.0), foam * 0.8);`);
-  };
+  installTerrainSurface(tmat, surfaceLibrary, waterT);
+  terrainMaterial = tmat;
   const terrain = new THREE.Mesh(geo, tmat);
   terrain.receiveShadow = true;
   scene.add(terrain);
@@ -364,6 +346,10 @@ function makeStructBox(x, y, z, w, h, d, mat, o = {}) {
   if (curHouse) { m.updateMatrixWorld(true); } else scene.add(m);
   const col = addCollider({ type: 'box', minX: x - w / 2, maxX: x + w / 2, minY: y, maxY: y + h, minZ: z - d / 2, maxZ: z + d / 2 });
   col.mesh = m; col.hp = col.maxHp = o.hp || 200; col.mat = o.mat || 'wood'; col.indestructible = !!o.indestructible; col.kind = 'house';
+  col.surface = o.surface ?? (h <= 0.45 && w > 1.5 && d > 1.5 ? SURFACE.CONCRETE
+    : col.mat === 'wood' && !o.indestructible ? SURFACE.WOOD
+    : Math.min(mat.color.r, mat.color.g, mat.color.b) > 0.57 ? SURFACE.STONE
+    : col.mat === 'metal' ? SURFACE.METAL : SURFACE.CONCRETE);
   m.userData.struct = col;
   addTarget(m); structs.push(col);
   if (curHouse) { col.house = curHouse; col.chunk = chunkOfY(y + h / 2); curHouse.boxes.push(col); }
@@ -373,94 +359,15 @@ function makeStructBox(x, y, z, w, h, d, mat, o = {}) {
 // (walls + decorations). Destroying a wall rebuilds that building's mesh only.
 let curHouse = null;
 const HOUSE_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.06 });
-// Rendu réaliste style Fortnite Chapitre 2 : bardage bois en lattes (siding), joints de brique,
-// tuiles d'ardoise sur les toits, reflets bleutés sur vitres, et dorures étincelantes des agents.
-HOUSE_MAT.onBeforeCompile = (sh) => {
-  sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vNorm;')
-    .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvNorm = normalize((modelMatrix * vec4(normal, 0.0)).xyz);');
-
-  sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>
-      varying vec3 vWP;
-      varying vec3 vNorm;
-      float bHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float bNoise(vec2 p) {
-        vec2 i = floor(p), f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(bHash(i), bHash(i + vec2(1.0, 0.0)), f.x), mix(bHash(i + vec2(0.0, 1.0)), bHash(i + vec2(1.0, 1.0)), f.x), f.y);
-      }`)
-    .replace('#include <color_fragment>', `#include <color_fragment>
-      vec3 fn = normalize(cross(dFdx(vWP), dFdy(vWP)));
-      float isVert = smoothstep(0.35, 0.12, abs(fn.y));
-      float isRoof = smoothstep(0.18, 0.45, fn.y) * smoothstep(0.96, 0.82, fn.y);
-
-      // Détection des types de surfaces d'après leur teinte
-      float isGlass = step(0.1, diffuseColor.b - diffuseColor.r) * step(0.4, diffuseColor.b + diffuseColor.g);
-      float isDarkGlass = step(0.05, diffuseColor.b - diffuseColor.r) * step(length(diffuseColor.rgb), 0.35);
-      float isGold = step(0.65, diffuseColor.r) * step(0.48, diffuseColor.g) * step(diffuseColor.b, 0.28);
-      float isWhiteMarble = step(0.82, diffuseColor.r) * step(0.82, diffuseColor.g) * step(0.78, diffuseColor.b);
-      float isBrickOrStone = step(0.3, diffuseColor.r) * step(abs(diffuseColor.r - diffuseColor.g), 0.25) * (1.0 - isGold);
-
-      // 1. MURS VERTICAUX : BARDAGE BOIS & BRIQUES FORTNITE
-      if (isVert > 0.1 && (isGlass + isDarkGlass) < 0.5) {
-        // Bardage en lattes horizontales réaliste (siding Fortnite ~0.38 m par planche)
-        float plankY = mod(vWP.y, 0.38);
-        float groove = smoothstep(0.0, 0.035, plankY) * (1.0 - smoothstep(0.345, 0.38, plankY));
-        float siding = 0.92 + groove * 0.14 + smoothstep(0.035, 0.12, plankY) * 0.05;
-
-        // Briques et pierres appareillées pour les façades de ville / brique
-        if (isBrickOrStone > 0.5 && isWhiteMarble < 0.5) {
-          float bRow = floor(vWP.y / 0.28);
-          float coordX = abs(fn.x) > 0.5 ? vWP.z : vWP.x;
-          float bCol = mod(coordX + bRow * 0.44, 0.88);
-          float mortar = smoothstep(0.0, 0.035, mod(vWP.y, 0.28)) * smoothstep(0.0, 0.045, bCol);
-          diffuseColor.rgb *= 0.86 + 0.18 * mortar;
-        } else if (isWhiteMarble > 0.5) {
-          // Marbre blanc lisse de l'Agence avec joints subtils de blocs impériaux (1.5 m)
-          float pY = smoothstep(0.0, 0.03, mod(vWP.y, 1.5)) * (1.0 - smoothstep(1.47, 1.5, mod(vWP.y, 1.5)));
-          float pX = smoothstep(0.0, 0.03, mod(vWP.x + vWP.z, 2.0)) * (1.0 - smoothstep(1.97, 2.0, mod(vWP.x + vWP.z, 2.0)));
-          diffuseColor.rgb *= 0.94 + 0.06 * (pY * pX);
-        } else {
-          // Bois peint style Pleasant Park
-          float grain = (bNoise(vWP.xz * 1.8 + vWP.y * 0.5) - 0.5) * 0.06;
-          diffuseColor.rgb *= (siding + grain);
-        }
-
-        // Occlusion ambiante de contact au bas des murs (base ancrée dans le terrain)
-        float contactAO = smoothstep(0.0, 1.1, mod(vWP.y + 0.1, 4.0));
-        diffuseColor.rgb *= 0.87 + 0.13 * contactAO;
-      }
-
-      // 2. VITRES & BAIES VITRÉES : REFLETS DYNA-CYAN STYLE FORTNITE
-      if (isGlass > 0.5 || isDarkGlass > 0.5) {
-        float glGleam = pow(max(0.0, sin((vWP.x + vWP.z) * 0.65 + vWP.y * 1.1)), 10.0) * 0.4;
-        vec3 tint = isDarkGlass > 0.5 ? vec3(0.35, 0.5, 0.65) : vec3(0.82, 0.93, 1.0);
-        diffuseColor.rgb = mix(diffuseColor.rgb, tint, glGleam * 0.8);
-      }
-
-      // 3. TOITURES : STRATES DE TUILES ET BARDEAUX D'ARDOISE
-      if (isRoof > 0.2) {
-        float shingleY = mod(vWP.y, 0.26);
-        float shStep = 0.88 + smoothstep(0.0, 0.03, shingleY) * 0.22;
-        float shRow = floor(vWP.y / 0.26);
-        float tone = 0.95 + 0.1 * fract(sin(shRow * 91.13) * 43758.5453);
-        diffuseColor.rgb *= shStep * tone;
-      }
-
-      // 4. DORURES & MÉTAL PRÉCIEUX DES AGENTS (Midas, coffre, yacht, agence)
-      if (isGold > 0.5) {
-        float shine = pow(max(0.0, sin((vWP.x + vWP.y + vWP.z) * 1.8)), 8.0) * 0.45;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.96, 0.7), shine);
-      }
-    `);
-};
+installBuildingSurface(HOUSE_MAT, surfaceLibrary);
 const _hcCache = new Map();
 function hcol(hex) { let c = _hcCache.get(hex); if (!c) { c = new THREE.Color(hex); _hcCache.set(hex, c); } return c; }
-function colorize(g, c) {
+function colorize(g, c, surface = SURFACE.PLAIN) {
   const n = g.attributes.position.count, a = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
-  g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g;
+  g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  g.setAttribute('surfaceKind', new THREE.BufferAttribute(new Float32Array(n).fill(surface), 1));
+  return g;
 }
 const chunkOfY = (y) => Math.floor((y + 1) / 4);
 function rebuildHouse(H, only) {
@@ -470,8 +377,8 @@ function rebuildHouse(H, only) {
   for (const k of keys) {
     const old = H.chunks.get(k); if (old) { scene.remove(old); old.geometry.dispose(); H.chunks.delete(k); }
     const geos = [];
-    for (const c of H.boxes) if (c.chunk === k && c.alive) geos.push(colorize(BOX.clone().applyMatrix4(c.mesh.matrixWorld), c.mesh.material.color));
-    for (const e of H.deco) if (e.chunk === k && (!e.parent || e.parent.alive)) geos.push(colorize(e.geo.clone().applyMatrix4(e.m), e.color));
+    for (const c of H.boxes) if (c.chunk === k && c.alive) geos.push(colorize(BOX.clone().applyMatrix4(c.mesh.matrixWorld), c.mesh.material.color, c.surface));
+    for (const e of H.deco) if (e.chunk === k && (!e.parent || e.parent.alive)) geos.push(colorize(e.geo.clone().applyMatrix4(e.m), e.color, e.surface ?? (e.geo === PRISM_GEO ? SURFACE.ROOF : SURFACE.PLAIN)));
     if (!geos.length) continue;
     const g = mergeGeometries(geos); geos.forEach((x) => x.dispose());
     const m = new THREE.Mesh(g, HOUSE_MAT); m.castShadow = true; m.receiveShadow = true; scene.add(m); H.chunks.set(k, m);
@@ -483,7 +390,9 @@ function finishHouse(H) { rebuildHouse(H); }
 const _dm = new THREE.Matrix4(), _dq = new THREE.Quaternion(), _de = new THREE.Euler(), _dp = new THREE.Vector3(), _ds = new THREE.Vector3();
 function hdeco(geo, hex, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, parent = null, order = 'XYZ') {
   _de.set(rx, ry, rz, order); _dq.setFromEuler(_de); _dm.compose(_dp.set(x, y, z), _dq, _ds.set(sx, sy, sz));
-  curHouse.deco.push({ geo, color: hcol(hex), m: _dm.clone(), parent, chunk: parent ? parent.chunk : chunkOfY(y) });
+  const entry = { geo, color: hcol(hex), m: _dm.clone(), parent, chunk: parent ? parent.chunk : chunkOfY(y) };
+  curHouse.deco.push(entry);
+  return entry;
 }
 // box whose bottom is at y
 function hbox(hex, x, y, z, w, h, d, parent = null, ry = 0) { hdeco(BOX, hex, x, y + h / 2, z, w, h, d, 0, ry, 0, parent); }
@@ -557,7 +466,7 @@ const CYL_GEO = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
   const NF = Math.floor(N / 5);
   const grass = new THREE.InstancedMesh(tuft, gm, N), flowers = new THREE.InstancedMesh(flower, fm, NF);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color(), col2 = new THREE.Color();
-  const GR = [0x6fcf45, 0x86dc50, 0x55b83c, 0x9be35c, 0x62c447], DRY = new THREE.Color(0xc6c85a), DARK = new THREE.Color(0x2f8a3a);
+  const GR = [0x70b749, 0x85c055, 0x529d3f, 0x94c461, 0x65ad47], DRY = new THREE.Color(0xb4b86a), DARK = new THREE.Color(0x377f3d);
   const FL = [0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff, 0xa98bff, 0xff8a3d, 0x5ac8ff];
   let ng = 0, nf = 0, guard = 0;
   while ((ng < N || nf < NF) && guard++ < N * 14) {
@@ -949,7 +858,7 @@ function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
   const mat = ST.mat;
   const twoStory = (style === 'brick' || style === 'wood' || style === 'adobe') && w >= 10 && R() < 0.45;
   const H = twoStory ? 4 : 4.2, T = 0.35, levels = twoStory ? 2 : 1;
-  const o = { hp: ST.hp, mat };
+  const o = { hp: ST.hp, mat, surface: surfaceForStyle(style) };
   // foundation + floor
   makeStructBox(cx, baseY - 3, cz, w + 0.6, 3.15, d + 0.6, matC(style === 'beach' ? 0xc49a62 : 0x8d8a84), { indestructible: true });
   hbox(style === 'adobe' ? 0xc8a070 : 0xb98a5a, cx, baseY + 0.15, cz, w - 0.3, 0.03, d - 0.3);
@@ -5215,7 +5124,8 @@ window.render_game_to_text = () => JSON.stringify({
 });
 window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; },
-  agencyLayout, profileOf, preferredDistance, combatIntent, botThink };
+  agencyLayout, profileOf, preferredDistance, combatIntent, botThink,
+  surfaces: { library: surfaceLibrary, buildings: HOUSE_MAT, get terrain() { return terrainMaterial; } } };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built
