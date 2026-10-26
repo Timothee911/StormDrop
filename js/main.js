@@ -3596,19 +3596,38 @@ function buildSpyPOI(p) {
     // le début de la grotte est grand ouvert, on voit le ciel depuis la caverne
     gshell(KX + 13.5, FY - 1.5, KZ - 9.9, 1.4, WH, 8.8, ROCK_B);
     gshell(KX + 13.5, FY - 1.5, KZ + 9.9, 1.4, WH, 8.8, ROCK_B);
-    // voûte en cadre : trois massifs rocheux ÉPAIS (5 m) autour du GRAND TROU
-    // BÉANT (la cheminée par laquelle on saute depuis le plateau). Chaque
-    // massif est ancré dans le plateau (sommet ~24,5 affleurant) et surplombe
-    // la cheminée — vu du plateau ce sont des barres rocheuses naturelles. Pas
-    // de massif à l'est : la bouche de la rampe reste GRAND OUVERTE, on voit
-    // le ciel depuis la caverne en regardant vers l'entrée.
-    gshell(153, 19.5, KZ, 16, 5, 40, ROCK_B);   // massif ouest (x 145-161)
-    gshell(168, 19.5, 147.8, 46, 5, 16, ROCK_B); // massif nord (x 145-191, z 139,8-155,8)
-    gshell(171, 19.5, 178.85, 30, 5, 9.3, ROCK_B); // massif sud (x 156-186, z 174,2-183,5)
-    // contrefort sous l'extrémité est du massif nord : bouche la veine de
-    // terrain creusé (la cheminée) visible depuis le plateau — la roche
-    // descend jusqu'au sol de la caverne, aucun surplomb flottant
-    gshell(179, 10, 152.9, 14, 9.5, 5.8, ROCK_B); // contrefort nord-est (x 172-186, z 150-155,8)
+    // ---- MONTAGNE : silhouette rocheuse arrondie et asymétrique qui
+    // recouvre la caverne et le crâne. Le sommet herbeux culmine à ~36-40,
+    // les flancs rocheux descendent jusqu'au terrain. On conserve le trou
+    // béant (la cheminée) : les blocs l'entourent sans le fermer.
+    // No 4 massifs rectangulaires plats : formes prismatiques/décalées pour
+    // casser la silhouette et éviter un plateau coupé au carré.
+    {
+      const CX = KX, CZ = KZ;
+      const ROCK = 0x5b6472, ROCK_D = 0x4e5663;
+      // Sommet : deux dômes rocheux décalés qui laissent le trou béant (cheminée)
+      // central x=171,z=165 LIBRE — un anneau rocheux autour du trou, pas au-dessus.
+      gdeco(PRISM_GEO, ROCK, CX - 7, 33.5, CZ - 6, 8.5, 3.8, 8.0, 0, 0.25, 0.1);
+      gdeco(PRISM_GEO, ROCK_D, CX + 7, 32.8, CZ + 6, 8.0, 3.4, 7.5, 0, -0.4, -0.1);
+      gdeco(BOX, ROCK_D, CX - 8, 30.5, CZ, 6.0, 5.0, 15.0, 0, 0.2, 0);   // anneau ouest
+      gdeco(BOX, ROCK_D, CX + 8, 30.5, CZ, 6.0, 5.0, 15.0, 0, -0.2, 0);  // anneau est
+      gdeco(BOX, ROCK_D, CX, 30.5, CZ - 8, 14.0, 5.0, 6.0, 0, 0, 0.15);  // anneau nord
+      gdeco(BOX, ROCK_D, CX, 30.5, CZ + 8, 14.0, 5.0, 6.0, 0, 0, -0.15); // anneau sud
+      // Flancs : rochers en pente qui descendent vers le terrain
+      for (const [bx, bz, by2, bs] of [[-14, -12, 22, 6.5], [15, -11, 22, 5.5], [-15, 13, 21, 7.0], [14, 14, 20, 6.0], [-4, -17, 24, 4.5], [5, 17, 23, 4.0]])
+        gdeco(PRISM_GEO, ROCK_D, CX + bx, by2, CZ + bz, bs, bs, bs * 1.3, (MR() - 0.5) * 0.8, (MR() - 0.5) * 0.6, 0);
+      // Herbe : tapis vert au sommet (plaques sur les dômes)
+      gdeco(BOX, 0x4a9b4f, CX - 7, 34.8, CZ - 6, 6.5, 0.6, 7.0);
+      gdeco(BOX, 0x4a9b4f, CX + 7, 34.0, CZ + 6, 6.0, 0.6, 6.5);
+      gdeco(BOX, 0x55884f, CX - 8, 32.5, CZ, 5.0, 0.5, 13.0, 0, 0.2, 0);
+      gdeco(BOX, 0x55884f, CX + 8, 32.5, CZ, 5.0, 0.5, 13.0, 0, -0.2, 0);
+      // sapins stylisés sur la crête (style image de référence)
+      for (const [tx, tz, hy] of [[-9, -8, 34.0], [-7, -11, 33.0], [-4, -10, 32.5], [9, -7, 33.0], [-10, 1, 32.5], [9, 4, 32.0], [-8, 9, 32.5], [6, 11, 32.0], [1, 12, 31.5]]) {
+        gdeco(PRISM_GEO, 0x2d5a35, CX + tx, hy + 1.8, CZ + tz, 1.4, 3.6, 1.4, 0, (MR() - 0.5) * 0.3, 0);
+        gdeco(PRISM_GEO, 0x4a3423, CX + tx, hy + 0.4, CZ + tz, 0.5, 0.8, 0.5);
+      }
+      // la cheminée (trou béant) reste percée : pas de bloc au-dessus du centre
+    }
     // roches irrégulières plaquées sur les parois
     for (const [bx, bz, by2, bs] of [[-12.5, -5, 13, 2.4], [12.4, 4, 15, 2.8], [5, 12.5, 11, 2.2], [-7, -12.4, 17, 2.6], [12.5, -9, 18, 2.4], [-12.4, 8, 18, 2.2]])
       gdeco(BOX, ROCK_C, KX + bx, by2, KZ + bz, bs, bs * 0.85, bs * 1.2, 0.3, 0.5, 0.2);
@@ -3672,30 +3691,43 @@ function buildSpyPOI(p) {
     addCaveLight(PX, PT + 2.5, PZ, 0xffc98a, 8, 18); // QG
     addCaveLight(179, 16, 158, 0xffd9b0, 5, 12); // crâne de l'Ombre
 
-    // ---- CRÂNE DE L'OMBRE : bas-relief géant sculpté dans la face sud du
-    // contrefort nord, il domine la cheminée (v12.10 de Fortnite : la Grotte
-    // a pris parti pour l'Ombre) — visible depuis le plateau, la rampe et la
-    // caverne, sans jamais dépasser du plateau (pas de bloc flottant)
+    // ---- FAÇADE CRÂNE : la bouche du crâne EST l'entrée de la Grotte. Le
+    // visage est sculpté dans la face EST de la montagne, face à la rampe
+    // (+X), au-dessus d'un palier sablonneux (sol 10, terrain). Yeux creux,
+    // nez triangulaire, arcades sourcilières, dents en arche, PAS de
+    // mâchoire inférieure : le passage est libre jusqu'au sol.
+    // Les gros blocs sont en gshell (colliders + visible), les détails fins en gdeco.
     {
       const skullStart = grottoGeos.length;
       const SK = 0xa4a9b0, SKD = 0x7f848b, SKK = 0x14171d;
-      gdeco(BOX, SK, 179, 15.9, 156.9, 10.2, 4.4, 2.2);   // crâne : masse supérieure
-      gdeco(BOX, SK, 179, 18.9, 156.9, 8.0, 1.0, 1.8);   // arrondi du dôme (affleure sous la voûte)
-      gdeco(BOX, SK, 179, 14.6, 156.9, 8.8, 2.4, 2.0);   // milieu du visage
-      gdeco(BOX, SKD, 179, 16.2, 157.4, 9.4, 1.2, 2.2, 0.1, 0, 0); // arcade sourcilière agressive
-      gdeco(BOX, SKK, 176.6, 15.1, 157.6, 2.6, 2.2, 0.7); // orbite gauche creusée
-      gdeco(BOX, SKK, 181.4, 15.1, 157.6, 2.6, 2.2, 0.7); // orbite droite creusée
-      gdeco(PRISM_GEO, SKK, 179, 13.9, 157.3, 1.1, 1.7, 1.0, 0, Math.PI / 2, 0); // cavité nasale
-      gdeco(BOX, SKD, 175.6, 14.3, 157.4, 1.8, 1.0, 1.1);  // pommette gauche
-      gdeco(BOX, SKD, 182.4, 14.3, 157.4, 1.8, 1.0, 1.1);  // pommette droite
-      gdeco(BOX, SK, 179, 12.5, 157.1, 7.2, 2.1, 1.6);    // mâchoire inférieure
-      // dents : barres verticales sombres sur la mâchoire (lisible de loin)
-      for (let i = 0; i < 6; i++) gdeco(BOX, SKK, 176.6 + i * 0.96, 12.9, 157.75, 0.55, 1.1, 0.3);
-      gdeco(BOX, SKD, 179, 11.4, 157.3, 3.9, 1.0, 1.1);   // menton posé au sol de la caverne
-      // pupilles rouges lumineuses (thème Ombre) : maillage émissif séparé
-      for (const ex of [176.6, 181.4]) {
+      const FX = 185.0;   // plan de la façade (face EST de la montagne)
+      const FY = 10.0;   // sol de la bouche
+      // Tempes : blocs latéraux (au-dessus de la bouche, colorent vers le haut)
+      // Masse frontale : gros bloc central au-dessus de l'ouverture (bouche libre z 159.5..170.5)
+      gshell(FX, FY + 5.4, 165, 2.4, 5.4, 24, SK);              // frontal : dessus de la bouche, plein sud-nord
+      // Tempes latérales : de part et d'autre de la bouche (z < 159 et z > 171)
+      gshell(FX, FY, 154.5, 2.4, 12.0, 10, SK);                // tempe/pommette gauche (z 149.5-159.5)
+      gshell(FX, FY, 175.5, 2.4, 12.0, 10, SK);                // tempe/pommette droite (z 170.5-180.5)
+      // Dôme du crâne : bloc arrondi au-dessus du frontal
+      gdeco(BOX, SK, FX + 0.5, FY + 12.5, 165, 1.8, 4.5, 16, 0, 0, 0); // arrondi du dôme
+      gdeco(BOX, SKD, FX, FY + 5.5, 157.5, 1.8, 2.5, 5.0);     // arcade sourcilière gauche
+      gdeco(BOX, SKD, FX, FY + 5.5, 172.5, 1.8, 2.5, 5.0);     // arcade sourcilière droite
+      // Orbites creusées (yeux) : plaques sombres incrustées dans les tempes
+      gdeco(BOX, SKK, FX + 1.0, FY + 4.5, 156.5, 1.2, 2.2, 3.2); // orbite gauche
+      gdeco(BOX, SKK, FX + 1.0, FY + 4.5, 173.5, 1.2, 2.2, 3.2); // orbite droite
+      // Nez : cavité triangulaire (prisme renversé) dans le frontal
+      gdeco(PRISM_GEO, SKK, FX + 1.0, FY + 4.0, 165, 1.0, 2.0, 1.4, Math.PI, 0, 0);
+      // Dents : rangée supérieure en arche au-dessus de la bouche
+      for (let i = 0; i < 7; i++) {
+        const dx = -3 + i; // -3..+3
+        gdeco(BOX, SKD, FX, FY + 3.2 + (i % 2) * 0.5, 165 + dx, 0.6, 1.6 + (i % 2) * 0.5, 0.5);
+      }
+      // Gencive/lèvre supérieure : fine barre rocheuse sous les dents
+      gdeco(BOX, SKD, FX, FY + 2.4, 165, 1.4, 0.6, 12.0);
+      // Pupilles lumineuses rouges (thème Ombre) : points dans les orbites
+      for (const ez of [156.5, 173.5]) {
         const eye = new THREE.Mesh(BOX, matC(0x1a0d0d, { emissive: 0xff2211, emissiveIntensity: 2.2, roughness: 0.4 }));
-        eye.scale.set(1.1, 0.7, 0.3); eye.position.set(ex, 15.0, 157.9); scene.add(eye);
+        eye.scale.set(0.5, 0.4, 0.2); eye.position.set(FX + 1.4, FY + 4.5, ez); scene.add(eye);
       }
       // bornes du crâne exposées à la QA (le relief est bien dans la falaise)
       const sb = new THREE.Box3(), tb = new THREE.Box3();

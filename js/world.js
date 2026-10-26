@@ -102,10 +102,18 @@ export function terrainH(x, z) {
       h = GROTTO.holeY + (h - GROTTO.holeY) * t * t * t;
     }
   }
-  // Rampe d'accès à ciel ouvert : grande tranchée qui descend du plateau (24)
-  // jusqu'à la caverne (10,4) — la partie x 180-184 passe sous l'arche rocheuse
-  // (bande est de la voûte), bords fondus sur 5 m — aucune façade, aucune porte :
-  // le début de la grotte est grand ouvert
+  // Bouche du crâne : palier plat à 10 sous la façade (le sol du crâne), la
+  // façade (roche) est au-dessus, le terrain s'arrête à la limite de la façade.
+  {
+    if (x > GROTTO.mouthX0 - 0.5 && x < GROTTO.mouthX1 + 0.5) {
+      const perp = Math.abs(z - GROTTO.cz);
+      if (perp < GROTTO.mouthHalfZ + GROTTO.rampBlend)
+        h = GROTTO.mouthH + (h - GROTTO.mouthH) * smooth(GROTTO.mouthHalfZ, GROTTO.mouthHalfZ + GROTTO.rampBlend, perp);
+    }
+  }
+  // Rampe d'accès à ciel ouvert : grande tranchée qui monte du palier du crâne (10)
+  // jusqu'au plateau (24) — bords fondus sur 5 m. Le palier sous le crâne est
+  // déjà à 10 : la montée commence juste après la façade.
   {
     if (x > GROTTO.rampX0 && x < GROTTO.rampX1 + 2) {
       const t = Math.min(1, Math.max(0, (GROTTO.rampX1 - x) / (GROTTO.rampX1 - GROTTO.rampX0)));
@@ -133,14 +141,21 @@ export function inPOI(x, z, pad = 0) {
 export const GROTTO = {
   cx: 200, cz: 165, bowlH: 24,
   holeX: 171, holeZ: 165, holeHX: 9.9, holeHZ: 9.2, holeY: 9.6, holeBlend: 10,
-  rampX0: 180, rampX1: 222, rampHalfZ: 5.5, rampBlend: 7, rampH0: 24, rampH1: 10.4,
+  // palier plat sous la bouche du crâne puis remontée vers le terrain extérieur :
+  //  x 184 -> 192  : palier à 10, sous la façade crâne (sol du crâne)
+  //  x 192 -> 232  : montée 10 -> 24 (42 m, même pente que l'ancienne rampe)
+  rampX0: 192, rampX1: 232, rampHalfZ: 5.5, rampBlend: 7, rampH0: 10, rampH1: 24,
+  mouthX0: 184, mouthX1: 192, mouthHalfZ: 5.5, mouthH: 10,
   cavernX: 171, cavernZ: 165, cavernR: 13.5, floor1: 10,
 };
-// Empreinte souterraine de la Grotte (caverne sous la voûte + bouche de la
-// rampe sous l'arche rocheuse) : le moteur s'en sert pour savoir qu'un point SOUS
-// le terrain est dans la grotte (le sol y est fait de colliders rocheux).
+// Empreinte souterraine de la Grotte (caverne sous la voûte + palier sous la
+// bouche du crâne + approche extérieure) : le moteur s'en sert pour savoir
+// qu'un point SOUS le terrain est dans la grotte (le sol y est fait de
+// colliders rocheux).
 export function inGrotto(x, z) {
   if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2) return true;
+  // palier sous la bouche du crâne (sol 10, sous la façade)
+  if (x > GROTTO.mouthX0 - 1 && x < GROTTO.mouthX1 && Math.abs(z - GROTTO.cz) < GROTTO.mouthHalfZ + 1) return true;
   return x > GROTTO.rampX0 - 1 && x < GROTTO.cavernX + GROTTO.cavernR + 1 && Math.abs(z - GROTTO.cz) < 6;
 }
 
@@ -152,6 +167,8 @@ export function grottoCamCeil(x, z) {
   // caverne : massifs de voûte de 19,5 à 24,5 — le trou béant central est
   // couvert par la cheminée du terrain, la caméra reste sous les massifs
   if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2) return 18.6;
+  // palier sous la bouche du crâne : le crâne monte à ~15, la caméra reste sous
+  if (x > GROTTO.mouthX0 - 0.5 && x < GROTTO.mouthX1 + 0.5 && Math.abs(z - GROTTO.cz) < GROTTO.mouthHalfZ + 1) return 14.5;
   return null;
 }
 
@@ -161,6 +178,8 @@ export function grottoCamCeil(x, z) {
 export function grottoCamFloor(x, z) {
   // caverne : dalle du sol à 10 ; la rampe est un vrai terrain, pas besoin
   if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 1) return GROTTO.floor1;
+  // palier sous la bouche du crâne : sol plat à 10
+  if (x > GROTTO.mouthX0 - 0.5 && x < GROTTO.mouthX1 + 0.5 && Math.abs(z - GROTTO.cz) < GROTTO.mouthHalfZ + 1) return GROTTO.mouthH;
   return null;
 }
 
