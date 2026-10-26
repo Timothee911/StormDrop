@@ -3745,8 +3745,8 @@ function buildSpyPOI(p) {
         gdeco(PRISM_GEO, 0xf2efe6, FACE + 0.15, 15.4, 165 + dz, 1.45, len, 0.4, Math.PI, Math.PI / 2, 0);
       // DÔME DU CRÂNE : arrondi au-dessus du frontal, plus large — c'est le
       // sommet du crâne qui émerge devant la montagne sombre
-      gdeco(BOX, SK, FX + 0.5, 26.5, 165, 1.8, 2.5, 20, 0, 0, 0);
-      gdeco(BOX, SK, FX + 0.4, 28.6, 165, 1.4, 1.6, 14, 0, 0, 0);
+      gdeco(BOX, SK, FX + 0.5, 26.5, 165, 1.8, 2.5, 24, 0, 0, 0);
+      gdeco(BOX, SK, FX + 0.4, 28.6, 165, 1.4, 1.6, 17, 0, 0, 0);
       // éclairage chaud devant la façade pour faire ressortir le visage
       addCaveLight(190, 19, 165, 0xffe0b8, 8, 18);
       // === INTÉRIEUR DE LA BOUCHE : parois latérales sombres dans l'épaisseur
