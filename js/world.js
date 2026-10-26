@@ -71,10 +71,14 @@ export const POIS = [
   { name: 'Chalets Givrés', x: 41, z: 256, r: 28, style: 'chalet' },
 ];
 for (const p of POIS) p.h = Math.max(2.5, rawH(p.x, p.z));
-// La Grotte : la montagne est retirée — tout le POI s'abaisse à 24 (GROTTO.bowlH).
-// La caverne reste souterraine sous sa voûte, mais le plateau au-dessus n'est plus
-// une colline : la grotte vit « en dessous de la carte », à flanc de terrain plat.
-POIS.find((p) => p.key === 'grotto').h = 24;
+// La Grotte : tout le POI (plateau compris) est abaissé à 13,4 (GROTTO.bowlH) et
+// reculé vers la côte EST : la caverne vit désormais sous la falaise du bord de
+// mer, son sol (-0,6) est SOUS le niveau de l'eau — la mer entre dans la grotte
+// par la porte d'eau de la paroi est (calanque GROTTO.cove*).
+POIS.find((p) => p.key === 'grotto').h = 13.4;
+// L'Agence : légèrement surélevée (9) pour que son sous-sol (coffre-fort) reste
+// au-dessus du niveau de la mer.
+POIS.find((p) => p.key === 'agency').h = 9;
 
 export function terrainH(x, z) {
   let h = rawH(x, z);
@@ -91,7 +95,7 @@ export function terrainH(x, z) {
   // cheminée jusqu'au sol de la caverne : 2e entrée (on peut y sauter depuis le
   // plateau). Profil en deux étages : plat au fond (la caverne reste en roche,
   // pas d'herbe), pente douce sur 4 m, puis falaise raide (cachée derrière les
-  // murs de la caverne) qui remonte au plateau 24. La physique reste continue
+  // murs de la caverne) qui remonte au plateau 13,4. La physique reste continue
   // avec le maillage rendu (pas de sol invisible : transition lisse).
   {
     const dx = Math.max(0, Math.abs(x - GROTTO.holeX) - GROTTO.holeHX);
@@ -102,8 +106,8 @@ export function terrainH(x, z) {
       h = GROTTO.holeY + (h - GROTTO.holeY) * t * t * t;
     }
   }
-  // Bouche du crâne : palier plat à 10 sous la façade (le sol du crâne), la
-  // façade (roche) est au-dessus, le terrain s'arrête à la limite de la façade.
+  // Bouche du crâne : palier plat sous la façade (le sol du crâne), la façade
+  // (roche) est au-dessus, le terrain s'arrête à la limite de la façade.
   {
     if (x > GROTTO.mouthX0 - 0.5 && x < GROTTO.mouthX1 + 0.5) {
       const perp = Math.abs(z - GROTTO.cz);
@@ -111,17 +115,34 @@ export function terrainH(x, z) {
         h = GROTTO.mouthH + (h - GROTTO.mouthH) * smooth(GROTTO.mouthHalfZ, GROTTO.mouthHalfZ + GROTTO.rampBlend, perp);
     }
   }
-  // Rampe d'accès à ciel ouvert : grande tranchée qui monte du palier du crâne (10)
-  // jusqu'au plateau (24) — bords fondus sur 5 m. Le palier sous le crâne est
-  // déjà à 10 : la montée commence juste après la façade.
+  // Rampe d'accès à ciel ouvert : grande tranchée qui descend du plateau OUEST
+  // (13,4) jusqu'au palier du crâne (-0,6, au niveau de l'eau) — bords fondus.
   {
-    if (x > GROTTO.rampX0 && x < GROTTO.rampX1 + 2) {
-      const t = Math.min(1, Math.max(0, (GROTTO.rampX1 - x) / (GROTTO.rampX1 - GROTTO.rampX0)));
-      const floor = GROTTO.rampH0 + (GROTTO.rampH1 - GROTTO.rampH0) * t;
+    if (x > GROTTO.rampTop - 2 && x < GROTTO.rampBot) {
+      const t = Math.min(1, Math.max(0, (x - GROTTO.rampTop) / (GROTTO.rampBot - GROTTO.rampTop)));
+      const floor = GROTTO.rampH1 + (GROTTO.rampH0 - GROTTO.rampH1) * t;
       const perp = Math.abs(z - GROTTO.cz);
       if (perp < GROTTO.rampHalfZ + GROTTO.rampBlend)
         h = floor + (h - floor) * smooth(GROTTO.rampHalfZ, GROTTO.rampHalfZ + GROTTO.rampBlend, perp);
     }
+  }
+  // Calanque de la Grotte : chenal d'eau de mer qui traverse la falaise de la
+  // côte pour relier la mer OUVERTE à la porte d'eau de la caverne (paroi est).
+  // Le fond (-0,9) est sous le niveau de la mer : l'eau s'y voit, on y patauge.
+  {
+    if (x > GROTTO.coveX0 && x < GROTTO.coveX1) {
+      const t = (x - GROTTO.coveX0) / (GROTTO.coveX1 - GROTTO.coveX0);
+      const w = GROTTO.coveW0 + (GROTTO.coveW1 - GROTTO.coveW0) * t;
+      const perp = Math.abs(z - GROTTO.cz);
+      if (perp < w + GROTTO.coveBlend)
+        h = GROTTO.coveFloor + (h - GROTTO.coveFloor) * smooth(w, w + GROTTO.coveBlend, perp);
+    }
+  }
+  // Sous-sol de l'Agence : le terrain s'abaisse sous le bâtiment (la cave du
+  // coffre-fort) — les dalles et escaliers du bâtiment servent de sol.
+  {
+    if (x > AGENCY_BASE.x0 && x < AGENCY_BASE.x1 && z > AGENCY_BASE.z0 && z < AGENCY_BASE.z1)
+      h = Math.min(h, AGENCY_BASE.floor);
   }
   return h;
 }
@@ -131,32 +152,45 @@ export function inPOI(x, z, pad = 0) {
   return null;
 }
 
-// La Grotte : plateau abaissé à 24 (montagne retirée) + grande rampe à ciel
-// ouvert + caverne voûtée percée d'un trou béant. Solide mais sous la carte.
-//   bowlH          : hauteur du plateau du POI (24)
+// La Grotte : POI reculé vers la côte EST — plateau abaissé à 13,4, grande
+// rampe à ciel ouvert, caverne voûtée percée d'un trou béant, porte d'eau à
+// l'est reliée à la mer par une calanque. Solide mais sous la carte.
+//   bowlH          : hauteur du plateau du POI (13,4)
 //   holeX/Z, holeHX/HZ, holeY : trou béant dans la voûte (rectangle) et fond de
-//                              la cheminée (9,6 = sol de la caverne)
-//   rampX0/X1, rampHalfZ, rampH0/H1 : tranchée de la rampe (x 184->222, sol 24->10,4)
-//   cavernX/Z, cavernR, floor1 : caverne (sol 10, voûte ~21,5)
+//                              la cheminée (-1 = fond du puits)
+//   rampTop/Bot, rampHalfZ, rampH0/H1 : tranchée de la rampe (x 196->248,
+//                              sol 13,4 -> -0,6 : on descend jusqu'à l'eau)
+//   cavernX/Z, cavernR, floor1 : caverne (sol -0,6 SOUS la mer, voûte ~8,4)
+//   coveX0/X1, coveW0/W1, coveBlend, coveFloor : calanque reliant la mer à la
+//                              porte d'eau de la caverne (paroi est)
 export const GROTTO = {
-  cx: 200, cz: 165, bowlH: 24,
-  holeX: 171, holeZ: 165, holeHX: 9.9, holeHZ: 9.2, holeY: 9.6, holeBlend: 10,
-  // palier plat sous la bouche du crâne puis remontée vers le terrain extérieur :
-  //  x 184 -> 192  : palier à 10, sous la façade crâne (sol du crâne)
-  //  x 192 -> 232  : montée 10 -> 24 (42 m, même pente que l'ancienne rampe)
-  rampX0: 192, rampX1: 232, rampHalfZ: 5.5, rampBlend: 7, rampH0: 24, rampH1: 10,
-  mouthX0: 184, mouthX1: 192, mouthHalfZ: 5.5, mouthH: 10,
-  cavernX: 171, cavernZ: 165, cavernR: 13.5, floor1: 10,
+  cx: 240, cz: 165, bowlH: 13.4,
+  holeX: 269, holeZ: 165, holeHX: 9.9, holeHZ: 9.2, holeY: -1, holeBlend: 10,
+  // palier plat sous la bouche du crâne puis remontée vers le plateau OUEST :
+  //  x 248 -> 256 : palier à -0,6, sous la façade crâne (sol du crâne)
+  //  x 196 -> 248 : montée -0,6 -> 13,4 (52 m de tranchée)
+  rampTop: 196, rampBot: 248, rampHalfZ: 5.5, rampBlend: 7, rampH0: -0.6, rampH1: 13.4,
+  mouthX0: 248, mouthX1: 256, mouthHalfZ: 5.5, mouthH: -0.6,
+  cavernX: 269, cavernZ: 165, cavernR: 13.5, floor1: -0.6,
+  coveX0: 280, coveX1: 312, coveW0: 9, coveW1: 16, coveBlend: 8, coveFloor: -0.9,
 };
+// Sous-sol de l'Agence (bâtiment centré en 0,0) : empreinte de la cave et
+// hauteur du plancher de la cave. Le terrain y est abaissé (AGENCY_BASE.floor)
+// sous les dalles du bâtiment — la physique y est celle des colliders.
+export const AGENCY_BASE = { x0: -13.6, x1: 13.6, z0: -10.6, z1: 10.6, floor: 3.45, camCeil: 8.5 };
+export function inAgencyBasement(x, z) {
+  return x > AGENCY_BASE.x0 && x < AGENCY_BASE.x1 && z > AGENCY_BASE.z0 && z < AGENCY_BASE.z1;
+}
 // Empreinte souterraine de la Grotte (caverne sous la voûte + palier sous la
 // bouche du crâne + approche extérieure) : le moteur s'en sert pour savoir
 // qu'un point SOUS le terrain est dans la grotte (le sol y est fait de
 // colliders rocheux).
 export function inGrotto(x, z) {
   if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2) return true;
-  // palier sous la bouche du crâne (sol 10, sous la façade)
+  // palier sous la bouche du crâne (sol -0,6, sous la façade)
   if (x > GROTTO.mouthX0 - 1 && x < GROTTO.mouthX1 && Math.abs(z - GROTTO.cz) < GROTTO.mouthHalfZ + 1) return true;
-  return x > GROTTO.rampX0 - 1 && x < GROTTO.cavernX + GROTTO.cavernR + 1 && Math.abs(z - GROTTO.cz) < 6;
+  // tranchée de la rampe (du plateau à la bouche du crâne)
+  return x > GROTTO.rampTop - 1 && x < GROTTO.rampBot + 1 && Math.abs(z - GROTTO.cz) < 6;
 }
 
 // Plafond caméra de la Grotte : hauteur maximale que la caméra tierce personne peut
@@ -164,11 +198,11 @@ export function inGrotto(x, z) {
 // qu'elle ne glisse jamais au-dessus de la voûte dans la roche. Retourne null
 // ailleurs (cratère à ciel ouvert, extérieur).
 export function grottoCamCeil(x, z) {
-  // caverne : massifs de voûte de 19,5 à 24,5 — le trou béant central est
+  // caverne : massifs de voûte de 8,9 à 13,9 — le trou béant central est
   // couvert par la cheminée du terrain, la caméra reste sous les massifs
-  if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2) return 18.6;
-  // palier sous la bouche du crâne : le crâne monte à ~15, la caméra reste sous
-  if (x > GROTTO.mouthX0 - 0.5 && x < GROTTO.mouthX1 + 0.5 && Math.abs(z - GROTTO.cz) < GROTTO.mouthHalfZ + 1) return 14.5;
+  if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2) return 8;
+  // palier sous la bouche du crâne : le crâne monte à ~4,4, la caméra reste sous
+  if (x > GROTTO.mouthX0 - 0.5 && x < GROTTO.mouthX1 + 0.5 && Math.abs(z - GROTTO.cz) < GROTTO.mouthHalfZ + 1) return 3.9;
   return null;
 }
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, inGrotto, grottoCamCeil, grottoCamFloor } from './world.js';
+import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, inGrotto, grottoCamCeil, grottoCamFloor, AGENCY_BASE, inAgencyBasement } from './world.js';
 import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
@@ -1590,7 +1590,7 @@ function physics(ch, dt) {
   } else if (wasGrounded && ch.vel.y <= 0 && ch.pos.y - ground < 0.65) {
     ch.pos.y = ground; ch.vel.y = 0; ch.grounded = true;
   } else ch.grounded = false;
-  ch.inWater = onTerrain && ground < -0.4; ch.gcol = gcol;
+  ch.inWater = (onTerrain && ground < -0.4) || (!onTerrain && ch.pos.y < -0.4 && inGrotto(ch.pos.x, ch.pos.z)); ch.gcol = gcol;
   if (ch.inWater && ch.pos.y < -0.9) { ch.pos.y = -0.9; if (ch.vel.y < 0) ch.vel.y = 0; ch.grounded = true; }
 }
 
@@ -3379,71 +3379,206 @@ function finishGrotto() {
 }
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
-    buildTower(p.x, p.z, p.h, 18, 18, 5, 0, AGENCY_PAL);
-    // Grand parvis de l'Agence : colonnade majestueuse en marbre blanc & or
+    // ---- L'AGENCE : refonte totale de l'extérieur pour coller à l'Agence de
+    // Fortnite (Chapitre 2 Saison 2) : grand bâtiment blanc-crème à bandes
+    // dorées, hautes fenêtres sombres à encadrements or, portique d'entrée à
+    // colonnes sur la façade sud avec fronton et enseigne « THE AGENCY »,
+    // statue dorée de Midas devant l'entrée, braseros, dôme vitré sur le toit,
+    // drapeaux GHOST bleus aux quatre coins, hélipad à l'ouest.
+    // Le COFFRE-FORT descend au SOUS-SOL : le terrain est creusé sous le
+    // bâtiment (AGENCY_BASE, voir world.js), un escalier intérieur descend
+    // du hall du rez-de-chaussée jusqu'à la cave où veille le coffre-fort.
+    const A = AGENCY_BASE;
+    const BX = p.x, BZ = p.z;                 // centre du bâtiment
+    const LV = [9.05, 13.45, 17.85, 22.25];   // base de chaque niveau (toit 26,65)
+    const FH = 4.4, WALL = 0xf4f1ea, GOLD = 0xffc400, GLASS = 0x27313f;
+    const stoneM = () => matC(WALL, { roughness: 0.8 });
+    const oStone = { hp: 420, mat: 'stone' };
     curHouse = { boxes: [], deco: [], mesh: null };
-    // Colonnade d'entrée néoclassique (4 imposantes colonnes avec chapiteaux dorés)
-    for (let c = -2; c <= 2; c++) {
-      if (c === 0) continue;
-      const colX = p.x + c * 3.2, colZ = p.z + 10.4;
-      hdeco(CYL_GEO, 0xf4f1ea, colX, p.h + 5.5, colZ, 1.1, 11, 1.1);
-      hdeco(BOX, 0xffc400, colX, p.h + 11.2, colZ, 1.5, 0.5, 1.5); // chapiteau or
-      hdeco(BOX, 0x3a404c, colX, p.h + 0.25, colZ, 1.6, 0.5, 1.6); // base
-      propBox(colX, p.h, colZ, 0.8, 0.8, 11.4); // colonne solide
-    }
-    // Fronton d'entrée art-déco avec aigle/blason d'or
-    hdeco(BOX, 0xf4f1ea, p.x, p.h + 11.8, p.z + 10.4, 16, 1.0, 2.2);
-    hdeco(BOX, 0xffc400, p.x, p.h + 12.5, p.z + 10.8, 14, 0.35, 0.4);
-    hdeco(CYL_GEO, 0xffc400, p.x, p.h + 12.8, p.z + 11.2, 1.6, 0.25, 1.6, Math.PI / 2, 0, 0); // médaillon central
-    // Caméras de surveillance avec LED rouge clignotante aux 4 coins
-    for (const [cx2, cz2] of [[-9.4, -9.4], [9.4, -9.4], [-9.4, 9.4], [9.4, 9.4]]) {
-      hdeco(BOX, 0x1a1a22, p.x + cx2, p.h + 20, p.z + cz2, 0.5, 0.4, 0.8);
-      hdeco(BOX, 0xff1e42, p.x + cx2, p.h + 20, p.z + cz2 + (cz2 > 0 ? 0.42 : -0.42), 0.18, 0.18, 0.18);
-      propBox(p.x + cx2, p.h + 19.8, p.z + cz2, 0.3, 0.42, 0.4); // caméra : solide
-    }
-    // Dôme verrière centrale sur le toit de l'Agence (atrium de verre)
-    hdeco(CYL_GEO, 0x1f2430, p.x, p.h + 20.6, p.z, 7.5, 0.6, 7.5);
-    hdeco(CYL_GEO, 0x6fd0ff, p.x, p.h + 22.0, p.z, 6.4, 2.4, 6.4);
-    // dôme vitré de l'atrium : collision à la taille réelle du modèle (socle rond 7,5 m, dôme 6,4 m), plus de toit invisible autour
-    propDisc(p.x, p.h + 20.0, p.z, 3.75, 0.9);
-    propDisc(p.x, p.h + 20.9, p.z, 3.2, 2.4);
-    hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 7.0, 0.3, 0.3);
-    hdeco(BOX, 0xffc400, p.x, p.h + 23.4, p.z, 0.3, 0.3, 7.0);
 
-    // Statue dorée de Midas sur le parvis
-    const sx = p.x + 14, sz = p.z - 8;
+    // ---- SOUS-SOL (cave du coffre-fort) : le terrain est creusé jusqu'à
+    // 3,45 (world.js). Murs de cave épais (leur face interne affleure le bord
+    // de la fouille, aucune bande de terrain ne dépasse), dalle au sol,
+    // escalier de 12 marches qui descend du hall, coffre-fort au centre.
+    const baseM = matC(0x494f5a, { metalness: 0.3, roughness: 0.6 });
+    makeStructBox(BX, A.floor, BZ - 10, 26, 8.6 - A.floor, 1.0, baseM, { indestructible: true }); // mur nord
+    makeStructBox(BX, A.floor, BZ + 10, 26, 8.6 - A.floor, 1.0, baseM, { indestructible: true }); // mur sud
+    makeStructBox(BX - 13, A.floor, BZ, 1.0, 8.6 - A.floor, 20, baseM, { indestructible: true }); // mur ouest
+    makeStructBox(BX + 13, A.floor, BZ, 1.0, 8.6 - A.floor, 20, baseM, { indestructible: true }); // mur est
+    // dalle du sol de la cave (dessus à 3,65 : les marches y arrivent pile)
+    makeStructBox(BX, A.floor, BZ, 25, 0.2, 19, matC(0x39404c, { metalness: 0.2 }), { indestructible: true });
+    // escalier : 12 marches de 0,45 qui descendent vers le nord, à l'ouest du
+    // hall (trou dans la dalle du RDC : x -12,5..-8,5, z -9,5..+1)
+    const stairM = matC(0x5a616c, { metalness: 0.35, roughness: 0.55 });
+    for (let i = 0; i < 12; i++) {
+      const top = LV[0] - 0.45 * (i + 1);
+      makeStructBox(BX - 10.5, top - 0.9, BZ + 1.0 - (i + 0.5) * 0.85, 4, 0.9, 0.85, stairM, { indestructible: true });
+    }
+    // dalle du rez-de-chaussée (8,6 -> 9,05) avec le trou de l'escalier
+    makeStructBox(BX + 2.25, 8.6, BZ, 21.5, 0.45, 20, stoneM(), oStone);            // partie est
+    makeStructBox(BX - 10.75, 8.6, BZ + 5.5, 4.5, 0.45, 9, stoneM(), oStone);      // bande ouest nord du trou
+    makeStructBox(BX - 10.75, 8.6, BZ - 9.75, 4.5, 0.45, 0.5, stoneM(), oStone);   // bande ouest sud du trou
+    // seuil de la porte : la dalle du RDC s'étend sous l'épaisseur du mur sud
+    makeStructBox(BX, 8.6, BZ + 10.375, 6, 0.45, 0.75, stoneM(), { indestructible: true });
+    // soubassement (plinth) : terrasse de pierre autour du bâtiment qui masque
+    // la pente du terrain entre la fouille du sous-sol et le plateau du POI
+    // (le maillage terrain ne peut pas suivre la falaise verticale de la fouille,
+    // il interpole sur 3,4 m : sans plinth, cette pente verte entrerait dans la
+    // cave et se verrait derrière l'escalier). Le dessus affleure le sol 9,0.
+    makeStructBox(BX, A.floor, BZ + 12.25, 28, 9.0 - A.floor, 3.5, stoneM(), { indestructible: true });   // sud
+    makeStructBox(BX, A.floor, BZ - 12.25, 28, 9.0 - A.floor, 3.5, stoneM(), { indestructible: true });   // nord
+    makeStructBox(BX + 15.25, A.floor, BZ, 3.5, 9.0 - A.floor, 28, stoneM(), { indestructible: true });   // est
+    makeStructBox(BX - 15.25, A.floor, BZ, 3.5, 9.0 - A.floor, 28, stoneM(), { indestructible: true });   // ouest
+
+    // ---- MURS DU BÂTIMENT (4 niveaux, façade sud percée de la porte)
+    const cN = [], cS = [], cE = [], cW = [];
+    for (let f = 0; f < 4; f++) {
+      const ly = LV[f];
+      // niveau 0 : murs de 1,0 m d'épaisseur, alignés sur les murs de la cave
+      // (sinon une fente verticale reste visible depuis le sous-sol, entre le
+      // dessus du mur de cave et la face extérieure du mur du bâtiment)
+      const th = f === 0 ? 1.0 : 0.5;
+      cN[f] = makeStructBox(BX, ly, BZ - 10, 26, FH, th, stoneM(), oStone);
+      cE[f] = makeStructBox(BX + 13, ly, BZ, th, FH, 20, stoneM(), oStone);
+      cW[f] = makeStructBox(BX - 13, ly, BZ, th, FH, 20, stoneM(), oStone);
+      if (f === 0) {
+        // façade sud : grande porte centrale (x -3..3) + segments + linteau
+        cS[f] = [makeStructBox(BX - 8, ly, BZ + 10, 10, FH, th, stoneM(), oStone), makeStructBox(BX + 8, ly, BZ + 10, 10, FH, th, stoneM(), oStone)];
+        makeStructBox(BX, ly + 3.2, BZ + 10, 6, 1.2, th, stoneM(), oStone); // linteau de la porte
+      } else cS[f] = [makeStructBox(BX, ly, BZ + 10, 26, FH, th, stoneM(), oStone)];
+      // dalles de plancher des niveaux supérieurs (l'intérieur du RDC reste
+      // un hall ouvert ; les étages ne sont pas visitables)
+      if (f > 0) makeStructBox(BX, LV[f] - 0.45, BZ, 25, 0.45, 19, stoneM(), oStone);
+    }
+    // dalle de toit
+    makeStructBox(BX, 26.2, BZ, 25, 0.45, 19, stoneM(), oStone);
+
+    // ---- FENÊTRES : verre sombre + encadrement et sill or, sur les 4 faces
+    const win = (wall, u, f) => {
+      const ly = LV[f], w = wall === 'N' || wall === 'S';
+      // niveau 0 : murs de 1,0 m -> fenêtres affleurant la face extérieure
+      const off = f === 0 ? (w ? 10.47 : 13.47) : (w ? 10.28 : 13.28);
+      const px = w ? BX + u : (wall === 'E' ? BX + off : BX - off);
+      const pz = w ? (wall === 'S' ? BZ + off : BZ - off) : BZ + u;
+      const sx = w ? 2.2 : 0.12, sz = w ? 0.12 : 2.2;
+      const col = (wall === 'N' ? cN : wall === 'S' ? cS : wall === 'E' ? cE : cW)[f];
+      const par = Array.isArray(col) ? null : col;
+      hdeco(BOX, GLASS, px, ly + 2.2, pz, sx, 2.4, sz, 0, 0, 0, par);
+      hdeco(BOX, GOLD, px, ly + 0.95, pz, w ? 2.6 : 0.16, 0.16, w ? 0.16 : 2.6, 0, 0, 0, par);
+    };
+    for (let f = 0; f < 4; f++) {
+      const usNS = [-9.5, -4.75, 0, 4.75, 9.5], usEW = [-5, 0, 5];
+      for (const u of usNS) { if (f === 0 && Math.abs(u) < 3) continue; win('N', u, f); win('S', u, f); }
+      for (const u of usEW) win('E', u, f), win('W', u, f);
+    }
+    // bandes dorées entre les niveaux + corniche du toit
+    for (const y of [13.45, 17.85, 22.25, 26.65]) {
+      hdeco(BOX, GOLD, BX, y - 0.18, BZ + 10.3, 26.4, 0.36, 0.18);
+      hdeco(BOX, GOLD, BX, y - 0.18, BZ - 10.3, 26.4, 0.36, 0.18);
+      hdeco(BOX, GOLD, BX + 13.3, y - 0.18, BZ, 0.18, 0.36, 20.4);
+      hdeco(BOX, GOLD, BX - 13.3, y - 0.18, BZ, 0.18, 0.36, 20.4);
+    }
+    // parapet du toit
+    makeStructBox(BX, 26.65, BZ - 10, 26, 0.8, 0.5, stoneM(), oStone);
+    makeStructBox(BX, 26.65, BZ + 10, 26, 0.8, 0.5, stoneM(), oStone);
+    makeStructBox(BX + 13, 26.65, BZ, 0.5, 0.8, 20, stoneM(), oStone);
+    makeStructBox(BX - 13, 26.65, BZ, 0.5, 0.8, 20, stoneM(), oStone);
+
+    // ---- PORTIQUE D'ENTRÉE (façade sud) : 4 colonnes cannelées + fronton
+    for (const cx of [-7.5, -2.5, 2.5, 7.5]) {
+      hdeco(CYL_GEO, 0xf4f1ea, BX + cx, p.h + 2.25, BZ + 13.5, 1.0, 4.5, 1.0);
+      hdeco(BOX, GOLD, BX + cx, p.h + 4.5, BZ + 13.5, 1.6, 0.5, 1.6);   // chapiteau
+      hdeco(BOX, 0x3a404c, BX + cx, p.h + 0.25, BZ + 13.5, 1.6, 0.5, 1.6); // base
+      propBox(BX + cx, p.h, BZ + 13.5, 0.8, 0.8, 4.6); // colonne : solide
+    }
+    makeStructBox(BX, 13.45, BZ + 12.5, 18, 0.45, 5, stoneM(), oStone); // dalle du portique
+    hdeco(PRISM_GEO, 0xf4f1ea, BX, 13.9, BZ + 12.5, 18, 1.8, 5);       // fronton
+    hdeco(BOX, GOLD, BX, 13.95, BZ + 15.05, 18.4, 0.22, 0.3);           // rive dorée du fronton
+    // emblème GHOST doré au centre du fronton
+    hdeco(CYL_GEO, GOLD, BX, 15.1, BZ + 12.5, 1.5, 0.25, 1.5, Math.PI / 2, 0, 0);
+    hdeco(BOX, 0x101319, BX, 15.15, BZ + 12.42, 0.9, 1.0, 0.08);
+
+    // ---- DRAPEAUX GHOST bleus aux quatre coins du toit
+    for (const [fx, fz] of [[-11.5, -8.5], [11.5, -8.5], [-11.5, 8.5], [11.5, 8.5]]) {
+      hdeco(BOX, 0x8d929a, BX + fx, 28.65, BZ + fz, 0.22, 4, 0.22);
+      propBox(BX + fx, 26.65, BZ + fz, 0.16, 0.16, 4.4);
+      hdeco(BOX, 0x1f3a8a, BX + fx + 1.1, 29.9, BZ + fz, 2.2, 1.4, 0.08);
+      hdeco(BOX, 0xffffff, BX + fx + 1.1, 29.9, BZ + fz + 0.05, 0.7, 0.7, 0.02);
+    }
+
+    // ---- DÔME VITRÉ (atrium) sur le toit
+    hdeco(CYL_GEO, 0x1f2430, BX, 26.95, BZ, 7.5, 0.6, 7.5);
+    hdeco(CYL_GEO, 0x6fd0ff, BX, 28.35, BZ, 6.4, 2.4, 6.4);
+    hdeco(BOX, GOLD, BX, 27.05, BZ, 7.0, 0.25, 0.25);
+    hdeco(BOX, GOLD, BX, 27.05, BZ, 0.25, 0.25, 7.0);
+    propDisc(BX, 26.65, BZ, 3.75, 0.9);
+    propDisc(BX, 27.55, BZ, 3.2, 2.4);
+
+    // ---- ANCIEN PARVIS : statue dorée de Midas sur le chemin de l'entrée
+    const sx = BX, sz = BZ + 20;
     hdeco(BOX, 0x39404c, sx, p.h, sz, 3.2, 0.5, 3.2);
     hdeco(BOX, 0x2c313c, sx, p.h + 0.5, sz, 2.4, 0.6, 2.4);
     hdeco(BOX, 0xffc400, sx, p.h + 1.1, sz, 0.9, 1.7, 0.5);
     hdeco(BOX, 0xffc400, sx, p.h + 2.8, sz, 0.6, 0.6, 0.6);
     hdeco(BOX, 0x3fa9ff, sx, p.h + 3.7, sz, 1.1, 1.1, 1.1);
-    // Projecteurs au sol braqués vers la façade
-    for (const [px3, pz3] of [[-10, 15], [10, 15]]) {
-      hdeco(BOX, 0x2c313c, p.x + px3, p.h, p.z + pz3, 0.8, 0.6, 0.8);
-      hdeco(CYL_GEO, 0xffe89e, p.x + px3, p.h + 0.6, p.z + pz3, 0.35, 0.4, 0.35, -Math.PI / 4, 0, 0);
+    propBox(sx, p.h, sz, 1.4, 1.4, 1.1); // socle : solide
+    // chemin pavé du portique à la statue
+    hdeco(BOX, 0xd8d4c8, BX, p.h + 0.03, BZ + 17.5, 6, 0.06, 9);
+    // braseros de part et d'autre du chemin (façon Agence de Fortnite)
+    for (const bxp of [-8, 8]) {
+      hdeco(CYL_GEO, 0x39404c, BX + bxp, p.h + 0.5, BZ + 16, 1.2, 1.0, 1.2);
+      hdeco(CYL_GEO, 0xff8c1a, BX + bxp, p.h + 1.1, BZ + 16, 0.7, 0.25, 0.7);
+      propBox(BX + bxp, p.h, BZ + 16, 1.0, 1.0, 1.1);
+      const fl = new THREE.PointLight(0xff9a2e, 5, 14); fl.position.set(BX + bxp, p.h + 1.6, BZ + 16); scene.add(fl);
+    }
+    // haies basses encadrant le parvis
+    for (const [hx, hz, hw, hd] of [[-16, 12, 6, 1.6], [16, 12, 6, 1.6], [-16, 20, 6, 1.6], [16, 20, 6, 1.6]]) {
+      hdeco(BOX, 0x2d5a35, BX + hx, p.h + 0.5, BZ + hz, hw, 1.0, hd);
+      propBox(BX + hx, p.h, BZ + hz, hw / 2, hd / 2, 1.0);
+    }
+    // caméras de surveillance aux quatre coins du bâtiment
+    for (const [cx2, cz2] of [[-12.8, -9.8], [12.8, -9.8], [-12.8, 9.8], [12.8, 9.8]]) {
+      hdeco(BOX, 0x1a1a22, BX + cx2, 12.2, BZ + cz2, 0.5, 0.4, 0.8);
+      hdeco(BOX, 0xff1e42, BX + cx2, 12.2, BZ + cz2 + (cz2 > 0 ? 0.42 : -0.42), 0.18, 0.18, 0.18);
     }
     { const H = curHouse; curHouse = null; finishHouse(H); }
-    // hélipad
+
+    // ---- enseigne « THE AGENCY » au-dessus de la porte (texture canvas)
+    const signTex = canvasTex((g, s) => {
+      g.fillStyle = '#101319'; g.fillRect(0, 0, s, s);
+      g.fillStyle = '#ffc400'; g.font = `bold ${Math.floor(s * 0.24)}px Georgia, serif`;
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('THE AGENCY', s / 2, s * 0.42);
+      g.fillStyle = '#8d929a'; g.font = `bold ${Math.floor(s * 0.1)}px Georgia, serif`;
+      g.fillText('CONFIDENTIAL · EYES ONLY', s / 2, s * 0.72);
+    }, 256);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 2.6), new THREE.MeshBasicMaterial({ map: signTex }));
+    sign.position.set(BX, 12.9, BZ + 10.56); scene.add(sign);
+
+    // ---- éclairage : hall, sous-sol et façade
+    const hallL = new THREE.PointLight(0xffe0b8, 10, 26); hallL.position.set(BX, 12, BZ); scene.add(hallL);
+    const baseL = new THREE.PointLight(0x7fd0ff, 9, 24); baseL.position.set(BX, 7.2, BZ); scene.add(baseL);
+    const stairL = new THREE.PointLight(0xffc98a, 5, 14); stairL.position.set(BX - 10.5, 6.5, BZ - 4); scene.add(stairL);
+    const faceL = new THREE.PointLight(0xffe0b8, 8, 20); faceL.position.set(BX, 14, BZ + 16); scene.add(faceL);
+
+    // ---- COFFRE-FORT AU SOUS-SOL (la cave est à 3,65 au-dessus de la dalle)
+    buildVault(p, { x: BX, y: 3.65, z: BZ });
+    // cabine téléphonique de l'agent près du parvis
+    buildPhoneBooth(p, { x: BX + 16, y: p.h, z: BZ + 6 });
+
+    // ---- hélipad à l'ouest du bâtiment
     curHouse = { boxes: [], deco: [], mesh: null };
-    hdeco(CYL_GEO, 0x2c313c, p.x - 15, p.h + 0.06, p.z + 13, 9, 0.12, 9);
-    hdeco(BOX, 0xffc400, p.x - 15, p.h + 0.14, p.z + 13, 3.4, 0.06, 0.8);
-    hdeco(BOX, 0xffc400, p.x - 15, p.h + 0.14, p.z + 13, 0.8, 0.06, 3.4);
+    hdeco(CYL_GEO, 0x2c313c, BX - 15, p.h + 0.06, BZ + 13, 9, 0.12, 9);
+    hdeco(BOX, 0xffc400, BX - 15, p.h + 0.14, BZ + 13, 3.4, 0.06, 0.8);
+    hdeco(BOX, 0xffc400, BX - 15, p.h + 0.14, BZ + 13, 0.8, 0.06, 3.4);
     { const H = curHouse; curHouse = null; finishHouse(H); }
-    buildHouse(p.x - 18, p.z + 16, p.h, 10, 9, 1, 'agency');
-    buildHouse(p.x + 9, p.z + 19, p.h, 9, 8, 2, 'agency');
-    // drapeaux GHOST bleus sur la tour + emblème doré sur la façade
-    curHouse = { boxes: [], deco: [], mesh: null };
-    for (const [fx, fz] of [[-8.4, -8.4], [8.4, -8.4], [-8.4, 8.4], [8.4, 8.4]]) {
-      hdeco(BOX, 0x8d929a, p.x + fx, p.h + 22, p.z + fz, 0.22, 4, 0.22);
-      propBox(p.x + fx, p.h + 20, p.z + fz, 0.16, 0.16, 4.4); // mât de drapeau : solide sur sa hauteur visible seulement
-      hdeco(BOX, 0x1f3a8a, p.x + fx + 1.1, p.h + 23.4, p.z + fz, 2.2, 1.4, 0.08);
-      propBox(p.x + fx + 1.1, p.h + 22.7, p.z + fz, 1.1, 0.05, 1.4); // toile de drapeau : solide
-      hdeco(BOX, 0xffffff, p.x + fx + 1.1, p.h + 23.4, p.z + fz + 0.05, 0.7, 0.7, 0.02);
-    }
-    hdeco(CYL_GEO, 0xf2efe6, p.x, p.h + 13, p.z + 9.25, 3.2, 0.25, 3.2, Math.PI / 2, 0, 0, null, 'YXZ');
-    hdeco(CYL_GEO, 0xffc400, p.x, p.h + 13, p.z + 9.3, 2.2, 0.25, 2.2, Math.PI / 2, 0, 0, null, 'YXZ');
-    hdeco(BOX, 0x1f3a8a, p.x, p.h + 13, p.z + 9.35, 1.1, 1.1, 0.06);
-    { const H = curHouse; curHouse = null; finishHouse(H); }
+
+    // ---- coffres et butin du hall (le reste est dans le coffre-fort)
+    spawnChest(BX - 6, LV[0] + 0.05, BZ - 4);
+    spawnChest(BX + 7, LV[0] + 0.05, BZ + 3);
+    ammoBoxes.push(spawnAmmoBox(BX + 2, LV[0] + 0.05, BZ - 6));
+    lootSpots.push({ x: BX, y: LV[0] + 0.6, z: BZ - 5 });
+    lootSpots.push({ x: BX - 8, y: LV[0] + 0.6, z: BZ + 4 });
   } else if (p.key === 'shark') {
     // manoir moderne blanc à toits plats (la Sky Villa) : rez creux + terrasse
     curHouse = { boxes: [], deco: [], mesh: null };
@@ -3572,110 +3707,118 @@ function buildSpyPOI(p) {
     buildVault(p, { x: p.x - 9, y: y + 1.4, z: p.z });
     buildPhoneBooth(p, { x: p.x + 2, y: y + 1.4, z: p.z + 3 });
   } else if (p.key === 'grotto') {
-    // ---- LA GROTTE : plateau abaissé (montagne retirée), grande rampe à ciel
-    // ouvert sans porte, caverne voûtée percée d'un trou béant (cascade, bassin,
-    // cristaux, QG de Brutus, coffre-fort). La grotte vit sous la carte.
+    // ---- LA GROTTE : POI reculé vers la côte EST, plateau abaissé (13,4),
+    // grande rampe à ciel ouvert qui descend du plateau OUEST jusqu'au niveau
+    // de l'eau, caverne voûtée percée d'un trou béant (cascade, cristaux, QG de
+    // Brutus, coffre-fort). Le sol de la caverne (-0,6) est SOUS le niveau de
+    // la mer : l'eau y pénètre par la PORTE D'EAU de la paroi est, reliée à
+    // la mer ouverte par la calanque (GROTTO.cove*, voir world.js).
     // =============================================================
     const G = GROTTO;
     const KX = G.cavernX, KZ = G.cavernZ, FY = G.floor1;
     const ROCK_A = 0x5b6472, ROCK_B = 0x4e5663, ROCK_C = 0x67707e;
     // QG de Brutus : plateforme métallique surélevée au nord de la caverne
-    const PX = KX - 4, PZ = KZ - 8, PT = FY + 3.6;
+    const PX = KX + 4, PZ = KZ - 8, PT = FY + 3.6;
 
     // (plus de tunnel couvert : la rampe à ciel ouvert est creusée dans le terrain
-    // par world.js — voir GROTTO.rampX0/X1 — et il n'y a ni façade ni porte : la
-    // bouche de la grotte est grande ouverte sur toute la largeur de la tranchée)
+    // par world.js — voir GROTTO.rampTop/Bot — et il n'y a ni façade ni porte : la
+    // bouche de la grotte est grand ouverte sur toute la largeur de la tranchée)
 
-    // ---- CAVERNE : salle voûtée sous le plateau (sol 10, voûte 21,5)
-    gshell(KX, FY - 2, KZ, 31, 2, 31, ROCK_A); // dalle du sol
+    // ---- CAVERNE : salle voûtée sous le plateau (sol -0,6 SOUS la mer, voûte ~11,9)
+    gshell(KX, FY - 2, KZ, 31, 2, 31, ROCK_A); // dalle du sol (le fond est dans l'eau de mer)
     const WH = 14;
     gshell(KX, FY - 1.5, KZ - 13.5, 28.6, WH, 1.4, ROCK_B); // paroi nord
     gshell(KX, FY - 1.5, KZ + 13.5, 28.6, WH, 1.4, ROCK_B); // paroi sud
-    gshell(KX - 13.5, FY - 1.5, KZ, 1.4, WH, 28.6, ROCK_B); // paroi ouest
-    // paroi est : percée par la bouche de la rampe (trou z ±5,5) — PAS DE LINTEAU :
+    // paroi ouest : percée par la bouche de la rampe (trou z ±5,5) — PAS DE LINTEAU :
     // le début de la grotte est grand ouvert, on voit le ciel depuis la caverne
-    gshell(KX + 13.5, FY - 1.5, KZ - 9.9, 1.4, WH, 8.8, ROCK_B);
-    gshell(KX + 13.5, FY - 1.5, KZ + 9.9, 1.4, WH, 8.8, ROCK_B);
+    gshell(KX - 13.5, FY - 1.5, KZ - 9.9, 1.4, WH, 8.8, ROCK_B);
+    gshell(KX - 13.5, FY - 1.5, KZ + 9.9, 1.4, WH, 8.8, ROCK_B);
+    // paroi est : PORTE D'EAU — ouverture z 158->172, du sol jusqu'à y 3,6 :
+    // la mer (calanque) entre dans la caverne, on y nage/patauge depuis la mer
+    gshell(KX + 13.5, FY - 1.5, KZ - 10.25, 1.4, WH, 6.5, ROCK_B); // jambage nord
+    gshell(KX + 13.5, FY - 1.5, KZ + 10.25, 1.4, WH, 6.5, ROCK_B); // jambage sud
+    gshell(KX + 13.5, FY + 4.2, KZ, 1.4, WH - 4.2, 14, ROCK_B); // linteau au-dessus de la porte d'eau
     // ---- MONTAGNE : silhouette rocheuse qui recouvre la caverne et le
     // crâne. Structure porteuse : les 3 massifs gshell de la voûte (avec
     // colliders) forment la base, puis des étages supérieurs raccordés
-    // montent jusqu'au sommet (~36). La cheminée (trou béant x=171, z=165)
-    // reste ouverte, la bouche du crâne (x>183, z 159.5-170.5) reste libre.
+    // montent jusqu'au sommet (~25). La cheminée (trou béant x=269, z=165)
+    // reste ouverte, la bouche du crâne (x>253, z 159.5-170.5) reste libre.
     {
       const CX = KX, CZ = KZ;
       const ROCK = 0x5b6472, ROCK_D = 0x4e5663;
-      // ÉTAGE 0 (base, 19.5 -> 24.5) : les 3 massifs historiques (colliders)
-      gshell(153, 19.5, CZ, 16, 5, 40, ROCK_B);          // massif ouest (x 145-161)
-      gshell(168, 19.5, CZ - 17.2, 36, 5, 16, ROCK_B);    // massif nord (z 139.8-155.8, x 150-186 : affleurant la façade)
-      gshell(171, 19.5, CZ + 13.85, 30, 5, 9.3, ROCK_B); // massif sud (z 174.2-183.5)
-      // ÉTAGE 1 (24.5 -> 29) : CADRE autour de la cheminée (x 161-181, z 156-174)
-      // même logique que l'étage 0 : ouest x<161, nord z<156, sud z>174
-      gshell(153, 24.5, CZ, 14, 4.5, 40, ROCK_B);          // ouest (x 146-160)
-      gshell(169, 24.5, CZ - 19, 34, 4.5, 14, ROCK_B);   // nord (z 140-154, x 152-186 : affleurant la façade)
-      gshell(170, 24.5, CZ + 18.5, 28, 4.5, 9, ROCK_B);   // sud (z 179-188)
-      gshell(183.5, 24.5, CZ, 2.6, 4.5, 34, ROCK_B);         // est (x 182.2-184.8, EN ARRIÈRE de la façade du crâne : ne masque pas le front)
-      // ÉTAGE 2 (29 -> 33) : dômes décalés, crête plus étroite (toujours en cadre)
-      gshell(155, 29, CZ - 10, 10, 4, 16, ROCK_B);        // dôme NO (x 150-160, z 147-163)
-      gshell(175, 29, CZ + 14, 8, 4, 10, ROCK_B);         // dôme SE (x 171-179, z 179-189)
-      gshell(167, 29, CZ - 17, 30, 3.5, 5, ROCK_B);        // crête nord (z 140-145)
-      gshell(167, 29, CZ + 17, 26, 3.5, 5, ROCK_B);        // crête sud (z 179-184)
-      // ÉTAGE 3 (33 -> 36) : pointes sommitales
-      gshell(157, 33, CZ - 10, 7, 3, 7, ROCK_B);           // pointe NO
-      gshell(174, 33, CZ + 14, 6, 3, 7, ROCK_B);           // pointe SE (z 179-186)
+      // ÉTAGE 0 (base, 8.9 -> 13.9) : les 3 massifs historiques (colliders)
+      gshell(287, 8.9, CZ, 16, 5, 40, ROCK_B);          // massif est (x 279-295)
+      gshell(272, 8.9, CZ - 17.2, 36, 5, 16, ROCK_B);    // massif nord (z 139.8-155.8)
+      gshell(269, 8.9, CZ + 13.85, 30, 5, 9.3, ROCK_B); // massif sud (z 174.2-183.5)
+      // ÉTAGE 1 (13.9 -> 18.4) : CADRE autour de la cheminée — même logique
+      // que l'étage 0 : est x>280, nord z<156, sud z>174, ouest derrière le crâne
+      gshell(287, 13.9, CZ, 14, 4.5, 40, ROCK_B);          // est (x 280-294)
+      gshell(271, 13.9, CZ - 19, 34, 4.5, 14, ROCK_B);   // nord (z 140-154)
+      gshell(270, 13.9, CZ + 18.5, 28, 4.5, 9, ROCK_B);   // sud (z 179-188)
+      gshell(256.5, 13.9, CZ, 2.6, 4.5, 34, ROCK_B);         // ouest (x 255.2-257.8, EN ARRIÈRE de la façade du crâne : ne masque pas le front)
+      // ÉTAGE 2 (18.4 -> 22.4) : dômes décalés, crête plus étroite (toujours en cadre)
+      gshell(285, 18.4, CZ - 10, 10, 4, 16, ROCK_B);        // dôme NE (x 280-290, z 147-163)
+      gshell(265, 18.4, CZ + 14, 8, 4, 10, ROCK_B);         // dôme SO (x 261-269, z 179-189)
+      gshell(273, 18.4, CZ - 17, 30, 3.5, 5, ROCK_B);        // crête nord (z 140-145)
+      gshell(273, 18.4, CZ + 17, 26, 3.5, 5, ROCK_B);        // crête sud (z 179-184)
+      // ÉTAGE 3 (22.4 -> 25.4) : pointes sommitales
+      gshell(283, 22.4, CZ - 10, 7, 3, 7, ROCK_B);           // pointe NE
+      gshell(266, 22.4, CZ + 14, 6, 3, 7, ROCK_B);           // pointe SO (z 179-186)
       // FACETTES : gdeco pour casser les faces planes et donner du relief
       // (plaquées sur les étages, jamais dans la cheminée ni la bouche)
-      for (const [bx, bz, by2, bs] of [[-16, -14, 26, 5.5], [-18, 2, 27, 6.0], [-15, 16, 25, 5.0], [13, -13, 26, 5.0], [16, 8, 27, 5.5], [-6, -19, 27, 4.5], [3, 19, 26, 4.0]])
+      for (const [bx, bz, by2, bs] of [[16, -14, 15.4, 5.5], [18, 2, 16.4, 6.0], [15, 16, 14.4, 5.0], [-13, -13, 15.4, 5.0], [-16, 8, 16.4, 5.5], [6, -19, 16.4, 4.5], [-3, 19, 15.4, 4.0]])
         gdeco(PRISM_GEO, ROCK_D, CX + bx, by2, CZ + bz, bs, bs, bs * 1.3, (MR() - 0.5) * 0.6, (MR() - 0.5) * 0.4, 0);
       // HERBE : tapis vert sur les surfaces supérieures réelles
-      gdeco(BOX, 0x4a9b4f, 155, 33.4, CZ - 10, 8, 0.6, 12);   // dôme NO (x 150-160, z 147-163)
-      gdeco(BOX, 0x4a9b4f, 175, 32.6, CZ + 14, 6, 0.6, 8);   // dôme SE (x 171-179, z 179-189)
-      gdeco(BOX, 0x55884f, 167, 32.8, CZ - 17, 22, 0.5, 4);  // crête nord (z 140-145)
-      gdeco(BOX, 0x55884f, 167, 32.8, CZ + 17, 18, 0.5, 4);  // crête sud (z 179-184)
-      gdeco(BOX, 0x55884f, 157, 36.2, CZ - 10, 5, 0.5, 5);  // pointe NO
-      gdeco(BOX, 0x55884f, 174, 35.4, CZ + 14, 4.5, 0.5, 5); // pointe SE (z 179-186)
+      gdeco(BOX, 0x4a9b4f, 285, 22.8, CZ - 10, 8, 0.6, 12);   // dôme NE (x 280-290, z 147-163)
+      gdeco(BOX, 0x4a9b4f, 265, 22.0, CZ + 14, 6, 0.6, 8);   // dôme SO (x 261-269, z 179-189)
+      gdeco(BOX, 0x55884f, 273, 22.2, CZ - 17, 22, 0.5, 4);  // crête nord (z 140-145)
+      gdeco(BOX, 0x55884f, 273, 22.2, CZ + 17, 18, 0.5, 4);  // crête sud (z 179-184)
+      gdeco(BOX, 0x55884f, 283, 25.6, CZ - 10, 5, 0.5, 5);  // pointe NE
+      gdeco(BOX, 0x55884f, 266, 24.8, CZ + 14, 4.5, 0.5, 5); // pointe SO (z 179-186)
       // SAPINS : sur les crêtes réelles (y du sommet du bloc + 0.5)
-      for (const [tx, tz, hy] of [[-18, -10, 28.5], [-16, -14, 29.0], [-13, -12, 29.5], [-20, 2, 28.5], [-17, 8, 28.0], [-15, 16, 27.5], [-4, -20, 28.5], [-10, -22, 29.5], [8, 18, 28.0], [12, 20, 27.5], [3, 22, 28.0]]) {
+      for (const [tx, tz, hy] of [[18, -10, 17.9], [16, -14, 18.4], [13, -12, 18.9], [20, 2, 17.9], [17, 8, 17.4], [15, 16, 16.9], [4, -20, 17.9], [10, -22, 18.9], [-8, 18, 17.4], [-12, 20, 16.9], [-3, 22, 17.4]]) {
         gdeco(PRISM_GEO, 0x2d5a35, CX + tx, hy + 1.8, CZ + tz, 1.4, 3.6, 1.4, 0, (MR() - 0.5) * 0.3, 0);
         gdeco(PRISM_GEO, 0x4a3423, CX + tx, hy + 0.4, CZ + tz, 0.5, 0.8, 0.5);
       }
-      // la cheminée (trou béant x 161-181, z 156-174) reste percée : les
+      // la cheminée (trou béant x 259-279, z 156-174) reste percée : les
       // étages 1-3 forment un anneau autour, jamais au-dessus du centre
     }
     // roches irrégulières plaquées sur les parois
-    for (const [bx, bz, by2, bs] of [[-12.5, -5, 13, 2.4], [12.4, 4, 15, 2.8], [5, 12.5, 11, 2.2], [-7, -12.4, 17, 2.6], [12.5, -9, 18, 2.4], [-12.4, 8, 18, 2.2]])
+    for (const [bx, bz, by2, bs] of [[12.5, -5, 2.4, 2.4], [-12.4, 4, 4.4, 2.8], [-5, 12.5, 0.4, 2.2], [7, -12.4, 6.4, 2.6], [-12.5, -9, 7.4, 2.4], [12.4, 8, 7.2, 2.2]])
       gdeco(BOX, ROCK_C, KX + bx, by2, KZ + bz, bs, bs * 0.85, bs * 1.2, 0.3, 0.5, 0.2);
     // stalactites suspendues à la voûte (toutes sous les massifs, pas au-dessus du trou ni de la bouche) + stalagmites
-    for (const [sx2, sz2, sl] of [[-15, -10, 2.6], [-8, -15, 3.2], [-12, -15, 2.2], [-3, 12, 2.8], [9, 11, 2.4], [-16, 3, 2.0]])
-      gdeco(PRISM_GEO, 0x8b939e, KX + sx2, 19.6 - sl, KZ + sz2, 1.1, sl, 1.1, Math.PI, 0, 0);
-    for (const [sx2, sz2, sl] of [[-6, 6, 1.6], [8, -4, 2.0], [2, 9, 1.4], [-9, -2, 1.8]])
+    for (const [sx2, sz2, sl] of [[15, -10, 2.6], [8, -15, 3.2], [12, -15, 2.2], [3, 12, 2.8], [-9, 11, 2.4], [16, 3, 2.0]])
+      gdeco(PRISM_GEO, 0x8b939e, KX + sx2, 9.0 - sl, KZ + sz2, 1.1, sl, 1.1, Math.PI, 0, 0);
+    for (const [sx2, sz2, sl] of [[6, 6, 1.6], [-8, -4, 2.0], [-2, 9, 1.4], [9, -2, 1.8]])
       gdeco(PRISM_GEO, 0x8b939e, KX + sx2, FY, KZ + sz2, 1.0, sl, 1.0, 0, 0, 0);
 
     // ---- QG DE BRUTUS : plateforme, piliers, escalier, garde-corps
     for (const [ox, oz] of [[-4.5, -2.8], [4.5, -2.8], [-4.5, 2.8], [4.5, 2.8]]) gshell(PX + ox, FY, PZ + oz, 0.7, 3.6, 0.7, 0x5a616c);
     gshell(PX, PT, PZ, 11, 0.55, 7, 0x5a616c);
-    for (let i = 0; i < 8; i++) gshell(PX - 2, PT - 0.45 * (i + 1) - 1.0, PZ + 4 + i * 0.92, 2.6, 1.0, 0.95, 0x5a616c);
+    // escalier : descend vers l'OUEST le long du bord ouest de la plateforme —
+    // il ne doit jamais barrer l'axe de la porte d'eau (couloir z 158-172)
+    for (let i = 0; i < 8; i++) gshell(PX - 5.5 - 0.475 - i * 0.92, PT - 0.45 * (i + 1) - 1.0, PZ, 0.95, 1.0, 2.6, 0x5a616c);
     gdeco(BOX, 0x8a929e, PX, PT + 0.55, PZ - 3.5, 11, 0.9, 0.1);
     gdeco(BOX, 0x8a929e, PX, PT + 0.55, PZ + 3.5, 11, 0.9, 0.1);
-    gdeco(BOX, 0x8a929e, PX - 5.5, PT + 0.55, PZ, 0.1, 0.9, 7);
-    gdeco(BOX, 0x39424e, PX - 2, PT + 0.55, PZ - 1, 2.6, 0.8, 1.4); // table de commandement
-    gdeco(BOX, 0x39ff88, PX - 2, PT + 1.0, PZ - 1, 1.6, 0.06, 0.9); // écran radar
-    gdeco(BOX, 0x8a6a3a, PX + 3.2, PT + 0.55, PZ + 2, 1.2, 1.1, 1.2); // caisse
-    gdeco(BOX, 0x6b5430, PX + 3.2, PT + 1.65, PZ + 2, 1.0, 0.1, 1.0);
+    gdeco(BOX, 0x8a929e, PX + 5.5, PT + 0.55, PZ, 0.1, 0.9, 7);
+    gdeco(BOX, 0x39424e, PX + 2, PT + 0.55, PZ - 1, 2.6, 0.8, 1.4); // table de commandement
+    gdeco(BOX, 0x39ff88, PX + 2, PT + 1.0, PZ - 1, 1.6, 0.06, 0.9); // écran radar
+    gdeco(BOX, 0x8a6a3a, PX - 3.2, PT + 0.55, PZ + 2, 1.2, 1.1, 1.2); // caisse
+    gdeco(BOX, 0x6b5430, PX - 3.2, PT + 1.65, PZ + 2, 1.0, 0.1, 1.0);
 
-    // ---- CASCADE ET BASSIN (la cascade tombe du bord du massif sud, dans le trou)
+    // ---- CASCADE (la cascade tombe du bord du massif sud, dans le trou ;
+    // plus de bassin : le sol de la caverne est sous le niveau de la mer,
+    // l'eau de la grotte EST la mer qui entre par la porte d'eau)
     {
-      const wx = KX - 10.5, wz = KZ + 10.5;
+      const wx = KX + 10.5, wz = KZ + 10.5;
       grottoWaterfallTex = canvasTex((g, s) => {
         g.fillStyle = 'rgba(190,230,255,0.9)'; g.fillRect(0, 0, s, s);
         for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.5})`; g.fillRect(Math.random() * s, Math.random() * s, 2 + Math.random() * 4, 12 + Math.random() * 30); }
       }, 128);
       grottoWaterfallTex.wrapS = grottoWaterfallTex.wrapT = THREE.RepeatWrapping;
       const wf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 14, 12, 1, true), new THREE.MeshBasicMaterial({ map: grottoWaterfallTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
-      wf.position.set(167, 17, 173.5); scene.add(wf);
-      const pool = new THREE.Mesh(BOX, new THREE.MeshStandardMaterial({ color: 0x1d8fd6, transparent: true, opacity: 0.72, roughness: 0.12, metalness: 0.1 }));
-      // grand bassin turquoise qui baigne tout l'angle sud-ouest de la caverne
-      pool.scale.set(11, 0.55, 11); pool.position.set(KX - 8.2, 10.28, KZ + 7.7); scene.add(pool);
-      grottoPoolPos = new THREE.Vector3(wx, FY, wz);
+      wf.position.set(273, 6.4, 173.5); scene.add(wf);
+      grottoPoolPos = new THREE.Vector3(273, FY, 173.5); // éclaboussures au pied de la cascade
     }
 
     // ---- CRISTAUX LUMINEUX CYAN (maillage émissif fusionné)
@@ -3686,27 +3829,27 @@ function buildSpyPOI(p) {
         _dm.compose(_dp.set(x, y, z), _dq, _ds.set(s, s * 1.8, s));
         crysGeos.push(colorize(PRISM_GEO.clone().applyMatrix4(_dm), hcol(0x9fe8ff)));
       };
-      for (const [cx2, cy2, cz2, s] of [[-12.2, 12, -6, 0.9], [-9, 12, -7, 1.1], [6, 11, 12.2, 0.8], [-12.2, 18, 6, 1.0], [-4, 18.9, -12.2, 0.7], [11, 18.7, 9, 0.9]]) crys(KX + cx2, cy2, KZ + cz2, s);
+      for (const [cx2, cy2, cz2, s] of [[12.2, 1.4, -6, 0.9], [9, 1.4, -7, 1.1], [-6, 0.4, 12.2, 0.8], [12.2, 7.4, 6, 1.0], [4, 8.3, -12.2, 0.7], [-11, 8.1, 9, 0.9]]) crys(KX + cx2, cy2, KZ + cz2, s);
       const crysMesh = new THREE.Mesh(mergeGeometries(crysGeos), matC(0x53e0ff, { emissive: 0x17a0c8, emissiveIntensity: 1.7, roughness: 0.25 }));
       crysMesh.castShadow = true; scene.add(crysMesh);
     }
 
-    // ---- LANTERNES (tunnel + entrée) et éclairage de la caverne
+    // ---- LANTERNES (rampe + entrée) et éclairage de la caverne
     const lampM = matC(0xffd9a0, { emissive: 0xff9a2e, emissiveIntensity: 1.6 });
     const lampAt = (x, y, z) => { const l = new THREE.Mesh(BOX, lampM); l.scale.set(0.32, 0.5, 0.32); l.position.set(x, y, z); scene.add(l); };
-    lampAt(212, 22.4, 158.2);   // rampe, bord nord (le sol y est à ~20,4)
-    lampAt(198, 17.6, 171.8);   // rampe, bord sud (le sol y est à ~15,4)
-    lampAt(160.5, 12.2, 158.0); // entrée de la caverne, sous l'arche rocheuse
+    lampAt(228, 7.3, 158.2);   // rampe, bord nord (le sol y est à ~5)
+    lampAt(242, 3.7, 171.8);   // rampe, bord sud (le sol y est à ~1,2)
+    lampAt(279.5, 1.6, 158.0); // entrée de la caverne, sous l'arche rocheuse
     const addCaveLight = (x, y, z, color, intensity, dist) => { const L = new THREE.PointLight(color, intensity, dist); L.position.set(x, y, z); scene.add(L); };
-    addCaveLight(195, 14, 165, 0xffb46b, 6, 14); // mi-rampe
-    addCaveLight(KX, 18, KZ, 0x66d9ff, 14, 34); // caverne
-    addCaveLight(KX - 4, 13, KZ + 6.5, 0x7fd0ff, 9, 20); // cascade
+    addCaveLight(245, 3.4, 165, 0xffb46b, 6, 14); // mi-rampe
+    addCaveLight(KX, 7.4, KZ, 0x66d9ff, 14, 34); // caverne
+    addCaveLight(KX + 4, 2.4, KZ + 6.5, 0x7fd0ff, 9, 20); // cascade
     addCaveLight(PX, PT + 2.5, PZ, 0xffc98a, 8, 18); // QG
-    addCaveLight(179, 16, 158, 0xffd9b0, 5, 12); // crâne de l'Ombre
+    addCaveLight(261, 5.4, 158, 0xffd9b0, 5, 12); // crâne de l'Ombre
 
     // ---- FAÇADE CRÂNE : la bouche du crâne EST l'entrée de la Grotte. Le
-    // visage est sculpté dans la face EST de la montagne, face à la rampe
-    // (+X), au-dessus d'un palier sablonneux (sol 10, terrain). Comme la
+    // visage est sculpté dans la face OUEST de la montagne, face à la rampe
+    // (-X), au-dessus d'un palier au niveau de l'eau (sol -0,6). Comme la
     // référence : une paroi PLEINE gris clair (contraste fort avec la
     // montagne sombre) avec deux grandes orbites NOIRES asymétriques, un
     // nez triangulaire noir, une rangée de grosses dents blanches au-dessus
@@ -3714,48 +3857,48 @@ function buildSpyPOI(p) {
     {
       const skullStart = grottoGeos.length;
       const SK = 0xb6bcc4, SKD = 0x7d858f, SKK = 0x0b0e13;
-      const FX = 185.0;   // plan de la façade (face EST de la montagne)
-      const FY = 10.0;   // sol de la bouche
-      const FACE = FX + 1.2; // face avant de la paroi (x = 186.2)
+      const FX = 255.0;   // plan de la façade (face OUEST de la montagne)
+      const FY = -0.6;    // sol de la bouche (au niveau de l'eau)
+      const FACE = FX - 1.2; // face avant de la paroi (x = 253.8, côté rampe)
       // === STRUCTURE PLEINE : mur supérieur massif au-dessus de la bouche
-      // (y 15.4-27.5, z 154-176) + tempes latérales de part et d'autre de la
-      // bouche (z 149.5-159.5 et 170.5-180.5, y 10-22). La bouche (z 159.5-
-      // 170.5, y 10-15.4) reste un VIDE traversant jusqu'à la caverne.
-      gshell(FX, 15.4, 165, 2.4, 12.1, 22, SK);   // mur plein (frontal+lèvre)
+      // (y 4.8-16.9, z 154-176) + tempes latérales de part et d'autre de la
+      // bouche (z 149.5-159.5 et 170.5-180.5, y -0.6-11.4). La bouche (z 159.5-
+      // 170.5, y -0.6-4.8) reste un VIDE traversant jusqu'à la caverne.
+      gshell(FX, 4.8, 165, 2.4, 12.1, 22, SK);   // mur plein (frontal+lèvre)
       gshell(FX, FY, 154.5, 2.4, 12.0, 10, SK);  // tempe gauche (z 149.5-159.5)
       gshell(FX, FY, 175.5, 2.4, 12.0, 10, SK);  // tempe droite (z 170.5-180.5)
       // === ORBITES : grandes plaques NOIRES plaquées sur la face avant de la
       // paroi pleine, avec un rebord gris plus sombre pour l'effet creusé.
-      // GAUCHE : centre z=160, y=21 (6.4 de large, 4.6 de haut), inclinée
+      // GAUCHE : centre z=160, y=10.4 (6.4 de large, 4.6 de haut), inclinée
       // (bord intérieur plus bas, regard menaçant)
-      gdeco(BOX, SKD, FACE + 0.05, 21.0, 160.0, 0.2, 5.4, 7.2, 0.15);   // rebord gauche
-      gdeco(BOX, SKK, FACE + 0.1, 21.0, 160.0, 0.25, 4.6, 6.4, 0.15);   // orbite noire gauche
+      gdeco(BOX, SKD, FACE - 0.05, 10.4, 160.0, 0.2, 5.4, 7.2, 0.15);   // rebord gauche
+      gdeco(BOX, SKK, FACE - 0.1, 10.4, 160.0, 0.25, 4.6, 6.4, 0.15);   // orbite noire gauche
       // DROITE (ASYMÉTRIQUE : plus haute, plus étroite), inclinée en miroir
-      gdeco(BOX, SKD, FACE + 0.05, 21.6, 170.3, 0.2, 5.2, 6.8, -0.15);  // rebord droit
-      gdeco(BOX, SKK, FACE + 0.1, 21.6, 170.3, 0.25, 4.4, 6.0, -0.15); // orbite noire droite
+      gdeco(BOX, SKD, FACE - 0.05, 11.0, 170.3, 0.2, 5.2, 6.8, -0.15);  // rebord droit
+      gdeco(BOX, SKK, FACE - 0.1, 11.0, 170.3, 0.25, 4.4, 6.0, -0.15); // orbite noire droite
       // === NEZ : triangle noir pointant vers le bas, plaqué sur la face avant,
-      // entre les orbites et au-dessus de la bouche (y 16.2-19.6). Rotation
-      // Y=π/2 pour que la FACE TRIANGULAIRE regarde vers +X (le joueur),
+      // entre les orbites et au-dessus de la bouche (y 6.2-9.6). Rotation
+      // Y=-π/2 pour que la FACE TRIANGULAIRE regarde vers -X (le joueur),
       // puis X=π pour pointer le sommet vers le bas.
-      gdeco(PRISM_GEO, SKK, FACE + 0.15, 18.2, 165, 2.8, 2.6, 0.3, Math.PI, Math.PI / 2, 0);
+      gdeco(PRISM_GEO, SKK, FACE - 0.15, 7.6, 165, 2.8, 2.6, 0.3, Math.PI, -Math.PI / 2, 0);
       // === DENTS : grosses dents blanches irrégulières suspendues au linteau
-      // (haut y 15.4), pointes vers 13.4-14.3, plaquées sur la face avant
+      // (haut y 4.8), pointes vers 2.8-3.7, plaquées sur la face avant
       const teeth = [[-5.6, 1.8], [-4.1, 1.2], [-2.6, 2.0], [-1.1, 1.4], [0.4, 1.9], [1.9, 1.1], [3.4, 1.6]];
       for (const [dz, len] of teeth)
-        gdeco(PRISM_GEO, 0xf2efe6, FACE + 0.15, 15.4, 165 + dz, 1.45, len, 0.4, Math.PI, Math.PI / 2, 0);
+        gdeco(PRISM_GEO, 0xf2efe6, FACE - 0.15, 4.8, 165 + dz, 1.45, len, 0.4, Math.PI, -Math.PI / 2, 0);
       // DÔME DU CRÂNE : arrondi au-dessus du frontal, large et proéminent
       // (dépasse en avant de la façade = front du crâne) — sommet qui émerge
       // devant la montagne sombre, rejoint le massif sud sans trou de ciel
-      gdeco(BOX, SK, FX + 1.3, 26.5, 165, 2.2, 2.5, 27, 0, 0, 0);
-      gdeco(BOX, SK, FX + 1.1, 28.6, 165, 1.8, 1.6, 19, 0, 0, 0);
-      gdeco(BOX, SK, FX + 0.8, 29.9, 165, 1.2, 1.2, 13, 0, 0, 0);
+      gdeco(BOX, SK, FX - 1.3, 15.9, 165, 2.2, 2.5, 27, 0, 0, 0);
+      gdeco(BOX, SK, FX - 1.1, 18.0, 165, 1.8, 1.6, 19, 0, 0, 0);
+      gdeco(BOX, SK, FX - 0.8, 19.3, 165, 1.2, 1.2, 13, 0, 0, 0);
       // éclairage chaud devant la façade pour faire ressortir le visage
-      addCaveLight(190, 19, 165, 0xffe0b8, 8, 18);
+      addCaveLight(250, 8.4, 165, 0xffe0b8, 8, 18);
       // === INTÉRIEUR DE LA BOUCHE : parois latérales sombres dans l'épaisseur
       // du passage (assombrissent l'entrée sans la boucher)
-      gdeco(BOX, SKK, 184.2, 12.5, 159.2, 1.6, 5, 0.8);            // paroi gauche
-      gdeco(BOX, SKK, 184.2, 12.5, 170.8, 1.6, 5, 0.8);           // paroi droite
-      gdeco(BOX, SKK, 184.2, 14.8, 165, 1.6, 1.2, 11.6);          // plafond sombre
+      gdeco(BOX, SKK, 255.8, 1.9, 159.2, 1.6, 5, 0.8);            // paroi gauche
+      gdeco(BOX, SKK, 255.8, 1.9, 170.8, 1.6, 5, 0.8);           // paroi droite
+      gdeco(BOX, SKK, 255.8, 4.2, 165, 1.6, 1.2, 11.6);          // plafond sombre
       // bornes du crâne exposées à la QA (le relief est bien dans la falaise)
       const sb = new THREE.Box3(), tb = new THREE.Box3();
       for (let i = skullStart; i < grottoGeos.length; i++) {
@@ -3769,52 +3912,52 @@ function buildSpyPOI(p) {
     // habillage industriel de la base souterraine de l'Ombre
     {
       const WM = 0x5a616c;
-      gshell(172.7, 13.3, 176.7, 17.4, 0.5, 2.2, WM); // tablier le long du mur sud
-      for (const cxp of [165, 177.6, 181.8]) gdeco(BOX, 0x39424e, cxp, 12.1, 177.3, 0.5, 1.2, 0.4); // consoles
-      gdeco(BOX, 0x8a929e, 172.7, 14.5, 175.65, 17.4, 0.9, 0.1); // garde-corps
-      for (let i = 0; i < 5; i++) gdeco(BOX, 0x8a929e, 164.5 + i * 4.1, 14.5, 175.65, 0.12, 0.9, 0.12); // poteaux
-      // escalier d'accès depuis le sol de la caverne (côté est)
-      for (let i = 0; i < 8; i++) gshell(180.2, 13.8 - 0.45 * (i + 1) - 1.0, 170.2 + i * 0.92, 2.2, 1.0, 0.95, WM);
-      // conteneurs de fret (le premier a les pieds dans le bassin)
-      makeStructBox(166, 10, 173.5, 6.5, 2.8, 2.8, matC(0xb03a2e, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
-      makeStructBox(160, 10, 161, 2.8, 2.8, 6.5, matC(0x2980b9, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
-      // cuve cylindrique contre le mur nord-ouest
+      gshell(267.3, 2.7, 176.7, 17.4, 0.5, 2.2, WM); // tablier le long du mur sud
+      for (const cxp of [275, 262.4, 258.2]) gdeco(BOX, 0x39424e, cxp, 1.5, 177.3, 0.5, 1.2, 0.4); // consoles
+      gdeco(BOX, 0x8a929e, 267.3, 3.9, 175.65, 17.4, 0.9, 0.1); // garde-corps
+      for (let i = 0; i < 5; i++) gdeco(BOX, 0x8a929e, 275.5 - i * 4.1, 3.9, 175.65, 0.12, 0.9, 0.12); // poteaux
+      // escalier d'accès depuis le sol de la caverne (côté ouest)
+      for (let i = 0; i < 8; i++) gshell(259.8, 3.2 - 0.45 * (i + 1) - 1.0, 170.2 + i * 0.92, 2.2, 1.0, 0.95, WM);
+      // conteneurs de fret (le premier a les pieds dans l'eau de mer)
+      makeStructBox(274, -0.6, 173.5, 6.5, 2.8, 2.8, matC(0xb03a2e, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+      makeStructBox(277, -0.6, 155.5, 2.8, 2.8, 6.5, matC(0x2980b9, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+      // cuve cylindrique contre le mur nord-est
       const tank = new THREE.Mesh(CYL_GEO, matC(0x8fa3ad, { metalness: 0.4, roughness: 0.5 }));
-      tank.scale.set(2.6, 4, 2.6); tank.position.set(159.5, 12, 155); tank.castShadow = true; scene.add(tank);
-      propBox(159.5, 10, 155, 1.3, 1.3, 4); // cuve : solide
+      tank.scale.set(2.6, 4, 2.6); tank.position.set(280.5, 1.4, 155); tank.castShadow = true; scene.add(tank);
+      propBox(280.5, -0.6, 155, 1.3, 1.3, 4); // cuve : solide
     }
 
-    // ---- SURFACE : deux bunkers et un hélipad sur le plateau abaissé (24, plat)
+    // ---- SURFACE : deux bunkers et un hélipad sur le plateau abaissé (13,4, plat)
     // bunker 1 : sud du plateau, hors des massifs de la voûte et de la rampe
-    buildHouse(p.x + 5, p.z + 25, p.h, 10, 9, 2, 'bunker');
-    // bunker 2 : sud-est, sur le plateau plat (z > 178), à l'écart de la rampe
-    buildHouse(p.x + 32, p.z + 15, p.h, 10, 8, 0, 'bunker');
+    buildHouse(p.x - 5, p.z + 25, p.h, 10, 9, 2, 'bunker');
+    // bunker 2 : sud-ouest, sur le plateau plat, à l'écart de la rampe
+    buildHouse(p.x - 32, p.z + 15, p.h, 10, 8, 0, 'bunker');
     {
-      const hx = p.x + 22, hz = p.z + 18;
+      const hx = p.x - 22, hz = p.z + 18;
       makeStructBox(hx, p.h - 0.35, hz, 6.4, 0.45, 6.4, matC(0x3a3f47, { metalness: 0.3, roughness: 0.6 }), { indestructible: true });
       const ring = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.1, 20), matC(0x1f2430)); ring.position.set(hx, p.h + 0.2, hz); scene.add(ring);
       for (const [mx, mz, mw, md] of [[-0.7, 0, 0.4, 1.6], [0.7, 0, 0.4, 1.6], [0, 0, 1.4, 0.4]]) { const m = new THREE.Mesh(BOX, matC(0xffd23f)); m.scale.set(mw, 0.05, md); m.position.set(hx + mx, p.h + 0.26, hz + mz); scene.add(m); }
     }
-    // blocs erratiques sur le plateau (24), loin de la rampe et de la cheminée
-    for (const [bx, bz, bs] of [[-14, 6, 2.6], [10, -13, 3.2], [16, 9, 2.2], [-9, -16, 2.8], [8, -18, 2.4]])
+    // blocs erratiques sur le plateau (13,4), loin de la rampe et de la cheminée
+    for (const [bx, bz, bs] of [[-26, 21, 2.6], [-14, -17, 3.2], [-34, 25, 2.2], [-28, 23, 2.8], [-22, -20, 2.4]])
       gshell(G.cx + bx, terrainH(G.cx + bx, G.cz + bz) - 0.5, G.cz + bz, bs, bs, bs * 1.3, ROCK_C);
 
     // ---- COFFRE-FORT ET CABINE DANS LA CAVERNE
-    buildVault(p, { x: KX + 1.5, y: FY, z: KZ + 5.5 }); // déplacé : libère la face du contrefort pour le crâne
-    buildPhoneBooth(p, { x: KX + 6.5, y: FY, z: KZ + 5 }); // déplacée : libère le pied de l'escalier de la passerelle
+    buildVault(p, { x: KX - 1.5, y: FY, z: KZ + 5.5 }); // déplacé : libère la face du contrefort pour le crâne
+    buildPhoneBooth(p, { x: KX - 6.5, y: FY, z: KZ + 5 }); // déplacée : libère le pied de l'escalier de la passerelle
 
     // ---- COFFRES, MUNITIONS ET BUTIN
-    spawnChest(KX - 9, FY + 0.05, KZ - 6);
-    spawnChest(KX + 6, FY + 0.05, KZ + 1);
-    spawnChest(PX - 2, PT + 0.55, PZ);
-    spawnChest(KX + 6, FY + 0.05, KZ + 8); // déplacé : l'ancien emplacement est noyé par le grand bassin
-    ammoBoxes.push(spawnAmmoBox(KX + 3, FY + 0.05, KZ - 5)); // déplacée : l'ancien coin NE est comblé par le contrefort
-    ammoBoxes.push(spawnAmmoBox(PX + 3, PT + 0.55, PZ - 1));
-    lootSpots.push({ x: KX + 1, y: FY + 0.6, z: KZ - 10 });
-    lootSpots.push({ x: KX - 10, y: FY + 0.6, z: KZ - 2 });
-    lootSpots.push({ x: KX + 5, y: FY + 0.6, z: KZ + 9 });
-    lootSpots.push({ x: PX + 2, y: PT + 0.7, z: PZ + 1 });
-    lootSpots.push({ x: KX - 11, y: FY + 0.6, z: KZ + 5 });
+    spawnChest(KX + 9, FY + 0.05, KZ - 6);
+    spawnChest(KX - 6, FY + 0.05, KZ + 1);
+    spawnChest(PX + 2, PT + 0.55, PZ);
+    spawnChest(KX - 6, FY + 0.05, KZ + 8);
+    ammoBoxes.push(spawnAmmoBox(KX - 3, FY + 0.05, KZ - 5));
+    ammoBoxes.push(spawnAmmoBox(PX - 3, PT + 0.55, PZ - 1));
+    lootSpots.push({ x: KX - 1, y: FY + 0.6, z: KZ - 10 });
+    lootSpots.push({ x: KX + 10, y: FY + 0.6, z: KZ - 2 });
+    lootSpots.push({ x: KX - 5, y: FY + 0.6, z: KZ + 9 });
+    lootSpots.push({ x: PX - 2, y: PT + 0.7, z: PZ + 1 });
+    lootSpots.push({ x: KX + 11, y: FY + 0.6, z: KZ + 5 });
 
     // fusion de toutes les roches de la grotte en un seul maillage
     finishGrotto();
@@ -3892,7 +4035,7 @@ function buildSpyPOI(p) {
     placePad(p.x + 16, p.z);
     placePad(p.x - 16, p.z);
   }
-  if (p.key !== 'yacht' && p.key !== 'rig' && p.key !== 'grotto') { buildVault(p); buildPhoneBooth(p); }
+  if (p.key !== 'yacht' && p.key !== 'rig' && p.key !== 'grotto' && p.key !== 'agency') { buildVault(p); buildPhoneBooth(p); }
   if (p.key === 'agency') placePad(p.x - 22, p.z + 8);
 }
 const spySpot0 = lootSpots.length;
@@ -3995,7 +4138,9 @@ function startGame() {
     if (p.key === 'yacht') { const yd = Math.max(terrainH(p.x, p.z), 2.4); sy = yd + 1.5; sx = p.x + rand(-10, 10); sz = p.z + rand(-3, 3); wpBox = { x: p.x, z: p.z, hx: 11, hz: 3.5 }; }
     else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; sx = p.x + rand(-8, 8); sz = p.z + rand(-6, 6); wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
     // La Grotte : Brutus et ses hommes de main gardent la caverne souterraine
-    else if (p.key === 'grotto') { sx = GROTTO.cavernX - 4; sz = GROTTO.cavernZ - 8; sy = GROTTO.floor1 + 3.6 + 0.1; wpBox = { x: GROTTO.cavernX, z: GROTTO.cavernZ, hx: 10, hz: 10 }; }
+    else if (p.key === 'grotto') { sx = GROTTO.cavernX + 4; sz = GROTTO.cavernZ - 8; sy = GROTTO.floor1 + 3.6 + 0.1; wpBox = { x: GROTTO.cavernX, z: GROTTO.cavernZ, hx: 10, hz: 10 }; }
+    // L'Agence : le boss garde le hall du rez-de-chaussée (le coffre-fort est en sous-sol)
+    else if (p.key === 'agency') { sx = p.x + rand(-6, 6); sz = p.z + rand(-3, 3); sy = p.h + 0.15; wpBox = { x: p.x, z: p.z, hx: 10, hz: 7 }; }
     else { const bp = randomLandPoint(p.x, p.z, p.r * 0.3); sx = bp.x; sz = bp.z; sy = Math.max(terrainH(sx, sz), 2.4) + 0.1; }
     const boss = new Char(cfg.boss, false, { skin: cfg.skin, backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
     boss.hench = true; boss.boss = true; boss.bossPoi = p; boss.henchPoi = p; boss.wpBox = wpBox;
@@ -4854,10 +4999,22 @@ function updateCamera(dt) {
       gClamped = true;
     }
   }
+  // Agence : le joueur est dans le sous-sol (coffre-fort) — la caméra reste
+  // sous le plancher du rez-de-chaussée, sinon elle traverse le bâtiment.
+  const pInBase = player.alive && player.mode !== 'bus' && player.mode !== 'drive'
+    && player.pos.y < AGENCY_BASE.camCeil && inAgencyBasement(player.pos.x, player.pos.z);
+  let aClamped = false;
+  if (pInBase) {
+    if (camera.position.y > AGENCY_BASE.camCeil) camera.position.y = AGENCY_BASE.camCeil;
+    if (camera.position.y < AGENCY_BASE.floor + 0.4) camera.position.y = AGENCY_BASE.floor + 0.4;
+    aClamped = true;
+  }
   // dans le volume couvert de la Grotte, la caméra peut passer sous le niveau du
   // terrain au-dessus (le plafond rocheux la protège déjà)
   const camUnder = gClamped && camera.position.y < th - 0.75 && inGrotto(camera.position.x, camera.position.z);
-  if (camera.position.y < th && !camUnder) camera.position.y = th;
+  // idem dans le sous-sol de l'Agence : le plancher du RDC protège la caméra
+  const camUnderAgency = aClamped && inAgencyBasement(camera.position.x, camera.position.z);
+  if (camera.position.y < th && !camUnder && !camUnderAgency) camera.position.y = th;
   camTarget.copy(camera.position).add(d);
   camera.lookAt(camTarget);
   if (player.alive) player.mesh.visible = !scopeOn && player.mode !== 'bus' && player.mode !== 'drive';
@@ -5105,7 +5262,7 @@ function updateWorld(dt) {
   // cascade de la Grotte : défilement de la texture + embruns au pied
   if (grottoWaterfallTex) {
     grottoWaterfallTex.offset.y -= dt * 0.85;
-    if (grottoPoolPos && MR() < dt * 2.5) burst(_v1.set(grottoPoolPos.x + (MR() - 0.5) * 2.4, 10.7, grottoPoolPos.z + (MR() - 0.5) * 2.4), 0xbfe8ff, 2, 2.2, 0.09, 0.4, 0.5);
+    if (grottoPoolPos && MR() < dt * 2.5) burst(_v1.set(grottoPoolPos.x + (MR() - 0.5) * 2.4, 0.1, grottoPoolPos.z + (MR() - 0.5) * 2.4), 0xbfe8ff, 2, 2.2, 0.09, 0.4, 0.5);
   }
   let nearC = null, nearD = 11;
   const pp = player.pos;
