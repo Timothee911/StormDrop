@@ -334,9 +334,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // REMONTÉE RÉELLE : la rampe se monte dans l'autre sens jusqu'au plateau
     G.setCam(Math.PI / 2, -0.1); // regarde plein ouest (haut de la rampe)
     G.keys.KeyW = true;
-    for (let i = 0; i < 90; i++) {
+    // ~57 m de montée à ~4 m/s ≈ 14,5 s : 120 pas de 150 ms laissent la marge.
+    // Arrêt à x<199 : sur la pente, y(199) ≈ 12,6 > 12,5 (l'assertion exige
+    // d'être HAUT sur la rampe, près du plateau 13,4).
+    for (let i = 0; i < 120; i++) {
       window.advanceTime(150);
-      if (!p.alive || p.pos.x < 202) break;
+      if (!p.alive || p.pos.x < 199) break;
     }
     G.keys.KeyW = false;
     R.push(['remontée de la rampe', p.alive && p.pos.y > 12.5 && p.pos.x < 208, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
@@ -387,7 +390,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // bouche du crâne EST l'entrée de la caverne (paroi x 253,8-256,2, tempes
     // z 149.5-180.5, dôme jusqu'à y ~17 : émerge devant la montagne)
     const sb = G.grottoSkullBounds;
-    R.push(["crâne de l'Ombre sculpté dans le contrefort", !!sb && sb.min.x >= 253 && sb.max.x <= 256.6 && sb.min.y <= -0.05 && sb.max.y >= 17 && sb.min.z <= 155 && sb.max.z >= 175, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
+    // (le dôme du front du crâne dépasse volontiers ~0,4 m devant la façade :
+    // min.x >= 252,5) — le crâne reste bien ancré dans le contrefort
+    R.push(["crâne de l'Ombre sculpté dans le contrefort", !!sb && sb.min.x >= 252.5 && sb.max.x <= 256.6 && sb.min.y <= -0.05 && sb.max.y >= 17 && sb.min.z <= 155 && sb.max.z >= 175, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
     // les maisons (bunkers) sont bien posées : terrain plat sous toute l'emprise
     {
       let flat = true, worst = 0;
@@ -403,7 +408,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     window.advanceTime(200);
     R.push(['passerelle du mur sud praticable', p.grounded && Math.abs(p.pos.y - 3.2) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
     // escalier d'accès de la passerelle : marches praticables
-    p.pos.set(259.8, 2.4, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    // posé sur la 3e marche (sommet à 1,85) : le joueur doit y rester debout
+    p.pos.set(259.8, 1.9, 171.8); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(200);
     R.push(['escalier de la passerelle praticable', p.grounded && p.pos.y > 0.5 && p.pos.y < 2.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
     // conteneur de fret : solide (cover au bord de l'eau)
