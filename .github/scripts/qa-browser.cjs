@@ -42,8 +42,16 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
     const url = 'http://localhost:8090/index.html';
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForFunction(() => document.readyState === 'complete', { timeout: 15000 })
-        .catch(() => notReady.push({ url, reason: 'document pas complet après 15s' }));
+      // Polling explicite (et pas rAF) : la boucle de rendu du jeu sature les
+      // requestAnimationFrame et l'attente par défaut de Puppeteer ne s'exécute jamais.
+      const t0 = Date.now();
+      while (Date.now() - t0 < 15000) {
+        const st = await page.evaluate(() => document.readyState).catch(() => null);
+        if (st === 'complete') break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if ((await page.evaluate(() => document.readyState)) !== 'complete')
+        notReady.push({ url, reason: 'document pas complet après 15s' });
       await new Promise(r => setTimeout(r, 3000));
 
       // Vérifie que la boucle de rendu WebGL progresse réellement
@@ -78,8 +86,14 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
     const url = 'http://localhost:8090/game.html';
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 })
-        .catch(() => notReady.push({ url, reason: 'document pas complet après 30s' }));
+      const t0 = Date.now();
+      while (Date.now() - t0 < 30000) {
+        const st = await page.evaluate(() => document.readyState).catch(() => null);
+        if (st === 'complete') break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if ((await page.evaluate(() => document.readyState)) !== 'complete')
+        notReady.push({ url, reason: 'document pas complet après 30s' });
       await new Promise(r => setTimeout(r, 5000));
 
       const canvas = await page.$('#game');

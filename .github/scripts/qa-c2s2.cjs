@@ -284,6 +284,113 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   check('grappin tiré et propulse le joueur', grap.fired === true && grap.vel > 8, JSON.stringify(grap));
 
+  // --- 9bis. La Grotte : plateau abaissé, rampe à ciel ouvert, caverne voûtée ---
+  const cave = await frame.evaluate(() => {
+    const G = window.__game, p = G.player, R = [];
+    G.storm.dmg = 0; // test ciblé : la tempête ne doit pas tuer le joueur ici
+    // la montagne est retirée : le plateau du POI est à ~24 (avant : 35,8)
+    const t1 = G.terrainH(205, 150), t2 = G.terrainH(230, 165);
+    R.push(['montagne retirée, plateau à 24', t1 > 22.5 && t1 < 25.5 && t2 > 22.5 && t2 < 25.5, 'y=' + t1.toFixed(1) + '/' + t2.toFixed(1)]);
+    // la grande rampe est creusée dans le plateau (mi-parcours)
+    R.push(['rampe creusée dans le plateau', G.terrainH(190, 165) < 22, 'y=' + G.terrainH(190, 165).toFixed(1)]);
+    // le trou béant traverse la voûte : le terrain s'effondre jusqu'au sol de la caverne
+    R.push(["trou béant dans la voûte", G.terrainH(171, 165) < 11, 'y=' + G.terrainH(171, 165).toFixed(1)]);
+    // ANTI « SOL INVISIBLE » : le maillage rendu doit épouser terrainH (±2 m).
+    // Si le rendu et la physique divergent, le joueur marche dans le vide ou
+    // traverse le sol — c'est exactement le bug signalé sur la grotte.
+    {
+      const tm = G.terrainMesh, TH = G.THREE, rc = new TH.Raycaster(), dn = new TH.Vector3(0, -1, 0);
+      let worst = 0, n = 0;
+      for (const [sx, sz] of [[230,165],[222,160],[210,165],[205,150],[200,158],[200,172],[190,165],[190,159],[186,165],[183,165],[171,165],[177,155],[166,160],[172,185],[226,152],[222,183],[183,147],[176,160]]) {
+        rc.set(new TH.Vector3(sx, 45, sz), dn);
+        const hit = rc.intersectObject(tm, false)[0];
+        if (hit) { worst = Math.max(worst, Math.abs(hit.point.y - G.terrainH(sx, sz))); n++; }
+      }
+      R.push(['sol rendu = sol physique', n >= 14 && worst < 2.5, n + ' pts, écart max ' + worst.toFixed(2) + ' m']);
+    }
+    // les hommes de main ne perturbent pas la marche de test (Brutus reste en place)
+    for (const c of G.chars) if (c.alive && c.hench && !c.boss) G.damage(c, 999999, null, false, 'test');
+    // DESCENTE RÉELLE : on marche depuis le plateau (pas de téléport au fil de la
+    // pente), le joueur doit rester au sol tout du long et atteindre la caverne
+    let walkOK = true, airFrames = 0;
+    p.pos.set(228, 24.4, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    G.setCam(Math.PI / 2, -0.25); // regarde plein ouest (bas de la rampe)
+    G.keys.KeyW = true;
+    for (let i = 0; i < 90; i++) {
+      window.advanceTime(150);
+      if (!p.alive) { walkOK = false; R.push(['joueur vivant dans la rampe', false, 'mort au pas ' + i]); break; }
+      if (p.mode === 'ground' && !p.grounded) airFrames++;
+      if (p.pos.x < 172) break;
+    }
+    G.keys.KeyW = false;
+    R.push(['descente de la rampe au sol', walkOK && airFrames < 3 && p.pos.x < 175 && p.pos.y < 11.6, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + ' air=' + airFrames]);
+    // REMONTÉE RÉELLE : la rampe se monte dans l'autre sens jusqu'au plateau
+    G.setCam(-Math.PI / 2, -0.1); // regarde plein est (haut de la rampe)
+    G.keys.KeyW = true;
+    for (let i = 0; i < 90; i++) {
+      window.advanceTime(150);
+      if (!p.alive || p.pos.x > 226) break;
+    }
+    G.keys.KeyW = false;
+    R.push(['remontée de la rampe', p.alive && p.pos.y > 22.5 && p.pos.x > 218, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
+    // le joueur est bien SOUS la voûte dans la caverne : un raycast vertical
+    // depuis le sol de la caverne doit toucher la roche de la voûte (la caverne
+    // est bien couverte, « en dessous de la carte »)
+    p.pos.set(159, 10.6, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(300);
+    {
+      const TH = G.THREE, rc = new TH.Raycaster();
+      rc.set(new TH.Vector3(156, 11, 165), new TH.Vector3(0, 1, 0));
+      rc.far = 14;
+      const hit = rc.intersectObject(G.grottoRockMesh, false)[0];
+      R.push(['caverne couverte par la voûte', p.grounded && !!hit && hit.distance < 13, 'roche à ' + (hit ? hit.distance.toFixed(1) : 'aucune') + ' m au-dessus']);
+    }
+    // sol de la caverne : dalle plate à 10
+    p.pos.set(171, 10.3, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(300);
+    R.push(['sol de la caverne à y=10', p.grounded && Math.abs(p.pos.y - 10) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // saut dans le trou béant : chute de 14 m, dégâts de chute négligeables
+    p.pos.set(171, 23.5, 165); p.vel.set(0, 0, 0); p.mode = 'ground';
+    window.advanceTime(1500);
+    R.push(['chute dans le trou béant survivable', p.alive && p.hp > 70 && p.grounded && Math.abs(p.pos.y - 10) < 1, 'hp=' + p.hp.toFixed(0) + ' y=' + p.pos.y.toFixed(1)]);
+    // Brutus garde la caverne depuis son QG
+    const brutus = G.henchmen.find((c) => c.alive && c.boss && c.name === 'Brutus');
+    R.push(['Brutus garde la caverne', !!brutus && brutus.pos.y < 16, brutus ? 'y=' + brutus.pos.y.toFixed(1) : 'absent']);
+    // coffre-fort de la Grotte au sol de la caverne
+    const vg = G.vaults.find((v) => v.poi.key === 'grotto');
+    R.push(['coffre-fort dans la caverne', !!vg && vg.y < 16, vg ? 'y=' + vg.y.toFixed(1) : 'absent']);
+    // crâne de l'Ombre : bas-relief dans le contrefort nord, sous la voûte
+    // (rien ne dépasse du plateau : max.y < 24)
+    const sb = G.grottoSkullBounds;
+    R.push(["crâne de l'Ombre sculpté dans le contrefort", !!sb && sb.min.x < 176 && sb.max.x > 182 && sb.max.y > 18 && sb.max.y < 21 && sb.max.y < 24 && sb.min.z < 156 && sb.max.z > 157.5, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
+    // les maisons (bunkers) sont bien posées : terrain plat sous toute l'emprise
+    {
+      let flat = true, worst = 0;
+      for (const [bx, bz, w, d] of [[205, 190, 10, 9], [226, 152, 10, 8]]) {
+        for (const [cx, cz] of [[bx, bz], [bx - w / 2, bz - d / 2], [bx + w / 2, bz - d / 2], [bx - w / 2, bz + d / 2], [bx + w / 2, bz + d / 2]]) {
+          const e = Math.abs(G.terrainH(cx, cz) - 24); worst = Math.max(worst, e); if (e > 1.2) flat = false;
+        }
+      }
+      R.push(['bunkers posés sur terrain plat', flat, 'écart max ' + worst.toFixed(2) + ' m']);
+    }
+    // passerelle métallique du mur sud : praticable
+    p.pos.set(172.7, 14.2, 176.7); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(200);
+    R.push(['passerelle du mur sud praticable', p.grounded && Math.abs(p.pos.y - 13.8) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // escalier d'accès de la passerelle : marches praticables
+    p.pos.set(180.2, 12.2, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(200);
+    R.push(['escalier de la passerelle praticable', p.grounded && p.pos.y > 11 && p.pos.y < 13.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // conteneur de fret : solide (cover au bord du bassin)
+    p.pos.set(166, 13.4, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(200);
+    R.push(['conteneur de fret solide', p.grounded && Math.abs(p.pos.y - 12.8) < 0.6, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // pas de dégâts de zone en début de partie : on doit rester en vie
+    // (Brutus riposte — seule la survie est vérifiée)
+    window.advanceTime(1500);
+    R.push(['joueur vivant', p.alive, 'hp=' + p.hp.toFixed(0)]);
+    return R.map((r) => (r[1] ? 'PASS' : 'FAIL') + '|' + r[0] + '|' + (r[2] ?? '')).join('\n');
+  });
   // --- 9. Victoire possible avec des hommes de main vivants ---
   const board = await frame.evaluate(() => {
     const G = window.__game;
@@ -300,62 +407,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   check('victoire déclenchée, PNJ exclus du classement', boardState !== 'playing' && board.alive === 1, JSON.stringify(board) + ' state=' + boardState);
 
-  // --- 9bis. La Grotte : caverne souterraine sous la colline ---
-  const cave = await frame.evaluate(() => {
-    const G = window.__game, p = G.player, R = [];
-    // le cratère d'entrée est bien creusé dans la colline
-    R.push(['cratère creusé sous y=25', G.terrainH(200, 165) < 25, 'y=' + G.terrainH(200, 165).toFixed(1)]);
-    // l'entaille de la bouche est évidée sous le plafond rocheux
-    R.push(['entaille de la bouche < 22', G.terrainH(190, 165) < 22, 'y=' + G.terrainH(190, 165).toFixed(1)]);
-    // descente du tunnel : le joueur est téléporté de marche en marche et doit
-    // rester au sol (colliders rocheux) jusqu'à la caverne (y ~ 10)
-    // sol attendu : marche i = 17 - 0.5 * i (tunnel aligné, plein ouest)
-    let okSteps = true, lastY = 99;
-    for (let s = 0; s < 14; s++) {
-      const d = 10.5 + s; // distance au centre du cratère le long de l'axe
-      const floorTop = 17 - 0.5 * s;
-      p.pos.set(200 - d, floorTop + 0.15, 165);
-      p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-      window.advanceTime(200);
-      if (!p.alive) { R.push(['joueur vivant dans la grotte', false, 'mort au pas ' + s]); okSteps = false; break; }
-      if (!p.grounded) { R.push(['au sol dans le tunnel', false, 'pas ' + s + ' y=' + p.pos.y.toFixed(1)]); okSteps = false; break; }
-      if (Math.abs(p.pos.y - floorTop) > 0.6) { R.push(['marches du tunnel praticables', false, 'pas ' + s + ' y=' + p.pos.y.toFixed(1) + ' attendu ' + floorTop.toFixed(1)]); okSteps = false; break; }
-      lastY = p.pos.y;
-    }
-    R.push(['descente jusqu\'à la caverne', okSteps && lastY < 11.6, 'y final ' + lastY.toFixed(1)]);
-    // le joueur est bien SOUS le terrain dans le tunnel profond
-    R.push(['tunnel souterrain', p.pos.y < G.terrainH(p.pos.x, p.pos.z) - 0.35, 'y=' + p.pos.y.toFixed(1) + ' terrain=' + G.terrainH(p.pos.x, p.pos.z).toFixed(1)]);
-    // marche jusqu'au fond de la caverne : sol plat à 10
-    p.pos.set(171, 10.3, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    window.advanceTime(300);
-    R.push(['sol de la caverne à y=10', p.grounded && Math.abs(p.pos.y - 10) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
-    // Brutus garde la caverne depuis son QG
-    const brutus = G.henchmen.find((c) => c.alive && c.boss && c.name === 'Brutus');
-    R.push(['Brutus garde la caverne', !!brutus && brutus.pos.y < 16, brutus ? 'y=' + brutus.pos.y.toFixed(1) : 'absent']);
-    // coffre-fort de la Grotte au sol de la caverne
-    const vg = G.vaults.find((v) => v.poi.key === 'grotto');
-    R.push(['coffre-fort dans la caverne', !!vg && vg.y < 16, vg ? 'y=' + vg.y.toFixed(1) : 'absent']);
-    // crâne de l'Ombre : bas-relief présent dans la falaise ouest du cratère
-    const sb = G.grottoSkullBounds;
-    R.push(["crâne de l'Ombre sculpté dans la falaise", !!sb && sb.min.x < 186.6 && sb.max.x > 184 && sb.max.y > 33 && sb.max.y < 36 && sb.min.z < 160 && sb.max.z > 170, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) : 'absent']);
-    // passerelle métallique du mur sud : praticable
-    p.pos.set(172.7, 14.2, 176.7); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    window.advanceTime(200);
-    R.push(['passerelle du mur sud praticable', p.grounded && Math.abs(p.pos.y - 13.8) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
-    // escalier d'accès de la passerelle : marches praticables
-    p.pos.set(180.2, 12.2, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    window.advanceTime(200);
-    R.push(['escalier de la passerelle praticable', p.grounded && p.pos.y > 11 && p.pos.y < 13.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
-    // conteneur de fret : solide (cover au bord du bassin)
-    p.pos.set(166, 13.4, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    window.advanceTime(200);
-    R.push(['conteneur de fret solide', p.grounded && Math.abs(p.pos.y - 12.8) < 0.6, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
-    // pas de dégâts de zone en début de partie : on doit rester en vie
-    // (Brutus et ses hommes ripostent — seule la survie est vérifiée)
-    window.advanceTime(1500);
-    R.push(['joueur vivant', p.alive, 'hp=' + p.hp.toFixed(0)]);
-    return R.map((r) => (r[1] ? 'PASS' : 'FAIL') + '|' + r[0] + '|' + (r[2] ?? '')).join('\n');
-  });
   for (const line of cave.split('\n')) { const i = line.indexOf('|'); check(line.slice(i + 1), line.startsWith('PASS'), line.slice(line.indexOf('|', i + 1) + 1)); }
 
   console.log(results.join('\n'));

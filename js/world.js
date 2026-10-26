@@ -71,6 +71,10 @@ export const POIS = [
   { name: 'Chalets Givrés', x: 41, z: 256, r: 28, style: 'chalet' },
 ];
 for (const p of POIS) p.h = Math.max(2.5, rawH(p.x, p.z));
+// La Grotte : la montagne est retirée — tout le POI s'abaisse à 24 (GROTTO.bowlH).
+// La caverne reste souterraine sous sa voûte, mais le plateau au-dessus n'est plus
+// une colline : la grotte vit « en dessous de la carte », à flanc de terrain plat.
+POIS.find((p) => p.key === 'grotto').h = 24;
 
 export function terrainH(x, z) {
   let h = rawH(x, z);
@@ -83,28 +87,32 @@ export function terrainH(x, z) {
       h += (p.h - h) * t;
     }
   }
-  // La Grotte : cratère d'entrée creusé dans le plateau (fond plat à craterY)
+  // La Grotte : grand trou béant dans la voûte — le terrain s'y effondre en
+  // cheminée jusqu'au sol de la caverne : 2e entrée (on peut y sauter depuis le
+  // plateau). Profil en deux étages : plat au fond (la caverne reste en roche,
+  // pas d'herbe), pente douce sur 4 m, puis falaise raide (cachée derrière les
+  // murs de la caverne) qui remonte au plateau 24. La physique reste continue
+  // avec le maillage rendu (pas de sol invisible : transition lisse).
   {
-    const gd = Math.hypot(x - GROTTO.cx, z - GROTTO.cz);
-    if (gd < GROTTO.craterR) h = GROTTO.craterY + (h - GROTTO.craterY) * smooth(GROTTO.craterFlat, GROTTO.craterR, gd);
+    const dx = Math.max(0, Math.abs(x - GROTTO.holeX) - GROTTO.holeHX);
+    const dz = Math.max(0, Math.abs(z - GROTTO.holeZ) - GROTTO.holeHZ);
+    const d = Math.hypot(dx, dz);
+    if (d < GROTTO.holeBlend) {
+      const t = smooth(0, GROTTO.holeBlend, d);
+      h = GROTTO.holeY + (h - GROTTO.holeY) * t * t * t;
+    }
   }
-  // Entaille de la bouche du tunnel : la colline est évidée juste au-dessus du
-  // plafond rocheux du tunnel sur les premiers mètres (entrée encastrée, sombre)
+  // Rampe d'accès à ciel ouvert : grande tranchée qui descend du plateau (24)
+  // jusqu'à la caverne (10,4) — la partie x 180-184 passe sous l'arche rocheuse
+  // (bande est de la voûte), bords fondus sur 5 m — aucune façade, aucune porte :
+  // le début de la grotte est grand ouvert
   {
-    const dx = x - GROTTO.cx, dz = z - GROTTO.cz;
-    const along = dx * GROTTO.ux + dz * GROTTO.uz;
-    if (along > GROTTO.mouthD - 1 && along < GROTTO.mouthD + 5) {
-      const perp = Math.hypot(dx - GROTTO.ux * along, dz - GROTTO.uz * along);
-      // l'évidage doit dépasser le PLUS HAUT dessus des dalles couvrantes :
-      // indice minimal des dalles qui couvrent ce point (bord à ±0,53 m)
-      const step = Math.max(0, Math.min(14, Math.ceil(along - (GROTTO.mouthD + 0.5) - 0.53)));
-      // deux phases : (1) approche de la bouche = ravin praticable EXACTEMENT au
-      // niveau du cratère et de la première marche (17) — plus haut, le joueur
-      // remontant du tunnel serait enterré dans le terrain et chuterait à travers ;
-      // (2) au-delà, l'évidage suit le dessus des dalles de plafond (+0,4 m) :
-      // les dalles restent enfouies juste sous le fond du ravin, le tunnel reste couvert
-      const carve = along < GROTTO.mouthD + 0.5 ? GROTTO.floor0 : GROTTO.floor0 - 0.5 * step + 5.25;
-      if (h > carve) h = carve + (h - carve) * smooth(3.7, 4.8, perp);
+    if (x > GROTTO.rampX0 && x < GROTTO.rampX1 + 2) {
+      const t = Math.min(1, Math.max(0, (GROTTO.rampX1 - x) / (GROTTO.rampX1 - GROTTO.rampX0)));
+      const floor = GROTTO.rampH0 + (GROTTO.rampH1 - GROTTO.rampH0) * t;
+      const perp = Math.abs(z - GROTTO.cz);
+      if (perp < GROTTO.rampHalfZ + GROTTO.rampBlend)
+        h = floor + (h - floor) * smooth(GROTTO.rampHalfZ, GROTTO.rampHalfZ + GROTTO.rampBlend, perp);
     }
   }
   return h;
@@ -115,50 +123,35 @@ export function inPOI(x, z, pad = 0) {
   return null;
 }
 
-// La Grotte : cratère d'entrée + tunnel descendant + caverne (les coordonnées sont
-// utilisées par world.js pour le cratère, et par main.js pour la coque rocheuse).
-//   cx/cz         : centre du cratère (et du POI)
-//   craterY        : fond du cratère (17), à plat jusqu'à craterFlat (8), fondu jusqu'à craterR (17)
-//   ux/uz          : direction unitaire du tunnel (plein ouest, aligné aux axes)
-//   mouthD/endD    : entrée du tunnel à 9,5 m du centre, il débouche à 25,5 m
-//   floor0/floor1  : sol du tunnel : 17 (entrée) -> 10 (caverne), marches de 0,5 m
-//   cavernX/Z, cavernR : centre et rayon de la caverne, sol 10, voûte ~21,5
+// La Grotte : plateau abaissé à 24 (montagne retirée) + grande rampe à ciel
+// ouvert + caverne voûtée percée d'un trou béant. Solide mais sous la carte.
+//   bowlH          : hauteur du plateau du POI (24)
+//   holeX/Z, holeHX/HZ, holeY : trou béant dans la voûte (rectangle) et fond de
+//                              la cheminée (9,6 = sol de la caverne)
+//   rampX0/X1, rampHalfZ, rampH0/H1 : tranchée de la rampe (x 184->222, sol 24->10,4)
+//   cavernX/Z, cavernR, floor1 : caverne (sol 10, voûte ~21,5)
 export const GROTTO = {
-  cx: 200, cz: 165, craterR: 17, craterFlat: 8, craterY: 17,
-  ux: -1, uz: 0, mouthD: 9.5, endD: 25.5, floor0: 17, floor1: 10,
-  cavernX: 171, cavernZ: 165, cavernR: 13.5,
+  cx: 200, cz: 165, bowlH: 24,
+  holeX: 171, holeZ: 165, holeHX: 9.9, holeHZ: 9.2, holeY: 9.6, holeBlend: 10,
+  rampX0: 180, rampX1: 222, rampHalfZ: 5.5, rampBlend: 7, rampH0: 24, rampH1: 10.4,
+  cavernX: 171, cavernZ: 165, cavernR: 13.5, floor1: 10,
 };
-const _gclamp = (v, a, b) => Math.max(a, Math.min(b, v));
-// Empreinte souterraine de la Grotte (cratère + couloir du tunnel + caverne) :
-// le moteur s'en sert pour savoir qu'un point SOUS le terrain est dans la grotte
-// (le sol y est fait de colliders rocheux, plus de terrain au-dessus de la tête).
+// Empreinte souterraine de la Grotte (caverne sous la voûte + bouche de la
+// rampe sous l'arche rocheuse) : le moteur s'en sert pour savoir qu'un point SOUS
+// le terrain est dans la grotte (le sol y est fait de colliders rocheux).
 export function inGrotto(x, z) {
-  const dx = x - GROTTO.cx, dz = z - GROTTO.cz;
-  const d = Math.hypot(dx, dz);
-  if (d < GROTTO.craterR + 1) return true;
-  const t = _gclamp((dx * GROTTO.ux + dz * GROTTO.uz - GROTTO.mouthD) / (GROTTO.endD - GROTTO.mouthD), 0, 1);
-  const ad = GROTTO.mouthD + t * (GROTTO.endD - GROTTO.mouthD);
-  if (Math.hypot(dx - GROTTO.ux * ad, dz - GROTTO.uz * ad) < 5) return true;
-  return Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2;
+  if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2) return true;
+  return x > GROTTO.rampX0 - 1 && x < GROTTO.cavernX + GROTTO.cavernR + 1 && Math.abs(z - GROTTO.cz) < 6;
 }
 
 // Plafond caméra de la Grotte : hauteur maximale que la caméra tierce personne peut
-// prendre dans le tunnel et la caverne (juste sous les dalles de plafond), pour
+// prendre dans le tunnel et la caverne (juste sous les massifs de plafond), pour
 // qu'elle ne glisse jamais au-dessus de la voûte dans la roche. Retourne null
 // ailleurs (cratère à ciel ouvert, extérieur).
 export function grottoCamCeil(x, z) {
-  const dx = x - GROTTO.cx, dz = z - GROTTO.cz;
-  const along = dx * GROTTO.ux + dz * GROTTO.uz;
-  const perp = Math.hypot(dx - GROTTO.ux * along, dz - GROTTO.uz * along);
-  // couloir du tunnel (marches + plafond) : prioritaire, il traverse la caverne.
-  // Dalle couvrante la PLUS BASSE (indice maximal) : la limite reste sous tous
-  // les plafonds présents, y compris dans les zones de recouvrement des dalles.
-  if (along >= GROTTO.mouthD - 1 && along <= GROTTO.endD && perp < 5.4) {
-    const step = Math.max(0, Math.min(14, Math.floor(along - (GROTTO.mouthD + 0.5) + 0.53)));
-    return GROTTO.floor0 - 0.5 * step + 3.45 - 0.4;
-  }
-  // caverne : voûte à 21,5 (dalles de 21,5 à 22,9)
-  if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 1) return 21.1;
+  // caverne : massifs de voûte de 19,5 à 24,5 — le trou béant central est
+  // couvert par la cheminée du terrain, la caméra reste sous les massifs
+  if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2) return 18.6;
   return null;
 }
 
@@ -166,13 +159,7 @@ export function grottoCamCeil(x, z) {
 // point (indice minimal des dalles couvrantes), ou dalle du sol de la caverne.
 // Sert de plancher caméra pour qu'elle ne s'enfonce jamais dans une marche.
 export function grottoCamFloor(x, z) {
-  const dx = x - GROTTO.cx, dz = z - GROTTO.cz;
-  const along = dx * GROTTO.ux + dz * GROTTO.uz;
-  const perp = Math.hypot(dx - GROTTO.ux * along, dz - GROTTO.uz * along);
-  if (along >= GROTTO.mouthD - 1 && along <= GROTTO.endD && perp < 5.4) {
-    const step = Math.max(0, Math.min(14, Math.ceil(along - (GROTTO.mouthD + 0.5) - 0.53)));
-    return GROTTO.floor0 - 0.5 * step;
-  }
+  // caverne : dalle du sol à 10 ; la rampe est un vrai terrain, pas besoin
   if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 1) return GROTTO.floor1;
   return null;
 }

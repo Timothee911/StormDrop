@@ -213,8 +213,9 @@ const GHOST_BAD = new THREE.MeshBasicMaterial({ color: 0xff4d6a, transparent: tr
 const waterT = { value: 0 }, windT = { value: 0 };
 // =====================================================================
 const TERRAIN_SIZE = WORLD_R * 2 + 120;
+let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser terrainH
 {
-  const SEG = 220;
+  const SEG = 320; // maillage fin : la physique (terrainH) et le rendu restent collés à ~1,5 m près autour des creux de la Grotte (sinon : sol invisible)
   const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, SEG, SEG);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -264,6 +265,7 @@ const TERRAIN_SIZE = WORLD_R * 2 + 120;
   };
   const terrain = new THREE.Mesh(geo, tmat);
   terrain.receiveShadow = true;
+  terrainMeshRef = terrain;
   scene.add(terrain);
 
   const wg = new THREE.PlaneGeometry(3000, 3000, 1, 1); wg.rotateX(-Math.PI / 2);
@@ -3364,6 +3366,7 @@ function gshell(x, y, z, w, h, d, hex = 0x5b6472) {
   makeStructBox(x, y, z, w, h, d, CAVE_HIDDEN, { indestructible: true, shadow: false });
   gdeco(BOX, hex, x, y + h / 2, z, w, h, d);
 }
+let grottoRockMesh = null; // exposé à la QA : raycast vers le haut = « caverne couverte »
 function finishGrotto() {
   if (!grottoGeos.length) return;
   const geos = grottoGeos.map((g) => colorize(g.geo.clone().applyMatrix4(g.m), g.color));
@@ -3371,6 +3374,7 @@ function finishGrotto() {
   geos.forEach((x) => x.dispose());
   mesh.castShadow = true; mesh.receiveShadow = true;
   scene.add(mesh);
+  grottoRockMesh = mesh;
   grottoGeos.length = 0;
 }
 function buildSpyPOI(p) {
@@ -3568,39 +3572,19 @@ function buildSpyPOI(p) {
     buildVault(p, { x: p.x - 9, y: y + 1.4, z: p.z });
     buildPhoneBooth(p, { x: p.x + 2, y: y + 1.4, z: p.z + 3 });
   } else if (p.key === 'grotto') {
-    // =============================================================
-    // LA GROTTE : cratère creusé dans la colline, bouche de tunnel en
-    // pierres, escalier minier qui plonge sous terre et grande caverne
-    // voûtée (cascade, bassin, cristaux, QG de Brutus, coffre-fort).
+    // ---- LA GROTTE : plateau abaissé (montagne retirée), grande rampe à ciel
+    // ouvert sans porte, caverne voûtée percée d'un trou béant (cascade, bassin,
+    // cristaux, QG de Brutus, coffre-fort). La grotte vit sous la carte.
     // =============================================================
     const G = GROTTO;
     const KX = G.cavernX, KZ = G.cavernZ, FY = G.floor1;
-    const vx = -G.uz, vz = G.ux; // perpendiculaire à l'axe du tunnel
     const ROCK_A = 0x5b6472, ROCK_B = 0x4e5663, ROCK_C = 0x67707e;
     // QG de Brutus : plateforme métallique surélevée au nord de la caverne
     const PX = KX - 4, PZ = KZ - 8, PT = FY + 3.6;
 
-    // ---- TUNNEL DESCENDANT : escalier minier qui plonge sous terre (plein ouest)
-    // marches étroites alignées sur l'axe + parois continues + plafond qui suit
-    for (let i = 0; i < 15; i++) {
-      const d = G.mouthD + 0.5 + i, top = G.floor0 - i * 0.5;
-      gshell(G.cx + G.ux * d, top - 1.8, G.cz, 1.06, 1.8, 8.6, pick([ROCK_A, ROCK_B])); // marche
-      gshell(G.cx + G.ux * d, top + 3.45, G.cz, 1.06, 1.4, 10.6, ROCK_B); // plafond
-    }
-    // parois continues du couloir (de la bouche à la caverne)
-    {
-      const wx = (G.cx - G.endD - 0.5 + G.cx - G.mouthD) / 2, ww = G.endD - G.mouthD + 0.5;
-      for (const sgn of [-1, 1]) gshell(wx, 9, G.cz + sgn * 4.6, ww, 12.8, 1.3, ROCK_B);
-    }
-
-    // ---- FAÇADE DE L'ENTRÉE : piliers rocheux qui cadrent l'entaille
-    {
-      const mx = G.cx + G.ux * G.mouthD, mz = G.cz;
-      for (const sgn of [-1, 1]) gshell(mx, G.floor0 - 2.5, mz + sgn * 5.6, 2.8, 7.5, 2.8, ROCK_C);
-      gshell(mx, G.floor0 + 3.4, mz, 2.8, 1.6, 12.4, ROCK_C);
-      gdeco(BOX, 0x39ff88, mx, G.floor0 + 4.35, mz - 3.4, 0.35, 0.35, 0.35);
-      gdeco(BOX, 0x39ff88, mx, G.floor0 + 4.35, mz + 3.4, 0.35, 0.35, 0.35);
-    }
+    // (plus de tunnel couvert : la rampe à ciel ouvert est creusée dans le terrain
+    // par world.js — voir GROTTO.rampX0/X1 — et il n'y a ni façade ni porte : la
+    // bouche de la grotte est grande ouverte sur toute la largeur de la tranchée)
 
     // ---- CAVERNE : salle voûtée sous le plateau (sol 10, voûte 21,5)
     gshell(KX, FY - 2, KZ, 31, 2, 31, ROCK_A); // dalle du sol
@@ -3608,18 +3592,29 @@ function buildSpyPOI(p) {
     gshell(KX, FY - 1.5, KZ - 13.5, 28.6, WH, 1.4, ROCK_B); // paroi nord
     gshell(KX, FY - 1.5, KZ + 13.5, 28.6, WH, 1.4, ROCK_B); // paroi sud
     gshell(KX - 13.5, FY - 1.5, KZ, 1.4, WH, 28.6, ROCK_B); // paroi ouest
-    // paroi est : percée par la bouche du tunnel (trou z ±5,5, hauteur libre < 19)
+    // paroi est : percée par la bouche de la rampe (trou z ±5,5) — PAS DE LINTEAU :
+    // le début de la grotte est grand ouvert, on voit le ciel depuis la caverne
     gshell(KX + 13.5, FY - 1.5, KZ - 9.9, 1.4, WH, 8.8, ROCK_B);
     gshell(KX + 13.5, FY - 1.5, KZ + 9.9, 1.4, WH, 8.8, ROCK_B);
-    gshell(KX + 13.5, 19, KZ, 1.4, 3.5, 11, ROCK_B); // linteau au-dessus de la bouche
-    for (const [ox, oz] of [[-7, -7], [7, -7], [-7, 7], [7, 7]]) gshell(KX + ox, 21.5, KZ + oz, 18, 1.4, 18, ROCK_B); // voûte en 4 dalles
-    gshell(KX - 1, FY, KZ + 2, 3.6, 11.5, 3.6, ROCK_C); // pilier central qui soutient la voûte
+    // voûte en cadre : trois massifs rocheux ÉPAIS (5 m) autour du GRAND TROU
+    // BÉANT (la cheminée par laquelle on saute depuis le plateau). Chaque
+    // massif est ancré dans le plateau (sommet ~24,5 affleurant) et surplombe
+    // la cheminée — vu du plateau ce sont des barres rocheuses naturelles. Pas
+    // de massif à l'est : la bouche de la rampe reste GRAND OUVERTE, on voit
+    // le ciel depuis la caverne en regardant vers l'entrée.
+    gshell(153, 19.5, KZ, 16, 5, 40, ROCK_B);   // massif ouest (x 145-161)
+    gshell(168, 19.5, 147.8, 46, 5, 16, ROCK_B); // massif nord (x 145-191, z 139,8-155,8)
+    gshell(171, 19.5, 178.85, 30, 5, 9.3, ROCK_B); // massif sud (x 156-186, z 174,2-183,5)
+    // contrefort sous l'extrémité est du massif nord : bouche la veine de
+    // terrain creusé (la cheminée) visible depuis le plateau — la roche
+    // descend jusqu'au sol de la caverne, aucun surplomb flottant
+    gshell(179, 10, 152.9, 14, 9.5, 5.8, ROCK_B); // contrefort nord-est (x 172-186, z 150-155,8)
     // roches irrégulières plaquées sur les parois
-    for (const [bx, bz, by2, bs] of [[-12.5, -5, 13, 2.4], [12.4, 4, 15, 2.8], [5, 12.5, 11, 2.2], [-7, -12.4, 17, 2.6], [12.5, -9, 18, 2.4], [-12.4, 8, 19, 2.2]])
+    for (const [bx, bz, by2, bs] of [[-12.5, -5, 13, 2.4], [12.4, 4, 15, 2.8], [5, 12.5, 11, 2.2], [-7, -12.4, 17, 2.6], [12.5, -9, 18, 2.4], [-12.4, 8, 18, 2.2]])
       gdeco(BOX, ROCK_C, KX + bx, by2, KZ + bz, bs, bs * 0.85, bs * 1.2, 0.3, 0.5, 0.2);
-    // stalactites suspendues à la voûte + stalagmites
-    for (const [sx2, sz2, sl] of [[-10, -10, 2.6], [4, -11, 3.2], [11, 2, 2.2], [-3, 11, 2.8], [9, 10, 2.4], [-11, 3, 2.0]])
-      gdeco(PRISM_GEO, 0x8b939e, KX + sx2, 21.6 - sl, KZ + sz2, 1.1, sl, 1.1, Math.PI, 0, 0);
+    // stalactites suspendues à la voûte (toutes sous les massifs, pas au-dessus du trou ni de la bouche) + stalagmites
+    for (const [sx2, sz2, sl] of [[-15, -10, 2.6], [-8, -15, 3.2], [-12, -15, 2.2], [-3, 12, 2.8], [9, 11, 2.4], [-16, 3, 2.0]])
+      gdeco(PRISM_GEO, 0x8b939e, KX + sx2, 19.6 - sl, KZ + sz2, 1.1, sl, 1.1, Math.PI, 0, 0);
     for (const [sx2, sz2, sl] of [[-6, 6, 1.6], [8, -4, 2.0], [2, 9, 1.4], [-9, -2, 1.8]])
       gdeco(PRISM_GEO, 0x8b939e, KX + sx2, FY, KZ + sz2, 1.0, sl, 1.0, 0, 0, 0);
 
@@ -3635,7 +3630,7 @@ function buildSpyPOI(p) {
     gdeco(BOX, 0x8a6a3a, PX + 3.2, PT + 0.55, PZ + 2, 1.2, 1.1, 1.2); // caisse
     gdeco(BOX, 0x6b5430, PX + 3.2, PT + 1.65, PZ + 2, 1.0, 0.1, 1.0);
 
-    // ---- CASCADE ET BASSIN (angle sud-ouest)
+    // ---- CASCADE ET BASSIN (la cascade tombe du bord du massif sud, dans le trou)
     {
       const wx = KX - 10.5, wz = KZ + 10.5;
       grottoWaterfallTex = canvasTex((g, s) => {
@@ -3643,8 +3638,8 @@ function buildSpyPOI(p) {
         for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.5})`; g.fillRect(Math.random() * s, Math.random() * s, 2 + Math.random() * 4, 12 + Math.random() * 30); }
       }, 128);
       grottoWaterfallTex.wrapS = grottoWaterfallTex.wrapT = THREE.RepeatWrapping;
-      const wf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 11, 12, 1, true), new THREE.MeshBasicMaterial({ map: grottoWaterfallTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
-      wf.position.set(wx, 15.5, wz); scene.add(wf);
+      const wf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 14, 12, 1, true), new THREE.MeshBasicMaterial({ map: grottoWaterfallTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      wf.position.set(167, 17, 173.5); scene.add(wf);
       const pool = new THREE.Mesh(BOX, new THREE.MeshStandardMaterial({ color: 0x1d8fd6, transparent: true, opacity: 0.72, roughness: 0.12, metalness: 0.1 }));
       // grand bassin turquoise qui baigne tout l'angle sud-ouest de la caverne
       pool.scale.set(11, 0.55, 11); pool.position.set(KX - 8.2, 10.28, KZ + 7.7); scene.add(pool);
@@ -3659,7 +3654,7 @@ function buildSpyPOI(p) {
         _dm.compose(_dp.set(x, y, z), _dq, _ds.set(s, s * 1.8, s));
         crysGeos.push(colorize(PRISM_GEO.clone().applyMatrix4(_dm), hcol(0x9fe8ff)));
       };
-      for (const [cx2, cy2, cz2, s] of [[-12.2, 12, -6, 0.9], [12.2, 16, -11, 1.1], [6, 11, 12.2, 0.8], [-12.2, 18, 6, 1.0], [-4, 19.5, -12.2, 0.7], [11, 19, 9, 0.9]]) crys(KX + cx2, cy2, KZ + cz2, s);
+      for (const [cx2, cy2, cz2, s] of [[-12.2, 12, -6, 0.9], [-9, 12, -7, 1.1], [6, 11, 12.2, 0.8], [-12.2, 18, 6, 1.0], [-4, 18.9, -12.2, 0.7], [11, 18.7, 9, 0.9]]) crys(KX + cx2, cy2, KZ + cz2, s);
       const crysMesh = new THREE.Mesh(mergeGeometries(crysGeos), matC(0x53e0ff, { emissive: 0x17a0c8, emissiveIntensity: 1.7, roughness: 0.25 }));
       crysMesh.castShadow = true; scene.add(crysMesh);
     }
@@ -3667,32 +3662,41 @@ function buildSpyPOI(p) {
     // ---- LANTERNES (tunnel + entrée) et éclairage de la caverne
     const lampM = matC(0xffd9a0, { emissive: 0xff9a2e, emissiveIntensity: 1.6 });
     const lampAt = (x, y, z) => { const l = new THREE.Mesh(BOX, lampM); l.scale.set(0.32, 0.5, 0.32); l.position.set(x, y, z); scene.add(l); };
-    lampAt(G.cx + G.ux * 10.5 + vx * 3.1, G.floor0 + 2.2, G.cz + G.uz * 10.5 + vz * 3.1);
-    lampAt(G.cx + G.ux * 17 + vx * 3.1, G.floor0 - 3.5 + 2.2, G.cz + G.uz * 17 + vz * 3.1);
-    lampAt(G.cx + G.ux * 24 + vx * 3.1, G.floor0 - 7 + 2.2, G.cz + G.uz * 24 + vz * 3.1);
+    lampAt(212, 22.4, 158.2);   // rampe, bord nord (le sol y est à ~20,4)
+    lampAt(198, 17.6, 171.8);   // rampe, bord sud (le sol y est à ~15,4)
+    lampAt(160.5, 12.2, 158.0); // entrée de la caverne, sous l'arche rocheuse
     const addCaveLight = (x, y, z, color, intensity, dist) => { const L = new THREE.PointLight(color, intensity, dist); L.position.set(x, y, z); scene.add(L); };
-    addCaveLight(G.cx + G.ux * 17, G.floor0 - 3.5 + 2.6, G.cz + G.uz * 17, 0xffb46b, 7, 16); // milieu du tunnel
+    addCaveLight(195, 14, 165, 0xffb46b, 6, 14); // mi-rampe
     addCaveLight(KX, 18, KZ, 0x66d9ff, 14, 34); // caverne
-    addCaveLight(KX - 9, 13, KZ + 9, 0x7fd0ff, 9, 20); // cascade
+    addCaveLight(KX - 4, 13, KZ + 6.5, 0x7fd0ff, 9, 20); // cascade
     addCaveLight(PX, PT + 2.5, PZ, 0xffc98a, 8, 18); // QG
+    addCaveLight(179, 16, 158, 0xffd9b0, 5, 12); // crâne de l'Ombre
 
-    // ---- CRÂNE DE L'OMBRE : bas-relief géant sculpté dans la falaise ouest du
-    // cratère, au-dessus de la bouche du tunnel (v12.10 de Fortnite : la Grotte
-    // a pris parti pour l'Ombre et un crâne est gravé dans la falaise)
+    // ---- CRÂNE DE L'OMBRE : bas-relief géant sculpté dans la face sud du
+    // contrefort nord, il domine la cheminée (v12.10 de Fortnite : la Grotte
+    // a pris parti pour l'Ombre) — visible depuis le plateau, la rampe et la
+    // caverne, sans jamais dépasser du plateau (pas de bloc flottant)
     {
       const skullStart = grottoGeos.length;
       const SK = 0xa4a9b0, SKD = 0x7f848b, SKK = 0x14171d;
-      gdeco(BOX, SK, 185.2, 27.5, 165, 2.4, 6.5, 13.5);   // crâne : masse supérieure
-      gdeco(BOX, SK, 185.2, 33.4, 165, 2.0, 1.4, 10.5);   // arrondi du dôme
-      gdeco(BOX, SK, 185.2, 25.0, 165, 2.2, 3.2, 11.5);   // milieu du visage
-      gdeco(BOX, SKD, 185.9, 27.9, 165, 2.6, 1.6, 12.5, 0, 0, 0.1); // arcade sourcilière agressive
-      gdeco(BOX, SKK, 186.15, 26.2, 161.9, 0.7, 2.6, 3.1); // orbite gauche creusée
-      gdeco(BOX, SKK, 186.15, 26.2, 168.1, 0.7, 2.6, 3.1); // orbite droite creusée
-      gdeco(PRISM_GEO, SKK, 185.7, 24.2, 165, 1.3, 2.3, 1.4, 0, Math.PI / 2, 0); // cavité nasale
-      gdeco(BOX, SKD, 185.8, 25.3, 160.2, 1.4, 1.4, 2.4);  // pommette gauche
-      gdeco(BOX, SKD, 185.8, 25.3, 169.8, 1.4, 1.4, 2.4); // pommette droite
-      gdeco(BOX, SK, 185.4, 22.2, 165, 1.9, 2.8, 9.5);    // mâchoire inférieure
-      gdeco(BOX, SKD, 185.6, 20.7, 165, 1.4, 1.4, 5.2);   // menton fondu dans la pente
+      gdeco(BOX, SK, 179, 15.9, 156.9, 10.2, 4.4, 2.2);   // crâne : masse supérieure
+      gdeco(BOX, SK, 179, 18.9, 156.9, 8.0, 1.0, 1.8);   // arrondi du dôme (affleure sous la voûte)
+      gdeco(BOX, SK, 179, 14.6, 156.9, 8.8, 2.4, 2.0);   // milieu du visage
+      gdeco(BOX, SKD, 179, 16.2, 157.4, 9.4, 1.2, 2.2, 0.1, 0, 0); // arcade sourcilière agressive
+      gdeco(BOX, SKK, 176.6, 15.1, 157.6, 2.6, 2.2, 0.7); // orbite gauche creusée
+      gdeco(BOX, SKK, 181.4, 15.1, 157.6, 2.6, 2.2, 0.7); // orbite droite creusée
+      gdeco(PRISM_GEO, SKK, 179, 13.9, 157.3, 1.1, 1.7, 1.0, 0, Math.PI / 2, 0); // cavité nasale
+      gdeco(BOX, SKD, 175.6, 14.3, 157.4, 1.8, 1.0, 1.1);  // pommette gauche
+      gdeco(BOX, SKD, 182.4, 14.3, 157.4, 1.8, 1.0, 1.1);  // pommette droite
+      gdeco(BOX, SK, 179, 12.5, 157.1, 7.2, 2.1, 1.6);    // mâchoire inférieure
+      // dents : barres verticales sombres sur la mâchoire (lisible de loin)
+      for (let i = 0; i < 6; i++) gdeco(BOX, SKK, 176.6 + i * 0.96, 12.9, 157.75, 0.55, 1.1, 0.3);
+      gdeco(BOX, SKD, 179, 11.4, 157.3, 3.9, 1.0, 1.1);   // menton posé au sol de la caverne
+      // pupilles rouges lumineuses (thème Ombre) : maillage émissif séparé
+      for (const ex of [176.6, 181.4]) {
+        const eye = new THREE.Mesh(BOX, matC(0x1a0d0d, { emissive: 0xff2211, emissiveIntensity: 2.2, roughness: 0.4 }));
+        eye.scale.set(1.1, 0.7, 0.3); eye.position.set(ex, 15.0, 157.9); scene.add(eye);
+      }
       // bornes du crâne exposées à la QA (le relief est bien dans la falaise)
       const sb = new THREE.Box3(), tb = new THREE.Box3();
       for (let i = skullStart; i < grottoGeos.length; i++) {
@@ -3721,29 +3725,31 @@ function buildSpyPOI(p) {
       propBox(159.5, 10, 155, 1.3, 1.3, 4); // cuve : solide
     }
 
-    // ---- SURFACE : deux bunkers et un hélipad sur le pourtour du cratère
-    buildHouse(p.x - 24, p.z + 17, p.h, 10, 9, 2, 'bunker');
-    buildHouse(p.x + 21, p.z - 19, p.h, 10, 8, 0, 'bunker');
+    // ---- SURFACE : deux bunkers et un hélipad sur le plateau abaissé (24, plat)
+    // bunker 1 : sud du plateau, hors des massifs de la voûte et de la rampe
+    buildHouse(p.x + 5, p.z + 25, p.h, 10, 9, 2, 'bunker');
+    // bunker 2 : sud-est, hors de l'influence du Port-Rouillé (terrain bien plat)
+    buildHouse(p.x + 26, p.z - 13, p.h, 10, 8, 0, 'bunker');
     {
       const hx = p.x + 22, hz = p.z + 18;
       makeStructBox(hx, p.h - 0.35, hz, 6.4, 0.45, 6.4, matC(0x3a3f47, { metalness: 0.3, roughness: 0.6 }), { indestructible: true });
       const ring = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.1, 20), matC(0x1f2430)); ring.position.set(hx, p.h + 0.2, hz); scene.add(ring);
       for (const [mx, mz, mw, md] of [[-0.7, 0, 0.4, 1.6], [0.7, 0, 0.4, 1.6], [0, 0, 1.4, 0.4]]) { const m = new THREE.Mesh(BOX, matC(0xffd23f)); m.scale.set(mw, 0.05, md); m.position.set(hx + mx, p.h + 0.26, hz + mz); scene.add(m); }
     }
-    // blocs erratiques autour du cratère
-    for (const [bx, bz, bs] of [[-14, 6, 2.6], [10, -13, 3.2], [16, 9, 2.2], [-9, -16, 2.8], [-19, -4, 2.4]])
+    // blocs erratiques sur le plateau (24), loin de la rampe et de la cheminée
+    for (const [bx, bz, bs] of [[-14, 6, 2.6], [10, -13, 3.2], [16, 9, 2.2], [-9, -16, 2.8], [8, -18, 2.4]])
       gshell(G.cx + bx, terrainH(G.cx + bx, G.cz + bz) - 0.5, G.cz + bz, bs, bs, bs * 1.3, ROCK_C);
 
     // ---- COFFRE-FORT ET CABINE DANS LA CAVERNE
-    buildVault(p, { x: KX + 8, y: FY, z: KZ - 8 });
+    buildVault(p, { x: KX + 1.5, y: FY, z: KZ + 5.5 }); // déplacé : libère la face du contrefort pour le crâne
     buildPhoneBooth(p, { x: KX + 6.5, y: FY, z: KZ + 5 }); // déplacée : libère le pied de l'escalier de la passerelle
 
     // ---- COFFRES, MUNITIONS ET BUTIN
     spawnChest(KX - 9, FY + 0.05, KZ - 6);
-    spawnChest(KX + 3, FY + 0.05, KZ + 7);
+    spawnChest(KX + 6, FY + 0.05, KZ + 1);
     spawnChest(PX - 2, PT + 0.55, PZ);
     spawnChest(KX + 6, FY + 0.05, KZ + 8); // déplacé : l'ancien emplacement est noyé par le grand bassin
-    ammoBoxes.push(spawnAmmoBox(KX + 11, FY + 0.05, KZ - 11));
+    ammoBoxes.push(spawnAmmoBox(KX + 3, FY + 0.05, KZ - 5)); // déplacée : l'ancien coin NE est comblé par le contrefort
     ammoBoxes.push(spawnAmmoBox(PX + 3, PT + 0.55, PZ - 1));
     lootSpots.push({ x: KX + 1, y: FY + 0.6, z: KZ - 10 });
     lootSpots.push({ x: KX - 10, y: FY + 0.6, z: KZ - 2 });
@@ -5398,7 +5404,7 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; },
+window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto,
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
 // storm est aussi exposé directement : window.__game.storm
 
