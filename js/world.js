@@ -144,7 +144,7 @@ export const GROTTO = {
   // palier plat sous la bouche du crâne puis remontée vers le terrain extérieur :
   //  x 184 -> 192  : palier à 10, sous la façade crâne (sol du crâne)
   //  x 192 -> 232  : montée 10 -> 24 (42 m, même pente que l'ancienne rampe)
-  rampX0: 192, rampX1: 232, rampHalfZ: 5.5, rampBlend: 7, rampH0: 10, rampH1: 24,
+  rampX0: 192, rampX1: 232, rampHalfZ: 5.5, rampBlend: 7, rampH0: 24, rampH1: 10,
   mouthX0: 184, mouthX1: 192, mouthHalfZ: 5.5, mouthH: 10,
   cavernX: 171, cavernZ: 165, cavernR: 13.5, floor1: 10,
 };
