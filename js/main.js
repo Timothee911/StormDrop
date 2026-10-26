@@ -3596,37 +3596,50 @@ function buildSpyPOI(p) {
     // le début de la grotte est grand ouvert, on voit le ciel depuis la caverne
     gshell(KX + 13.5, FY - 1.5, KZ - 9.9, 1.4, WH, 8.8, ROCK_B);
     gshell(KX + 13.5, FY - 1.5, KZ + 9.9, 1.4, WH, 8.8, ROCK_B);
-    // ---- MONTAGNE : silhouette rocheuse arrondie et asymétrique qui
-    // recouvre la caverne et le crâne. Le sommet herbeux culmine à ~36-40,
-    // les flancs rocheux descendent jusqu'au terrain. On conserve le trou
-    // béant (la cheminée) : les blocs l'entourent sans le fermer.
-    // No 4 massifs rectangulaires plats : formes prismatiques/décalées pour
-    // casser la silhouette et éviter un plateau coupé au carré.
+    // ---- MONTAGNE : silhouette rocheuse qui recouvre la caverne et le
+    // crâne. Structure porteuse : les 3 massifs gshell de la voûte (avec
+    // colliders) forment la base, puis des étages supérieurs raccordés
+    // montent jusqu'au sommet (~36). La cheminée (trou béant x=171, z=165)
+    // reste ouverte, la bouche du crâne (x>183, z 159.5-170.5) reste libre.
     {
       const CX = KX, CZ = KZ;
       const ROCK = 0x5b6472, ROCK_D = 0x4e5663;
-      // Sommet : deux dômes rocheux décalés qui laissent le trou béant (cheminée)
-      // central x=171,z=165 LIBRE — un anneau rocheux autour du trou, pas au-dessus.
-      gdeco(PRISM_GEO, ROCK, CX - 7, 33.5, CZ - 6, 8.5, 3.8, 8.0, 0, 0.25, 0.1);
-      gdeco(PRISM_GEO, ROCK_D, CX + 7, 32.8, CZ + 6, 8.0, 3.4, 7.5, 0, -0.4, -0.1);
-      gdeco(BOX, ROCK_D, CX - 8, 30.5, CZ, 6.0, 5.0, 15.0, 0, 0.2, 0);   // anneau ouest
-      gdeco(BOX, ROCK_D, CX + 8, 30.5, CZ, 6.0, 5.0, 15.0, 0, -0.2, 0);  // anneau est
-      gdeco(BOX, ROCK_D, CX, 30.5, CZ - 8, 14.0, 5.0, 6.0, 0, 0, 0.15);  // anneau nord
-      gdeco(BOX, ROCK_D, CX, 30.5, CZ + 8, 14.0, 5.0, 6.0, 0, 0, -0.15); // anneau sud
-      // Flancs : rochers en pente qui descendent vers le terrain
-      for (const [bx, bz, by2, bs] of [[-14, -12, 22, 6.5], [15, -11, 22, 5.5], [-15, 13, 21, 7.0], [14, 14, 20, 6.0], [-4, -17, 24, 4.5], [5, 17, 23, 4.0]])
-        gdeco(PRISM_GEO, ROCK_D, CX + bx, by2, CZ + bz, bs, bs, bs * 1.3, (MR() - 0.5) * 0.8, (MR() - 0.5) * 0.6, 0);
-      // Herbe : tapis vert au sommet (plaques sur les dômes)
-      gdeco(BOX, 0x4a9b4f, CX - 7, 34.8, CZ - 6, 6.5, 0.6, 7.0);
-      gdeco(BOX, 0x4a9b4f, CX + 7, 34.0, CZ + 6, 6.0, 0.6, 6.5);
-      gdeco(BOX, 0x55884f, CX - 8, 32.5, CZ, 5.0, 0.5, 13.0, 0, 0.2, 0);
-      gdeco(BOX, 0x55884f, CX + 8, 32.5, CZ, 5.0, 0.5, 13.0, 0, -0.2, 0);
-      // sapins stylisés sur la crête (style image de référence)
-      for (const [tx, tz, hy] of [[-9, -8, 34.0], [-7, -11, 33.0], [-4, -10, 32.5], [9, -7, 33.0], [-10, 1, 32.5], [9, 4, 32.0], [-8, 9, 32.5], [6, 11, 32.0], [1, 12, 31.5]]) {
+      // ÉTAGE 0 (base, 19.5 -> 24.5) : les 3 massifs historiques (colliders)
+      gshell(153, 19.5, CZ, 16, 5, 40, ROCK_B);          // massif ouest (x 145-161)
+      gshell(168, 19.5, CZ - 17.2, 46, 5, 16, ROCK_B);    // massif nord (z 139.8-155.8)
+      gshell(171, 19.5, CZ + 13.85, 30, 5, 9.3, ROCK_B); // massif sud (z 174.2-183.5)
+      // ÉTAGE 1 (24.5 -> 29) : CADRE autour de la cheminée (x 161-181, z 156-174)
+      // même logique que l'étage 0 : ouest x<161, nord z<156, sud z>174
+      gshell(153, 24.5, CZ, 14, 4.5, 40, ROCK_B);          // ouest (x 146-160)
+      gshell(169, 24.5, CZ - 19, 46, 4.5, 14, ROCK_B);     // nord (z 140-154)
+      gshell(170, 24.5, CZ + 18.5, 28, 4.5, 9, ROCK_B);   // sud (z 179-188)
+      gshell(188, 24.5, CZ, 6, 4.5, 34, ROCK_B);           // est (x 185-191, ferme le cadre)
+      // ÉTAGE 2 (29 -> 33) : dômes décalés, crête plus étroite (toujours en cadre)
+      gshell(155, 29, CZ - 10, 10, 4, 16, ROCK_B);        // dôme NO (x 150-160, z 147-163)
+      gshell(175, 29, CZ + 12, 8, 4, 10, ROCK_B);         // dôme SE (x 171-179, z 177-187)
+      gshell(167, 29, CZ - 17, 30, 3.5, 5, ROCK_B);        // crête nord (z 140-145)
+      gshell(167, 29, CZ + 17, 26, 3.5, 5, ROCK_B);        // crête sud (z 179-184)
+      // ÉTAGE 3 (33 -> 36) : pointes sommitales
+      gshell(157, 33, CZ - 10, 7, 3, 7, ROCK_B);           // pointe NO
+      gshell(174, 33, CZ + 12, 6, 3, 7, ROCK_B);           // pointe SE
+      // FACETTES : gdeco pour casser les faces planes et donner du relief
+      // (plaquées sur les étages, jamais dans la cheminée ni la bouche)
+      for (const [bx, bz, by2, bs] of [[-16, -14, 26, 5.5], [-18, 2, 27, 6.0], [-15, 16, 25, 5.0], [13, -13, 26, 5.0], [16, 8, 27, 5.5], [-6, -19, 27, 4.5], [3, 19, 26, 4.0]])
+        gdeco(PRISM_GEO, ROCK_D, CX + bx, by2, CZ + bz, bs, bs, bs * 1.3, (MR() - 0.5) * 0.6, (MR() - 0.5) * 0.4, 0);
+      // HERBE : tapis vert sur les surfaces supérieures réelles
+      gdeco(BOX, 0x4a9b4f, 155, 33.4, CZ - 10, 8, 0.6, 12);   // dôme NO (x 150-160, z 147-163)
+      gdeco(BOX, 0x4a9b4f, 175, 32.6, CZ + 12, 6, 0.6, 8);   // dôme SE (x 171-179, z 177-187)
+      gdeco(BOX, 0x55884f, 167, 32.8, CZ - 17, 22, 0.5, 4);  // crête nord (z 140-145)
+      gdeco(BOX, 0x55884f, 167, 32.8, CZ + 17, 18, 0.5, 4);  // crête sud (z 179-184)
+      gdeco(BOX, 0x55884f, 157, 36.2, CZ - 10, 5, 0.5, 5);  // pointe NO
+      gdeco(BOX, 0x55884f, 174, 35.4, CZ + 12, 4.5, 0.5, 5); // pointe SE
+      // SAPINS : sur les crêtes réelles (y du sommet du bloc + 0.5)
+      for (const [tx, tz, hy] of [[-18, -10, 28.5], [-16, -14, 29.0], [-13, -12, 29.5], [-20, 2, 28.5], [-17, 8, 28.0], [-15, 16, 27.5], [-4, -20, 28.5], [-10, -22, 29.5], [8, 18, 28.0], [12, 20, 27.5], [3, 22, 28.0]]) {
         gdeco(PRISM_GEO, 0x2d5a35, CX + tx, hy + 1.8, CZ + tz, 1.4, 3.6, 1.4, 0, (MR() - 0.5) * 0.3, 0);
         gdeco(PRISM_GEO, 0x4a3423, CX + tx, hy + 0.4, CZ + tz, 0.5, 0.8, 0.5);
       }
-      // la cheminée (trou béant) reste percée : pas de bloc au-dessus du centre
+      // la cheminée (trou béant x 161-181, z 156-174) reste percée : les
+      // étages 1-3 forment un anneau autour, jamais au-dessus du centre
     }
     // roches irrégulières plaquées sur les parois
     for (const [bx, bz, by2, bs] of [[-12.5, -5, 13, 2.4], [12.4, 4, 15, 2.8], [5, 12.5, 11, 2.2], [-7, -12.4, 17, 2.6], [12.5, -9, 18, 2.4], [-12.4, 8, 18, 2.2]])
