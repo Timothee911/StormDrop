@@ -367,7 +367,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // les maisons (bunkers) sont bien posées : terrain plat sous toute l'emprise
     {
       let flat = true, worst = 0;
-      for (const [bx, bz, w, d] of [[205, 190, 10, 9], [226, 146, 10, 8]]) {
+      for (const [bx, bz, w, d] of [[205, 190, 10, 9], [232, 180, 10, 8]]) {
         for (const [cx, cz] of [[bx, bz], [bx - w / 2, bz - d / 2], [bx + w / 2, bz - d / 2], [bx - w / 2, bz + d / 2], [bx + w / 2, bz + d / 2]]) {
           const e = Math.abs(G.terrainH(cx, cz) - 24); worst = Math.max(worst, e); if (e > 1.2) flat = false;
         }
