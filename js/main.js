@@ -3706,65 +3706,45 @@ function buildSpyPOI(p) {
 
     // ---- FAÇADE CRÂNE : la bouche du crâne EST l'entrée de la Grotte. Le
     // visage est sculpté dans la face EST de la montagne, face à la rampe
-    // (+X), au-dessus d'un palier sablonneux (sol 10, terrain). Yeux creux
-    // ASYMÉTRIQUES avec profondeur, nez triangulaire, dents suspendues au
-    // linteau, PAS de mâchoire inférieure ni de pupilles : le passage est
-    // libre jusqu'au sol. Les cavités sont de VRAIS vides (pas des plaques).
+    // (+X), au-dessus d'un palier sablonneux (sol 10, terrain). Comme la
+    // référence : une paroi PLEINE gris clair (contraste fort avec la
+    // montagne sombre) avec deux grandes orbites NOIRES asymétriques, un
+    // nez triangulaire noir, une rangée de grosses dents blanches au-dessus
+    // de la bouche-entrée, PAS de mâchoire inférieure : passage libre au sol.
     {
       const skullStart = grottoGeos.length;
-      const SK = 0x969da5, SKD = 0x68717c, SKK = 0x343b45, SKF = 0x171c24;
+      const SK = 0xb6bcc4, SKD = 0x7d858f, SKK = 0x0b0e13;
       const FX = 185.0;   // plan de la façade (face EST de la montagne)
       const FY = 10.0;   // sol de la bouche
-      // === STRUCTURE : frontal + tempes en gshell (colliders), avec les
-      // ouvertures découpeés en trois bandes horizontales pour laisser les
-      // cavités (orbites, nez, bouche) en VIDES REELS entre les bandes.
-      // Bande haute (frontal supérieur, y 24-27) : au-dessus des orbites
-      gshell(FX, 24, 165, 2.4, 3, 26, SK);
-      // Bande médiane (pommettes, y 17.5-21) : ENTRE les orbites et la bouche,
-      // avec un pilier central pour le nez
-      gshell(FX, 17.5, 156.5, 2.4, 3.5, 7, SK);   // pommette gauche (z 153-160)
-      gshell(FX, 17.5, 173.5, 2.4, 3.5, 7, SK);  // pommette droite (z 170-177)
-      gshell(FX, 17.5, 165, 2.4, 3.5, 4, SK);    // pilier nasal central (z 163-167)
-      // Bande basse (lèvre supérieure, y 15.4-17.5) : AU-DESSUS de la bouche
-      gshell(FX, 15.4, 165, 2.4, 2.1, 22, SK);   // lèvre supérieure (z 154-176)
-      // Tempes latérales : de part et d'autre de la bouche (z < 159 et z > 171)
+      const FACE = FX + 1.2; // face avant de la paroi (x = 186.2)
+      // === STRUCTURE PLEINE : mur supérieur massif au-dessus de la bouche
+      // (y 15.4-27.5, z 154-176) + tempes latérales de part et d'autre de la
+      // bouche (z 149.5-159.5 et 170.5-180.5, y 10-22). La bouche (z 159.5-
+      // 170.5, y 10-15.4) reste un VIDE traversant jusqu'à la caverne.
+      gshell(FX, 15.4, 165, 2.4, 12.1, 22, SK);   // mur plein (frontal+lèvre)
       gshell(FX, FY, 154.5, 2.4, 12.0, 10, SK);  // tempe gauche (z 149.5-159.5)
       gshell(FX, FY, 175.5, 2.4, 12.0, 10, SK);  // tempe droite (z 170.5-180.5)
-      // === ORBITES (yeux) : VRAIES cavités creusées — parois internes + fond
-      // sombre en retrait (x 183-184.6), rebord biseauté à l'avant (x 184.6-185.5)
-      // Orbite GAUCHE : centre z=160, y=21.3, largeur z 5.6, hauteur y 3.5
-      {
-        // parois internes sombres (cavité) : fond + parois
-        gdeco(BOX, SKK, 183.8, 21.3, 160, 0.4, 3.5, 5.6);          // fond gauche
-        gdeco(BOX, SKF, 184.2, 21.3, 160, 0.4, 3.5, 5.6);          // fond très sombre
-        // rebord biseauté (arcade) : bloc clair qui encadre la cavité
-        gdeco(BOX, SKD, 185.2, 23.2, 160, 0.8, 1.2, 6.4);          // arcade sup gauche
-        gdeco(BOX, SKD, 185.2, 19.4, 160, 0.8, 1.2, 6.4);          // arcade inf gauche
-        gdeco(BOX, SKD, 185.2, 21.3, 156.8, 0.8, 3.5, 1.0);        // bord ext gauche
-        gdeco(BOX, SKD, 185.2, 21.3, 163.2, 0.8, 3.5, 1.0);        // bord int gauche
-      }
-      // Orbite DROITE : centre z=170.2, y=21, largeur z 5, hauteur y 4.1
-      // (ASYMÉTRIQUE : plus haute et plus étroite que la gauche)
-      {
-        gdeco(BOX, SKK, 183.8, 21, 170.2, 0.4, 4.1, 5.0);          // fond droit
-        gdeco(BOX, SKF, 184.2, 21, 170.2, 0.4, 4.1, 5.0);         // fond très sombre
-        gdeco(BOX, SKD, 185.2, 23.3, 170.2, 0.8, 1.4, 5.8);       // arcade sup droite
-        gdeco(BOX, SKD, 185.2, 18.7, 170.2, 0.8, 1.4, 5.8);       // arcade inf droite
-        gdeco(BOX, SKD, 185.2, 21, 167.4, 0.8, 4.1, 0.8);          // bord int droit
-        gdeco(BOX, SKD, 185.2, 21, 173, 0.8, 4.1, 0.8);           // bord ext droit
-      }
-      // === NEZ : cavité triangulaire pointant vers le bas, DANS LE PILIER
-      // central (z 163-167, y 16-19), fond sombre en retrait
-      gdeco(PRISM_GEO, SKK, 183.9, 17.8, 165, 0.8, 2.6, 2.4, Math.PI, 0, 0); // fond du nez
-      gdeco(PRISM_GEO, SKD, 185.3, 19.4, 165, 0.8, 1.0, 2.8, Math.PI, 0, 0); // arête du nez
-      gdeco(BOX, SKD, 185.3, 16.2, 165, 0.6, 0.8, 2.2);           // base du nez
-      // === DENTS : suspendues au linteau (y 15.4), pointes vers 14.2-14.6,
-      // irrégulières, reliées à la roche (pas flottantes)
-      const teeth = [[-4.5, 1.0], [-3.2, 0.8], [-1.8, 1.2], [-0.5, 0.9], [1.0, 1.1], [2.5, 0.7], [4.0, 1.0]];
+      // === ORBITES : grandes plaques NOIRES plaquées sur la face avant de la
+      // paroi pleine, avec un rebord gris plus sombre pour l'effet creusé.
+      // GAUCHE : centre z=160, y=21 (6.4 de large, 4.6 de haut)
+      gdeco(BOX, SKD, FACE + 0.05, 21.0, 160.0, 0.2, 5.4, 7.2);   // rebord gauche
+      gdeco(BOX, SKK, FACE + 0.1, 21.0, 160.0, 0.25, 4.6, 6.4);   // orbite noire gauche
+      // DROITE (ASYMÉTRIQUE : plus haute, plus étroite) : centre z=170.3, y=21.6
+      gdeco(BOX, SKD, FACE + 0.05, 21.6, 170.3, 0.2, 5.2, 6.8);  // rebord droit
+      gdeco(BOX, SKK, FACE + 0.1, 21.6, 170.3, 0.25, 4.4, 6.0); // orbite noire droite
+      // === NEZ : triangle noir pointant vers le bas, plaqué sur la face avant,
+      // entre les orbites et au-dessus de la bouche (y 16.2-19.6)
+      gdeco(PRISM_GEO, SKK, FACE + 0.1, 17.9, 165, 0.3, 3.4, 2.8, Math.PI, 0, 0);
+      // === DENTS : grosses dents blanches irrégulières suspendues au linteau
+      // (haut y 15.4), pointes vers 13.4-14.3, plaquées sur la face avant
+      const teeth = [[-5.6, 1.8], [-4.1, 1.2], [-2.6, 2.0], [-1.1, 1.4], [0.4, 1.9], [1.9, 1.1], [3.4, 1.6]];
       for (const [dz, len] of teeth)
-        gdeco(BOX, 0xd8d4c8, FX, 15.4 - len / 2, 165 + dz, 0.5, len, 0.6);
+        gdeco(BOX, 0xe8e4da, FACE + 0.1, 15.4 - len / 2, 165 + dz, 0.4, len, 1.45);
       // === DÔME DU CRÂNE : arrondi au-dessus du frontal (décoratif)
       gdeco(BOX, SK, FX + 0.5, 26.5, 165, 1.8, 2.5, 18, 0, 0, 0);
+      gdeco(BOX, SK, FX + 0.4, 28.6, 165, 1.4, 1.6, 13, 0, 0, 0);
+      // éclairage chaud devant la façade pour faire ressortir le visage
+      addCaveLight(190, 19, 165, 0xffe0b8, 8, 18);
       // === INTÉRIEUR DE LA BOUCHE : parois latérales sombres dans l'épaisseur
       // du passage (assombrissent l'entrée sans la boucher)
       gdeco(BOX, SKK, 184.2, 12.5, 159.2, 1.6, 5, 0.8);            // paroi gauche
