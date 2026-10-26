@@ -3613,7 +3613,7 @@ function buildSpyPOI(p) {
       gshell(153, 24.5, CZ, 14, 4.5, 40, ROCK_B);          // ouest (x 146-160)
       gshell(169, 24.5, CZ - 19, 46, 4.5, 14, ROCK_B);     // nord (z 140-154)
       gshell(170, 24.5, CZ + 18.5, 28, 4.5, 9, ROCK_B);   // sud (z 179-188)
-      gshell(188, 24.5, CZ, 6, 4.5, 34, ROCK_B);           // est (x 185-191, ferme le cadre)
+      gshell(183.5, 24.5, CZ, 2.6, 4.5, 34, ROCK_B);         // est (x 182.2-184.8, EN ARRIÈRE de la façade du crâne : ne masque pas le front)
       // ÉTAGE 2 (29 -> 33) : dômes décalés, crête plus étroite (toujours en cadre)
       gshell(155, 29, CZ - 10, 10, 4, 16, ROCK_B);        // dôme NO (x 150-160, z 147-163)
       gshell(175, 29, CZ + 14, 8, 4, 10, ROCK_B);         // dôme SE (x 171-179, z 179-189)
@@ -3733,16 +3733,19 @@ function buildSpyPOI(p) {
       gdeco(BOX, SKD, FACE + 0.05, 21.6, 170.3, 0.2, 5.2, 6.8);  // rebord droit
       gdeco(BOX, SKK, FACE + 0.1, 21.6, 170.3, 0.25, 4.4, 6.0); // orbite noire droite
       // === NEZ : triangle noir pointant vers le bas, plaqué sur la face avant,
-      // entre les orbites et au-dessus de la bouche (y 16.2-19.6)
-      gdeco(PRISM_GEO, SKK, FACE + 0.1, 17.9, 165, 0.3, 3.4, 2.8, Math.PI, 0, 0);
+      // entre les orbites et au-dessus de la bouche (y 16.2-19.6). Rotation
+      // Y=π/2 pour que la FACE TRIANGULAIRE regarde vers +X (le joueur),
+      // puis X=π pour pointer le sommet vers le bas.
+      gdeco(PRISM_GEO, SKK, FACE + 0.15, 18.2, 165, 2.8, 2.6, 0.3, Math.PI, Math.PI / 2, 0);
       // === DENTS : grosses dents blanches irrégulières suspendues au linteau
       // (haut y 15.4), pointes vers 13.4-14.3, plaquées sur la face avant
       const teeth = [[-5.6, 1.8], [-4.1, 1.2], [-2.6, 2.0], [-1.1, 1.4], [0.4, 1.9], [1.9, 1.1], [3.4, 1.6]];
       for (const [dz, len] of teeth)
-        gdeco(BOX, 0xe8e4da, FACE + 0.1, 15.4 - len / 2, 165 + dz, 0.4, len, 1.45);
-      // === DÔME DU CRÂNE : arrondi au-dessus du frontal (décoratif)
-      gdeco(BOX, SK, FX + 0.5, 26.5, 165, 1.8, 2.5, 18, 0, 0, 0);
-      gdeco(BOX, SK, FX + 0.4, 28.6, 165, 1.4, 1.6, 13, 0, 0, 0);
+        gdeco(BOX, 0xf2efe6, FACE + 0.1, 15.4 - len / 2, 165 + dz, 0.4, len, 1.45);
+      // DÔME DU CRÂNE : arrondi au-dessus du frontal, plus large — c'est le
+      // sommet du crâne qui émerge devant la montagne sombre
+      gdeco(BOX, SK, FX + 0.5, 26.5, 165, 1.8, 2.5, 20, 0, 0, 0);
+      gdeco(BOX, SK, FX + 0.4, 28.6, 165, 1.4, 1.6, 14, 0, 0, 0);
       // éclairage chaud devant la façade pour faire ressortir le visage
       addCaveLight(190, 19, 165, 0xffe0b8, 8, 18);
       // === INTÉRIEUR DE LA BOUCHE : parois latérales sombres dans l'épaisseur
