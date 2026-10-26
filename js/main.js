@@ -3606,12 +3606,12 @@ function buildSpyPOI(p) {
       const ROCK = 0x5b6472, ROCK_D = 0x4e5663;
       // ÉTAGE 0 (base, 19.5 -> 24.5) : les 3 massifs historiques (colliders)
       gshell(153, 19.5, CZ, 16, 5, 40, ROCK_B);          // massif ouest (x 145-161)
-      gshell(168, 19.5, CZ - 17.2, 46, 5, 16, ROCK_B);    // massif nord (z 139.8-155.8)
+      gshell(168, 19.5, CZ - 17.2, 36, 5, 16, ROCK_B);    // massif nord (z 139.8-155.8, x 150-186 : affleurant la façade)
       gshell(171, 19.5, CZ + 13.85, 30, 5, 9.3, ROCK_B); // massif sud (z 174.2-183.5)
       // ÉTAGE 1 (24.5 -> 29) : CADRE autour de la cheminée (x 161-181, z 156-174)
       // même logique que l'étage 0 : ouest x<161, nord z<156, sud z>174
       gshell(153, 24.5, CZ, 14, 4.5, 40, ROCK_B);          // ouest (x 146-160)
-      gshell(169, 24.5, CZ - 19, 46, 4.5, 14, ROCK_B);     // nord (z 140-154)
+      gshell(169, 24.5, CZ - 19, 34, 4.5, 14, ROCK_B);   // nord (z 140-154, x 152-186 : affleurant la façade)
       gshell(170, 24.5, CZ + 18.5, 28, 4.5, 9, ROCK_B);   // sud (z 179-188)
       gshell(183.5, 24.5, CZ, 2.6, 4.5, 34, ROCK_B);         // est (x 182.2-184.8, EN ARRIÈRE de la façade du crâne : ne masque pas le front)
       // ÉTAGE 2 (29 -> 33) : dômes décalés, crête plus étroite (toujours en cadre)
@@ -3726,12 +3726,13 @@ function buildSpyPOI(p) {
       gshell(FX, FY, 175.5, 2.4, 12.0, 10, SK);  // tempe droite (z 170.5-180.5)
       // === ORBITES : grandes plaques NOIRES plaquées sur la face avant de la
       // paroi pleine, avec un rebord gris plus sombre pour l'effet creusé.
-      // GAUCHE : centre z=160, y=21 (6.4 de large, 4.6 de haut)
-      gdeco(BOX, SKD, FACE + 0.05, 21.0, 160.0, 0.2, 5.4, 7.2);   // rebord gauche
-      gdeco(BOX, SKK, FACE + 0.1, 21.0, 160.0, 0.25, 4.6, 6.4);   // orbite noire gauche
-      // DROITE (ASYMÉTRIQUE : plus haute, plus étroite) : centre z=170.3, y=21.6
-      gdeco(BOX, SKD, FACE + 0.05, 21.6, 170.3, 0.2, 5.2, 6.8);  // rebord droit
-      gdeco(BOX, SKK, FACE + 0.1, 21.6, 170.3, 0.25, 4.4, 6.0); // orbite noire droite
+      // GAUCHE : centre z=160, y=21 (6.4 de large, 4.6 de haut), inclinée
+      // (bord intérieur plus bas, regard menaçant)
+      gdeco(BOX, SKD, FACE + 0.05, 21.0, 160.0, 0.2, 5.4, 7.2, 0.15);   // rebord gauche
+      gdeco(BOX, SKK, FACE + 0.1, 21.0, 160.0, 0.25, 4.6, 6.4, 0.15);   // orbite noire gauche
+      // DROITE (ASYMÉTRIQUE : plus haute, plus étroite), inclinée en miroir
+      gdeco(BOX, SKD, FACE + 0.05, 21.6, 170.3, 0.2, 5.2, 6.8, -0.15);  // rebord droit
+      gdeco(BOX, SKK, FACE + 0.1, 21.6, 170.3, 0.25, 4.4, 6.0, -0.15); // orbite noire droite
       // === NEZ : triangle noir pointant vers le bas, plaqué sur la face avant,
       // entre les orbites et au-dessus de la bouche (y 16.2-19.6). Rotation
       // Y=π/2 pour que la FACE TRIANGULAIRE regarde vers +X (le joueur),
@@ -3741,7 +3742,7 @@ function buildSpyPOI(p) {
       // (haut y 15.4), pointes vers 13.4-14.3, plaquées sur la face avant
       const teeth = [[-5.6, 1.8], [-4.1, 1.2], [-2.6, 2.0], [-1.1, 1.4], [0.4, 1.9], [1.9, 1.1], [3.4, 1.6]];
       for (const [dz, len] of teeth)
-        gdeco(BOX, 0xf2efe6, FACE + 0.1, 15.4 - len / 2, 165 + dz, 0.4, len, 1.45);
+        gdeco(PRISM_GEO, 0xf2efe6, FACE + 0.15, 15.4, 165 + dz, 1.45, len, 0.4, Math.PI, Math.PI / 2, 0);
       // DÔME DU CRÂNE : arrondi au-dessus du frontal, plus large — c'est le
       // sommet du crâne qui émerge devant la montagne sombre
       gdeco(BOX, SK, FX + 0.5, 26.5, 165, 1.8, 2.5, 20, 0, 0, 0);
