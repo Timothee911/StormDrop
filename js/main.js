@@ -3796,8 +3796,10 @@ function buildSpyPOI(p) {
     for (const [ox, oz] of [[-4.5, -2.8], [4.5, -2.8], [-4.5, 2.8], [4.5, 2.8]]) gshell(PX + ox, FY, PZ + oz, 0.7, 3.6, 0.7, 0x5a616c);
     gshell(PX, PT, PZ, 11, 0.55, 7, 0x5a616c);
     // escalier : descend vers l'OUEST le long du bord ouest de la plateforme —
-    // il ne doit jamais barrer l'axe de la porte d'eau (couloir z 158-172)
-    for (let i = 0; i < 8; i++) gshell(PX - 5.5 - 0.475 - i * 0.92, PT - 0.45 * (i + 1) - 1.0, PZ, 0.95, 1.0, 2.6, 0x5a616c);
+    // il ne doit jamais barrer l'axe de la porte d'eau (couloir z 158-172).
+    // Sommet de marche le plus proche de la plateforme à PT+0,55-0,45 (3,1) :
+    // dernier dénivelé de 0,45 m gravissable en marchant (STEP 0,6).
+    for (let i = 0; i < 8; i++) gshell(PX - 5.5 - 0.475 - i * 0.92, PT - 0.9 - 0.45 * i, PZ, 0.95, 1.0, 2.6, 0x5a616c);
     gdeco(BOX, 0x8a929e, PX, PT + 0.55, PZ - 3.5, 11, 0.9, 0.1);
     gdeco(BOX, 0x8a929e, PX, PT + 0.55, PZ + 3.5, 11, 0.9, 0.1);
     gdeco(BOX, 0x8a929e, PX + 5.5, PT + 0.55, PZ, 0.1, 0.9, 7);
