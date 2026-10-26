@@ -3728,8 +3728,9 @@ function buildSpyPOI(p) {
       // Orbites creusées (yeux) : plaques sombres incrustées dans les tempes
       gdeco(BOX, SKK, FX + 1.0, FY + 4.5, 156.5, 1.2, 2.2, 3.2); // orbite gauche
       gdeco(BOX, SKK, FX + 1.0, FY + 4.5, 173.5, 1.2, 2.2, 3.2); // orbite droite
-      // Nez : cavité triangulaire (prisme renversé) dans le frontal
-      gdeco(PRISM_GEO, SKK, FX + 1.0, FY + 4.0, 165, 1.0, 2.0, 1.4, Math.PI, 0, 0);
+      // Nez : cavité triangulaire (prisme renversé) DANS LE FRONTAL, au-dessus
+      // de la bouche (y 16-18, jamais dans le passage z 159.5-170.5 y<15.4)
+      gdeco(PRISM_GEO, SKK, FX + 1.0, FY + 7.0, 165, 1.0, 2.0, 1.4, Math.PI, 0, 0);
       // Dents : rangée supérieure en arche au-dessus de la bouche
       for (let i = 0; i < 7; i++) {
         const dx = -3 + i; // -3..+3
