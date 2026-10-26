@@ -344,7 +344,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     G.keys.KeyW = false;
     R.push(['remontée de la rampe', p.alive && p.pos.y > 12.5 && p.pos.x < 208, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
     // PORTE D'EAU : depuis la calanque (mer ouverte), on entre dans la
-    // caverne À PIED en passant sous la falaise — la grotte est connectée à l'eau
+    // caverne À PIED en passant DANS LA BOUCHE DU CRÂNE (façade face à
+    // l'océan) — la grotte est connectée à l'eau
     p.pos.set(302, -0.4, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(200);
     R.push(["calanque reliée à la mer (patauge)", p.inWater === true && p.alive, 'y=' + p.pos.y.toFixed(1) + ' inWater=' + p.inWater]);
@@ -386,13 +387,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // coffre-fort de la Grotte au sol de la caverne (sous l'eau)
     const vg = G.vaults.find((v) => v.poi.key === 'grotto');
     R.push(['coffre-fort dans la caverne', !!vg && vg.y < 6, vg ? 'y=' + vg.y.toFixed(1) : 'absent']);
-    // crâne de l'Ombre : façade PLEINE sur la face ouest de la montagne, la
-    // bouche du crâne EST l'entrée de la caverne (paroi x 253,8-256,2, tempes
-    // z 149.5-180.5, dôme jusqu'à y ~17 : émerge devant la montagne)
+    // crâne de l'Ombre : façade PLEINE sur la face EST de la montagne, FACE À
+    // L'OCÉAN — la bouche du crâne EST la porte d'eau (paroi x 281,8-284,2,
+    // tempes z 149.5-180.5, dôme jusqu'à y ~20 : émerge devant la montagne,
+    // côté mer)
     const sb = G.grottoSkullBounds;
     // (le dôme du front du crâne dépasse volontiers ~0,4 m devant la façade :
-    // min.x >= 252,5) — le crâne reste bien ancré dans le contrefort
-    R.push(["crâne de l'Ombre sculpté dans le contrefort", !!sb && sb.min.x >= 252.5 && sb.max.x <= 256.6 && sb.min.y <= -0.05 && sb.max.y >= 17 && sb.min.z <= 155 && sb.max.z >= 175, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
+    // max.x <= 286) — le crâne reste bien ancré dans le contrefort EST et son
+    // centre est côté mer (x > 275) : il regarde l'océan
+    R.push(["crâne de l'Ombre face à l'océan (falaise est)", !!sb && sb.min.x >= 281 && sb.max.x <= 286 && (sb.min.x + sb.max.x) / 2 > 275 && sb.min.y <= -0.05 && sb.max.y >= 17 && sb.min.z <= 155 && sb.max.z >= 175, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
     // les maisons (bunkers) sont bien posées : terrain plat sous toute l'emprise
     {
       let flat = true, worst = 0;

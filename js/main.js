@@ -3711,8 +3711,9 @@ function buildSpyPOI(p) {
     // grande rampe à ciel ouvert qui descend du plateau OUEST jusqu'au niveau
     // de l'eau, caverne voûtée percée d'un trou béant (cascade, cristaux, QG de
     // Brutus, coffre-fort). Le sol de la caverne (-0,6) est SOUS le niveau de
-    // la mer : l'eau y pénètre par la PORTE D'EAU de la paroi est, reliée à
-    // la mer ouverte par la calanque (GROTTO.cove*, voir world.js).
+    // la mer. LE CRÂNE REGARDE L'OCÉAN : sa façade est sculptée dans la face
+    // EST de la montagne et la calanque (GROTTO.cove*, voir world.js) mène
+    // l'océan jusqu'à sa bouche — c'est la porte d'eau.
     // =============================================================
     const G = GROTTO;
     const KX = G.cavernX, KZ = G.cavernZ, FY = G.floor1;
@@ -3729,54 +3730,58 @@ function buildSpyPOI(p) {
     const WH = 14;
     gshell(KX, FY - 1.5, KZ - 13.5, 28.6, WH, 1.4, ROCK_B); // paroi nord
     gshell(KX, FY - 1.5, KZ + 13.5, 28.6, WH, 1.4, ROCK_B); // paroi sud
-    // paroi ouest : percée par la bouche de la rampe (trou z ±5,5) — PAS DE LINTEAU :
-    // le début de la grotte est grand ouvert, on voit le ciel depuis la caverne
+    // paroi ouest : percée par la bouche de la rampe (trou z ±5,5) — PAS DE
+    // LINTEAU ici : le linteau de roche est posé plus bas (voir ENTRÉE OUEST),
+    // le début de la grotte reste grand ouvert, on voit le ciel depuis la caverne
     gshell(KX - 13.5, FY - 1.5, KZ - 9.9, 1.4, WH, 8.8, ROCK_B);
     gshell(KX - 13.5, FY - 1.5, KZ + 9.9, 1.4, WH, 8.8, ROCK_B);
-    // paroi est : PORTE D'EAU — ouverture z 158->172, du sol jusqu'à y 3,6 :
-    // la mer (calanque) entre dans la caverne, on y nage/patauge depuis la mer
-    gshell(KX + 13.5, FY - 1.5, KZ - 10.25, 1.4, WH, 6.5, ROCK_B); // jambage nord
-    gshell(KX + 13.5, FY - 1.5, KZ + 10.25, 1.4, WH, 6.5, ROCK_B); // jambage sud
-    gshell(KX + 13.5, FY + 4.2, KZ, 1.4, WH - 4.2, 14, ROCK_B); // linteau au-dessus de la porte d'eau
+    // paroi est : REMPLACÉE par la FAÇADE CRÂNE (voir plus bas) — la bouche du
+    // crâne est la porte d'eau, face à l'océan
     // ---- MONTAGNE : silhouette rocheuse qui recouvre la caverne et le
     // crâne. Structure porteuse : les 3 massifs gshell de la voûte (avec
     // colliders) forment la base, puis des étages supérieurs raccordés
     // montent jusqu'au sommet (~25). La cheminée (trou béant x=269, z=165)
-    // reste ouverte, la bouche du crâne (x>253, z 159.5-170.5) reste libre.
+    // reste ouverte, la bouche du crâne EST (x 281,8-284,2, z 159,5-170,5)
+    // reste libre. Les massifs EST sont RACCOURCIS pour ne jamais couvrir la
+    // façade du crâne : c'est elle qui fait face à l'océan.
     {
       const CX = KX, CZ = KZ;
       const ROCK = 0x5b6472, ROCK_D = 0x4e5663;
-      // ÉTAGE 0 (base, 8.9 -> 13.9) : les 3 massifs historiques (colliders)
-      gshell(287, 8.9, CZ, 16, 5, 40, ROCK_B);          // massif est (x 279-295)
+      // ÉTAGE 0 (base, 8.9 -> 13.9) : les 3 massifs historiques (colliders).
+      // Massif est RACCOURCI : il s'arrête derrière la façade du crâne (est).
+      gshell(281.5, 8.9, CZ, 5, 5, 40, ROCK_B);          // massif est (x 279-284)
       gshell(272, 8.9, CZ - 17.2, 36, 5, 16, ROCK_B);    // massif nord (z 139.8-155.8)
       gshell(269, 8.9, CZ + 13.85, 30, 5, 9.3, ROCK_B); // massif sud (z 174.2-183.5)
       // ÉTAGE 1 (13.9 -> 18.4) : CADRE autour de la cheminée — même logique
-      // que l'étage 0 : est x>280, nord z<156, sud z>174, ouest derrière le crâne
-      gshell(287, 13.9, CZ, 14, 4.5, 40, ROCK_B);          // est (x 280-294)
+      // que l'étage 0 : est derrière la façade du crâne, nord z<156, sud z>174,
+      // ouest au-dessus de l'entrée ouest
+      gshell(282, 13.9, CZ, 4, 4.5, 40, ROCK_B);          // est (x 280-284)
       gshell(271, 13.9, CZ - 19, 34, 4.5, 14, ROCK_B);   // nord (z 140-154)
       gshell(270, 13.9, CZ + 18.5, 28, 4.5, 9, ROCK_B);   // sud (z 179-188)
-      gshell(256.5, 13.9, CZ, 2.6, 4.5, 34, ROCK_B);         // ouest (x 255.2-257.8, EN ARRIÈRE de la façade du crâne : ne masque pas le front)
+      gshell(256.5, 13.9, CZ, 2.6, 4.5, 34, ROCK_B);         // ouest (x 255.2-257.8, au-dessus de l'entrée ouest)
       // ÉTAGE 2 (18.4 -> 22.4) : dômes décalés, crête plus étroite (toujours en cadre)
-      gshell(285, 18.4, CZ - 10, 10, 4, 16, ROCK_B);        // dôme NE (x 280-290, z 147-163)
+      gshell(283, 18.4, CZ - 10, 6, 4, 16, ROCK_B);         // dôme NE (x 280-286, z 147-163)
       gshell(265, 18.4, CZ + 14, 8, 4, 10, ROCK_B);         // dôme SO (x 261-269, z 179-189)
       gshell(273, 18.4, CZ - 17, 30, 3.5, 5, ROCK_B);        // crête nord (z 140-145)
       gshell(273, 18.4, CZ + 17, 26, 3.5, 5, ROCK_B);        // crête sud (z 179-184)
       // ÉTAGE 3 (22.4 -> 25.4) : pointes sommitales
-      gshell(283, 22.4, CZ - 10, 7, 3, 7, ROCK_B);           // pointe NE
+      gshell(282, 22.4, CZ - 10, 5, 3, 7, ROCK_B);           // pointe NE (x 279.5-284.5)
       gshell(266, 22.4, CZ + 14, 6, 3, 7, ROCK_B);           // pointe SO (z 179-186)
       // FACETTES : gdeco pour casser les faces planes et donner du relief
-      // (plaquées sur les étages, jamais dans la cheminée ni la bouche)
-      for (const [bx, bz, by2, bs] of [[16, -14, 15.4, 5.5], [18, 2, 16.4, 6.0], [15, 16, 14.4, 5.0], [-13, -13, 15.4, 5.0], [-16, 8, 16.4, 5.5], [6, -19, 16.4, 4.5], [-3, 19, 15.4, 4.0]])
+      // (plaquées sur les étages, jamais dans la cheminée ni la bouche — les
+      // facettes est sont calées sur les massifs raccourcis)
+      for (const [bx, bz, by2, bs] of [[13, -14, 15.4, 5.5], [14, 2, 16.4, 6.0], [12, 16, 14.4, 5.0], [-13, -13, 15.4, 5.0], [-16, 8, 16.4, 5.5], [6, -19, 16.4, 4.5], [-3, 19, 15.4, 4.0]])
         gdeco(PRISM_GEO, ROCK_D, CX + bx, by2, CZ + bz, bs, bs, bs * 1.3, (MR() - 0.5) * 0.6, (MR() - 0.5) * 0.4, 0);
       // HERBE : tapis vert sur les surfaces supérieures réelles
-      gdeco(BOX, 0x4a9b4f, 285, 22.8, CZ - 10, 8, 0.6, 12);   // dôme NE (x 280-290, z 147-163)
+      gdeco(BOX, 0x4a9b4f, 283, 22.8, CZ - 10, 6, 0.6, 12);   // dôme NE (x 280-286, z 147-163)
       gdeco(BOX, 0x4a9b4f, 265, 22.0, CZ + 14, 6, 0.6, 8);   // dôme SO (x 261-269, z 179-189)
       gdeco(BOX, 0x55884f, 273, 22.2, CZ - 17, 22, 0.5, 4);  // crête nord (z 140-145)
       gdeco(BOX, 0x55884f, 273, 22.2, CZ + 17, 18, 0.5, 4);  // crête sud (z 179-184)
-      gdeco(BOX, 0x55884f, 283, 25.6, CZ - 10, 5, 0.5, 5);  // pointe NE
+      gdeco(BOX, 0x55884f, 282, 25.6, CZ - 10, 4, 0.5, 5);  // pointe NE (x 280-284)
       gdeco(BOX, 0x55884f, 266, 24.8, CZ + 14, 4.5, 0.5, 5); // pointe SO (z 179-186)
-      // SAPINS : sur les crêtes réelles (y du sommet du bloc + 0.5)
-      for (const [tx, tz, hy] of [[18, -10, 17.9], [16, -14, 18.4], [13, -12, 18.9], [20, 2, 17.9], [17, 8, 17.4], [15, 16, 16.9], [4, -20, 17.9], [10, -22, 18.9], [-8, 18, 17.4], [-12, 20, 16.9], [-3, 22, 17.4]]) {
+      // SAPINS : sur les crêtes réelles (y du sommet du bloc + 0.5) — les
+      // sapins est sont calés sur le massif est raccourci (x 280-284)
+      for (const [tx, tz, hy] of [[11, -10, 17.9], [12, -14, 18.4], [13, -12, 18.9], [12, 2, 17.9], [11, 8, 17.4], [12, 16, 16.9], [4, -20, 17.9], [10, -22, 18.9], [-8, 18, 17.4], [-12, 20, 16.9], [-3, 22, 17.4]]) {
         gdeco(PRISM_GEO, 0x2d5a35, CX + tx, hy + 1.8, CZ + tz, 1.4, 3.6, 1.4, 0, (MR() - 0.5) * 0.3, 0);
         gdeco(PRISM_GEO, 0x4a3423, CX + tx, hy + 0.4, CZ + tz, 0.5, 0.8, 0.5);
       }
@@ -3850,18 +3855,19 @@ function buildSpyPOI(p) {
     addCaveLight(261, 5.4, 158, 0xffd9b0, 5, 12); // crâne de l'Ombre
 
     // ---- FAÇADE CRÂNE : la bouche du crâne EST l'entrée de la Grotte. Le
-    // visage est sculpté dans la face OUEST de la montagne, face à la rampe
-    // (-X), au-dessus d'un palier au niveau de l'eau (sol -0,6). Comme la
-    // référence : une paroi PLEINE gris clair (contraste fort avec la
-    // montagne sombre) avec deux grandes orbites NOIRES asymétriques, un
-    // nez triangulaire noir, une rangée de grosses dents blanches au-dessus
-    // de la bouche-entrée, PAS de mâchoire inférieure : passage libre au sol.
+    // visage est sculpté dans la face EST de la montagne, FACE À L'OCÉAN
+    // (+X, au-dessus de la calanque), au-dessus d'un palier au niveau de
+    // l'eau (sol -0,6). Comme la référence : une paroi PLEINE gris clair
+    // (contraste fort avec la montagne sombre) avec deux grandes orbites
+    // NOIRES asymétriques, un nez triangulaire noir, une rangée de grosses
+    // dents blanches au-dessus de la bouche-entrée, PAS de mâchoire
+    // inférieure : passage libre au sol — la mer entre par la bouche.
     {
       const skullStart = grottoGeos.length;
       const SK = 0xb6bcc4, SKD = 0x7d858f, SKK = 0x0b0e13;
-      const FX = 255.0;   // plan de la façade (face OUEST de la montagne)
+      const FX = 283.0;   // plan de la façade (face EST de la montagne)
       const FY = -0.6;    // sol de la bouche (au niveau de l'eau)
-      const FACE = FX - 1.2; // face avant de la paroi (x = 253.8, côté rampe)
+      const FACE = FX + 1.2; // face avant de la paroi (x = 284.2, côté océan)
       // === STRUCTURE PLEINE : mur supérieur massif au-dessus de la bouche
       // (y 4.8-16.9, z 154-176) + tempes latérales de part et d'autre de la
       // bouche (z 149.5-159.5 et 170.5-180.5, y -0.6-11.4). La bouche (z 159.5-
@@ -3872,35 +3878,37 @@ function buildSpyPOI(p) {
       // === ORBITES : grandes plaques NOIRES plaquées sur la face avant de la
       // paroi pleine, avec un rebord gris plus sombre pour l'effet creusé.
       // GAUCHE : centre z=160, y=10.4 (6.4 de large, 4.6 de haut), inclinée
-      // (bord intérieur plus bas, regard menaçant)
-      gdeco(BOX, SKD, FACE - 0.05, 10.4, 160.0, 0.2, 5.4, 7.2, 0.15);   // rebord gauche
-      gdeco(BOX, SKK, FACE - 0.1, 10.4, 160.0, 0.25, 4.6, 6.4, 0.15);   // orbite noire gauche
+      // (bord intérieur plus bas, regard menaçant vers l'océan)
+      gdeco(BOX, SKD, FACE + 0.05, 10.4, 160.0, 0.2, 5.4, 7.2, 0.15);   // rebord gauche
+      gdeco(BOX, SKK, FACE + 0.1, 10.4, 160.0, 0.25, 4.6, 6.4, 0.15);   // orbite noire gauche
       // DROITE (ASYMÉTRIQUE : plus haute, plus étroite), inclinée en miroir
-      gdeco(BOX, SKD, FACE - 0.05, 11.0, 170.3, 0.2, 5.2, 6.8, -0.15);  // rebord droit
-      gdeco(BOX, SKK, FACE - 0.1, 11.0, 170.3, 0.25, 4.4, 6.0, -0.15); // orbite noire droite
+      gdeco(BOX, SKD, FACE + 0.05, 11.0, 170.3, 0.2, 5.2, 6.8, -0.15);  // rebord droit
+      gdeco(BOX, SKK, FACE + 0.1, 11.0, 170.3, 0.25, 4.4, 6.0, -0.15); // orbite noire droite
       // === NEZ : triangle noir pointant vers le bas, plaqué sur la face avant,
       // entre les orbites et au-dessus de la bouche (y 6.2-9.6). Rotation
-      // Y=-π/2 pour que la FACE TRIANGULAIRE regarde vers -X (le joueur),
+      // Y=+π/2 pour que la FACE TRIANGULAIRE regarde vers +X (l'océan),
       // puis X=π pour pointer le sommet vers le bas.
-      gdeco(PRISM_GEO, SKK, FACE - 0.15, 7.6, 165, 2.8, 2.6, 0.3, Math.PI, -Math.PI / 2, 0);
+      gdeco(PRISM_GEO, SKK, FACE + 0.15, 7.6, 165, 2.8, 2.6, 0.3, Math.PI, Math.PI / 2, 0);
       // === DENTS : grosses dents blanches irrégulières suspendues au linteau
       // (haut y 4.8), pointes vers 2.8-3.7, plaquées sur la face avant
       const teeth = [[-5.6, 1.8], [-4.1, 1.2], [-2.6, 2.0], [-1.1, 1.4], [0.4, 1.9], [1.9, 1.1], [3.4, 1.6]];
       for (const [dz, len] of teeth)
-        gdeco(PRISM_GEO, 0xf2efe6, FACE - 0.15, 4.8, 165 + dz, 1.45, len, 0.4, Math.PI, -Math.PI / 2, 0);
+        gdeco(PRISM_GEO, 0xf2efe6, FACE + 0.15, 4.8, 165 + dz, 1.45, len, 0.4, Math.PI, Math.PI / 2, 0);
       // DÔME DU CRÂNE : arrondi au-dessus du frontal, large et proéminent
       // (dépasse en avant de la façade = front du crâne) — sommet qui émerge
-      // devant la montagne sombre, rejoint le massif sud sans trou de ciel
-      gdeco(BOX, SK, FX - 1.3, 15.9, 165, 2.2, 2.5, 27, 0, 0, 0);
-      gdeco(BOX, SK, FX - 1.1, 18.0, 165, 1.8, 1.6, 19, 0, 0, 0);
-      gdeco(BOX, SK, FX - 0.8, 19.3, 165, 1.2, 1.2, 13, 0, 0, 0);
+      // devant la montagne sombre, côté océan, rejoint le massif NE sans
+      // trou de ciel
+      gdeco(BOX, SK, FX + 1.3, 15.9, 165, 2.2, 2.5, 27, 0, 0, 0);
+      gdeco(BOX, SK, FX + 1.1, 18.0, 165, 1.8, 1.6, 19, 0, 0, 0);
+      gdeco(BOX, SK, FX + 0.8, 19.3, 165, 1.2, 1.2, 13, 0, 0, 0);
       // éclairage chaud devant la façade pour faire ressortir le visage
-      addCaveLight(250, 8.4, 165, 0xffe0b8, 8, 18);
+      // (au-dessus de la calanque, côté océan)
+      addCaveLight(288, 8.4, 165, 0xffe0b8, 8, 18);
       // === INTÉRIEUR DE LA BOUCHE : parois latérales sombres dans l'épaisseur
       // du passage (assombrissent l'entrée sans la boucher)
-      gdeco(BOX, SKK, 255.8, 1.9, 159.2, 1.6, 5, 0.8);            // paroi gauche
-      gdeco(BOX, SKK, 255.8, 1.9, 170.8, 1.6, 5, 0.8);           // paroi droite
-      gdeco(BOX, SKK, 255.8, 4.2, 165, 1.6, 1.2, 11.6);          // plafond sombre
+      gdeco(BOX, SKK, 282.2, 1.9, 159.2, 1.6, 5, 0.8);            // paroi gauche
+      gdeco(BOX, SKK, 282.2, 1.9, 170.8, 1.6, 5, 0.8);           // paroi droite
+      gdeco(BOX, SKK, 282.2, 4.2, 165, 1.6, 1.2, 11.6);          // plafond sombre
       // bornes du crâne exposées à la QA (le relief est bien dans la falaise)
       const sb = new THREE.Box3(), tb = new THREE.Box3();
       for (let i = skullStart; i < grottoGeos.length; i++) {
@@ -3908,6 +3916,18 @@ function buildSpyPOI(p) {
         sb.union(tb.copy(grottoGeos[i].geo.boundingBox).applyMatrix4(grottoGeos[i].m));
       }
       grottoSkullBounds = sb;
+    }
+
+    // ---- ENTRÉE OUEST (rampe) : le crâne est désormais sur la face EST
+    // (océan) — l'entrée ouest reste un GRAND PASSAGE OUVERT coiffé d'un
+    // linteau de roche sombre (y 4,8-13,9) qui bouche le ciel au-dessus de
+    // la bouche et raccorde la montagne (massif ouest ét. 1 à 13,9)
+    {
+      // linteau au-dessus de la bouche (z ±5,5)
+      gshell(255.5, 4.8, 165, 1.4, 9.1, 11, ROCK_B);
+      // bouchage du jour restant au-dessus des segments de paroi (y 11,9-13,9)
+      gshell(255.5, 11.9, 155.1, 1.4, 2, 8.8, ROCK_B);
+      gshell(255.5, 11.9, 174.9, 1.4, 2, 8.8, ROCK_B);
     }
 
     // ---- PASSERELLE MÉTALLIQUE le long du mur sud + conteneurs et cuve :
