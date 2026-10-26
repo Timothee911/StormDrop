@@ -3787,8 +3787,8 @@ function buildSpyPOI(p) {
     // ---- SURFACE : deux bunkers et un hélipad sur le plateau abaissé (24, plat)
     // bunker 1 : sud du plateau, hors des massifs de la voûte et de la rampe
     buildHouse(p.x + 5, p.z + 25, p.h, 10, 9, 2, 'bunker');
-    // bunker 2 : sud-est, hors de l'influence du Port-Rouillé (terrain bien plat)
-    buildHouse(p.x + 26, p.z - 13, p.h, 10, 8, 0, 'bunker');
+    // bunker 2 : sud-est, hors du fondu de la rampe (z < 152) et du Port-Rouillé
+    buildHouse(p.x + 26, p.z - 19, p.h, 10, 8, 0, 'bunker');
     {
       const hx = p.x + 22, hz = p.z + 18;
       makeStructBox(hx, p.h - 0.35, hz, 6.4, 0.45, 6.4, matC(0x3a3f47, { metalness: 0.3, roughness: 0.6 }), { indestructible: true });

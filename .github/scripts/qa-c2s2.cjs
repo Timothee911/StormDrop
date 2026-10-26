@@ -329,10 +329,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     G.keys.KeyW = true;
     for (let i = 0; i < 90; i++) {
       window.advanceTime(150);
-      if (!p.alive || p.pos.x > 226) break;
+      if (!p.alive || p.pos.x > 231) break;
     }
     G.keys.KeyW = false;
-    R.push(['remontée de la rampe', p.alive && p.pos.y > 22.5 && p.pos.x > 218, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
+    R.push(['remontée de la rampe', p.alive && p.pos.y > 23 && p.pos.x > 226, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
     // le joueur est bien SOUS la voûte dans la caverne : un raycast vertical
     // depuis le sol de la caverne doit toucher la roche de la voûte (la caverne
     // est bien couverte, « en dessous de la carte »)
@@ -359,14 +359,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // coffre-fort de la Grotte au sol de la caverne
     const vg = G.vaults.find((v) => v.poi.key === 'grotto');
     R.push(['coffre-fort dans la caverne', !!vg && vg.y < 16, vg ? 'y=' + vg.y.toFixed(1) : 'absent']);
-    // crâne de l'Ombre : bas-relief dans le contrefort nord, sous la voûte
-    // (rien ne dépasse du plateau : max.y < 24)
+    // crâne de l'Ombre : façade PLEINE sur la face est de la montagne, la
+    // bouche du crâne EST l'entrée de la caverne (paroi x 183-187, tempes
+    // z 149.5-180.5, dôme jusqu'à y 30.5 : émerge devant la montagne)
     const sb = G.grottoSkullBounds;
-    R.push(["crâne de l'Ombre sculpté dans le contrefort", !!sb && sb.min.x < 176 && sb.max.x > 182 && sb.max.y > 18 && sb.max.y < 21 && sb.max.y < 24 && sb.min.z < 156 && sb.max.z > 157.5, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
+    R.push(["crâne de l'Ombre sculpté dans le contrefort", !!sb && sb.min.x >= 183 && sb.max.x <= 188 && sb.min.y <= 10.05 && sb.max.y >= 29 && sb.min.z <= 155 && sb.max.z >= 175, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
     // les maisons (bunkers) sont bien posées : terrain plat sous toute l'emprise
     {
       let flat = true, worst = 0;
-      for (const [bx, bz, w, d] of [[205, 190, 10, 9], [226, 152, 10, 8]]) {
+      for (const [bx, bz, w, d] of [[205, 190, 10, 9], [226, 146, 10, 8]]) {
         for (const [cx, cz] of [[bx, bz], [bx - w / 2, bz - d / 2], [bx + w / 2, bz - d / 2], [bx - w / 2, bz + d / 2], [bx + w / 2, bz + d / 2]]) {
           const e = Math.abs(G.terrainH(cx, cz) - 24); worst = Math.max(worst, e); if (e > 1.2) flat = false;
         }
