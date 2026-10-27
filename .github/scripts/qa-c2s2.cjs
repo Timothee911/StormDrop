@@ -7,7 +7,7 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 (async () => {
-  const browser = await puppeteer.launch({ headless: true, protocolTimeout: 600000, args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+  const browser = await puppeteer.launch({ headless: true, protocolTimeout: 1800000, args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
@@ -532,6 +532,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     G.keys.KeyW = false;
     R.push(['descente 2e -> 1er praticable (arrivée à 13,45)', downL && p.alive && Math.abs(p.pos.y - 13.45) < 0.25, 'y=' + p.pos.y.toFixed(1)]);
+    return R.map((r) => (r[1] ? 'PASS' : 'FAIL') + '|' + r[0] + '|' + (r[2] ?? '')).join('\n');
+  });
+  // --- 9quater. L'Agence : coffre-fort (verrouillage, ouverture, entrée) + anti-NaN
+  // (evaluate séparé : la simulation des escaliers ci-dessus est longue, on
+  // évite qu'un seul evaluate dépasse le protocolTimeout sur les runners CI)
+  const agencyVault = await frame.evaluate(() => {
+    const G = window.__game, p = G.player, R = [];
     // COFFRE-FORT : verrouillé sans carte, ouvrable avec carte, entrée à pied
     const vB = G.vaults.find((v) => v.poi.key === 'agency');
     const vaultR = { lockedOk: false, openOk: false, meshGone: false, inOk: false, chest: false };
@@ -594,6 +601,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   for (const line of cave.split('\n')) { const i = line.indexOf('|'); check(line.slice(i + 1), line.startsWith('PASS'), line.slice(line.indexOf('|', i + 1) + 1)); }
   for (const line of agencyBase.split('\n')) { const i = line.indexOf('|'); check(line.slice(i + 1), line.startsWith('PASS'), line.slice(line.indexOf('|', i + 1) + 1)); }
+  for (const line of agencyVault.split('\n')) { const i = line.indexOf('|'); check(line.slice(i + 1), line.startsWith('PASS'), line.slice(line.indexOf('|', i + 1) + 1)); }
 
   console.log(results.join('\n'));
   console.log('---');
