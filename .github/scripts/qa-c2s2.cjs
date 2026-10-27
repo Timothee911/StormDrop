@@ -452,10 +452,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     if (stairs) {
       G.setCam(0, -0.2); // regarde plein nord (descente)
       G.keys.KeyW = true;
-      for (let i = 0; i < 60; i++) {
+      // l'arrivée n'est valide que PIEDS AU SOL : sans le test grounded, la
+      // boucle peut se déclencher en pleine chute (joueur brièvement en l'air
+      // entre deux marches) et la suite de la marche vers la porte part alors
+      // dans une trajectoire aberrante (remontée de l'escalier, atrium…)
+      for (let i = 0; i < 90; i++) {
         window.advanceTime(150);
         if (!p.alive) break;
-        if (p.pos.z < -8.5 && p.pos.y < 4.5) { down = true; break; }
+        if (p.pos.z < -8.5 && p.pos.y < 4.5 && p.grounded) { down = true; break; }
       }
       G.keys.KeyW = false;
     }
