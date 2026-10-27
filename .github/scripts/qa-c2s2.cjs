@@ -473,6 +473,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         window.advanceTime(150);
         if (!p.alive) break;
         if (p.pos.z < -8.5 && p.pos.y < 4.5 && p.grounded) { down = true; break; }
+        // GARDE-FOU : si le joueur a raté l'escalier et quitté le bâtiment
+        // (nord du hall, z < -13 en surface), on arrête la marche au lieu de
+        // le laisser traverser la moitié de la carte — l'échec reste
+        // diagnostiqué proprement (down=false, position rapportée)
+        if (p.pos.z < -13 && p.pos.y > 6) break;
       }
       G.keys.KeyW = false;
     }
