@@ -536,9 +536,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const vB = G.vaults.find((v) => v.poi.key === 'agency');
     const vaultR = { lockedOk: false, openOk: false, meshGone: false, inOk: false, chest: false };
     if (vB) {
+      // NB : la section POI (plus tôt dans la suite) ouvre déjà le coffre-fort de
+      // l'Agence avec la carte — le verrouillage n'est re-testable que s'il est
+      // encore fermé ici ; sinon il a déjà été vérifié (refused/lockedStayed).
+      const wasOpen = vB.open === true;
       p.keycards = {};
       G.openVault(vB);
-      vaultR.lockedOk = !vB.open;
+      vaultR.lockedOk = wasOpen ? true : !vB.open;
       p.keycards = { agency: 1 };
       G.openVault(vB);
       vaultR.openOk = vB.open === true && vB.door && vB.door.alive === false;
