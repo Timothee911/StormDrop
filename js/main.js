@@ -3274,7 +3274,7 @@ function vaultSpot(p) {
   }
   return { x: p.x + p.r * 0.55, z: p.z };
 }
-function buildVault(p, at) {
+function buildVault(p, at, style) {
   let vx, vz, vy;
   if (at) { vx = at.x; vz = at.z; vy = at.y; }
   else { const s = vaultSpot(p); vx = s.x; vz = s.z; vy = Math.max(terrainH(vx, vz), 2.4); }
@@ -3284,15 +3284,32 @@ function buildVault(p, at) {
   makeStructBox(vx, vy, vz - 3.3, 7, 4, 0.6, wallM, { indestructible: true });
   makeStructBox(vx - 3.3, vy, vz, 0.6, 4, 7, wallM, { indestructible: true });
   makeStructBox(vx + 3.3, vy, vz, 0.6, 4, 7, wallM, { indestructible: true });
-  makeStructBox(vx, vy + 4, vz, 7.4, 0.6, 7.4, wallM, { indestructible: true });
+  makeStructBox(vx, vy + 4, vz, 7.4, style === 'agency' ? 0.95 : 0.6, 7.4, wallM, { indestructible: true }); // Agence : plafond affleurant sous la dalle du RDC (8,6)
   makeStructBox(vx - 2.4, vy, vz + 3.3, 2.6, 4, 0.6, wallM, { indestructible: true });
   makeStructBox(vx + 2.4, vy, vz + 3.3, 2.6, 4, 0.6, wallM, { indestructible: true });
-  const door = makeStructBox(vx, vy, vz + 3.3, 2.2, 3.6, 0.5, matC(0xffc400, { metalness: 0.75, roughness: 0.25 }), { indestructible: true });
+  let door;
+  if (style === 'agency') {
+    // PORTE CIRCULAIRE DORÉE (icône de l'Agence de Fortnite) : gros disque doré
+    // à rayons monté sur la face du mur, groupe scène + collider dédié —
+    // openVault la retire proprement (removeCollider + scene.remove)
+    const dGrp = new THREE.Group();
+    const goldM = matC(0xffc400, { metalness: 0.4, roughness: 0.4, emissive: 0xd9a400, emissiveIntensity: 0.85 });
+    const doorL = new THREE.PointLight(0xffd76e, 12, 14); doorL.position.set(vx, vy + 2.4, vz + 5.2); scene.add(doorL); // éclaire la porte depuis l'avant
+    const rim = new THREE.Mesh(CYL_GEO, matC(0x2c313c, { metalness: 0.5 })); rim.scale.set(4.4, 0.7, 4.4); rim.rotation.x = Math.PI / 2; rim.position.set(0, 1.85, 0); dGrp.add(rim);
+    const face = new THREE.Mesh(CYL_GEO, goldM); face.scale.set(3.8, 0.5, 3.8); face.rotation.x = Math.PI / 2; face.position.set(0, 1.85, 0.45); dGrp.add(face);
+    const hub = new THREE.Mesh(CYL_GEO, matC(0x39404c, { metalness: 0.6 })); hub.scale.set(1.1, 0.8, 1.1); hub.rotation.x = Math.PI / 2; hub.position.set(0, 1.85, 0.6); dGrp.add(hub);
+    for (let k = 0; k < 4; k++) { const sp = new THREE.Mesh(BOX, goldM); sp.scale.set(0.45, 3.3, 0.55); sp.position.set(0, 1.85, 0.6); sp.rotation.z = k * Math.PI / 4; dGrp.add(sp); } // rayons en relief devant la face
+    dGrp.position.set(vx, vy, vz + 3.35); dGrp.traverse((m) => { m.castShadow = true; }); scene.add(dGrp);
+    door = addCollider({ type: 'box', minX: vx - 1.4, maxX: vx + 1.4, minY: vy, maxY: vy + 3.7, minZ: vz + 3.05, maxZ: vz + 4.4 }); // couvre toute la porte décalée (face + moyeu)
+    door.mesh = dGrp; door.indestructible = true; door.hp = door.maxHp = 9999; // (alive: true par addCollider)
+  } else {
+    door = makeStructBox(vx, vy, vz + 3.3, 2.2, 3.6, 0.5, matC(0xffc400, { metalness: 0.75, roughness: 0.25 }), { indestructible: true });
+  }
   // bandeau lumineux + terminal de scan au-dessus de la porte
   hdeco(BOX, 0xffc400, vx, vy + 3.75, vz + 3.6, 2.4, 0.18, 0.12, 0, 0, 0, null);
   const term = new THREE.Group();
   addBox(term, 0.5, 0.9, 0.4, 0, 0.45, 0, matC(0x22262f, { metalness: 0.5 }));
-  addBox(term, 0.3, 0.2, 0.06, 0, 0.75, -0.21, matC(0x39ff88, { emissive: 0x39ff88, emissiveIntensity: 1.2 }));
+  addBox(term, 0.3, 0.2, 0.06, 0, 0.75, 0.21, matC(0x39ff88, { emissive: 0x39ff88, emissiveIntensity: 1.2 })); // écran côté sud : visible en arrivant de la salle
   term.position.set(vx + 2.1, vy + 1.2, vz + 3.9); scene.add(term);
   const c1 = spawnChest(vx - 1.4, vy + 0.05, vz - 1.2); c1.vault = true;
   const c2 = spawnChest(vx + 1.4, vy + 0.05, vz - 1.2); c2.vault = true;
@@ -3379,18 +3396,20 @@ function finishGrotto() {
 }
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
-    // ---- L'AGENCE : refonte totale de l'extérieur pour coller à l'Agence de
-    // Fortnite (Chapitre 2 Saison 2) : grand bâtiment blanc-crème à bandes
-    // dorées, hautes fenêtres sombres à encadrements or, portique d'entrée à
-    // colonnes sur la façade sud avec fronton et enseigne « THE AGENCY »,
-    // statue dorée de Midas devant l'entrée, braseros, dôme vitré sur le toit,
-    // drapeaux GHOST bleus aux quatre coins, hélipad à l'ouest.
-    // Le COFFRE-FORT descend au SOUS-SOL : le terrain est creusé sous le
-    // bâtiment (AGENCY_BASE, voir world.js), un escalier intérieur descend
-    // du hall du rez-de-chaussée jusqu'à la cave où veille le coffre-fort.
+    // ---- L'AGENCE : refonte totale extérieur + intérieur pour coller à
+    // l'Agence de Fortnite (Chapitre 2 Saison 2) : grand bâtiment blanc-crème
+    // à bandes dorées, hautes fenêtres sombres à encadrements or, portique
+    // d'entrée à colonnes sur la façade sud avec fronton et enseigne « THE
+    // AGENCY », braseros, drapeaux GHOST bleus aux quatre coins, hélipad à
+    // l'ouest. INTÉRIEUR : ATRIUM CENTRAL OUVERT DU RDC AU TOIT (le « hollow
+    // centre ») avec la statue dorée de Midas tenant un globe dans son
+    // bassin, bureau de Midas et salles de réunion aux étages desservis par
+    // des ESCALIERS OUVERTS (RDC -> 1er -> 2e -> 3e -> toit). Le COFFRE-FORT
+    // est au SOUS-SOL (AGENCY_BASE, voir world.js) derrière la PORTE
+    // CIRCULAIRE DORÉE, avec son terminal de scan d'empreinte.
     const A = AGENCY_BASE;
     const BX = p.x, BZ = p.z;                 // centre du bâtiment
-    const LV = [9.05, 13.45, 17.85, 22.25];   // base de chaque niveau (toit 26,65)
+    const LV = [9.05, 13.45, 17.85, 22.25, 26.65]; // base de chaque niveau + toit (LV[4], pour le palier de la dernière volée)
     const FH = 4.4, WALL = 0xf4f1ea, GOLD = 0xffc400, GLASS = 0x27313f;
     const stoneM = () => matC(WALL, { roughness: 0.8 });
     const oStone = { hp: 420, mat: 'stone' };
@@ -3446,12 +3465,58 @@ function buildSpyPOI(p) {
         cS[f] = [makeStructBox(BX - 8, ly, BZ + 10, 10, FH, th, stoneM(), oStone), makeStructBox(BX + 8, ly, BZ + 10, 10, FH, th, stoneM(), oStone)];
         makeStructBox(BX, ly + 3.2, BZ + 10, 6, 1.2, th, stoneM(), oStone); // linteau de la porte
       } else cS[f] = [makeStructBox(BX, ly, BZ + 10, 26, FH, th, stoneM(), oStone)];
-      // dalles de plancher des niveaux supérieurs (l'intérieur du RDC reste
-      // un hall ouvert ; les étages ne sont pas visitables)
-      if (f > 0) makeStructBox(BX, LV[f] - 0.45, BZ, 25, 0.45, 19, stoneM(), oStone);
     }
-    // dalle de toit
-    makeStructBox(BX, 26.2, BZ, 25, 0.45, 19, stoneM(), oStone);
+
+    // ---- DALLES EN ANNEAU (niveaux 1-3 + toit) : chaque plancher ceinture
+    // l'ATRIUM CENTRAL (trou x ±4,5, z ±4, ouvert du RDC au toit — la statue
+    // de Midas monte au centre) et est percé du trou de l'escalier qui y
+    // arrive. stairSide : côté du trou d'escalier ('E' : x 8..12,75,
+    // 'O' : x -12,75..-8 ; trous z -5,5..5,5)
+    const ringSlab = (y, stairSide) => {
+      // bords affleurants aux murs (faces internes x ±12,75, z ±9,75) : aucune
+      // fente sombre ne reste entre dalle et mur
+      const mk = (cx, cz, w, d) => makeStructBox(BX + cx, y, BZ + cz, w, 0.45, d, stoneM(), oStone);
+      if (stairSide === 'E') {
+        mk(-8.625, 0, 8.25, 19.5);      // bande ouest (x -12,75..-4,5)
+        mk(6.25, 0, 3.5, 19.5);        // bande est intérieure (x 4,5..8)
+        mk(10.375, -7.625, 4.75, 4.25); // nord-est (x 8..12,75, z -9,75..-5,5)
+        mk(10.375, 7.625, 4.75, 4.25);  // sud-est
+      } else {
+        mk(8.625, 0, 8.25, 19.5);       // bande est (x 4,5..12,75)
+        mk(-6.25, 0, 3.5, 19.5);       // bande ouest intérieure (x -8..-4,5)
+        mk(-10.375, -7.625, 4.75, 4.25); // nord-ouest (x -12,75..-8)
+        mk(-10.375, 7.625, 4.75, 4.25);  // sud-ouest
+      }
+      mk(0, -6.875, 9, 5.75);           // nord de l'atrium (x -4,5..4,5, z -9,75..-4)
+      mk(0, 6.875, 9, 5.75);            // sud de l'atrium (z 4..9,75)
+    };
+    ringSlab(LV[1] - 0.45, 'E'); // plancher du 1er (escalier RDC->1er à l'est)
+    ringSlab(LV[2] - 0.45, 'O'); // plancher du 2e (escalier 1er->2e à l'ouest)
+    ringSlab(LV[3] - 0.45, 'E'); // plancher du 3e (escalier 2e->3e à l'est)
+    ringSlab(26.2, 'O');         // dalle de toit (escalier 3e->toit à l'ouest)
+
+    // ---- ESCALIERS OUVERTS (façon Agence) : 4 volées alternées est/ouest,
+    // 11 marches de 0,4 + palier d'arrivée qui s'aligne sur la dalle
+    // supérieure. sgn -1 : monte vers le nord ; +1 : vers le sud.
+    const stairM2 = matC(0x5a616c, { metalness: 0.35, roughness: 0.55 });
+    const flight = (cx, sgn, f) => {
+      for (let i = 0; i < 11; i++) {
+        const top = LV[f] + 0.4 * (i + 1);
+        makeStructBox(BX + cx, top - 0.9, BZ + sgn * (4.075 - 0.85 * i), 4, 0.9, 0.85, stairM2, { indestructible: true });
+      }
+      makeStructBox(BX + cx, LV[f + 1] - 0.45, BZ - sgn * 4.925, 4, 0.45, 1.15, stoneM(), oStone); // palier haut
+    };
+    flight(10.5, -1, 0);  // RDC -> 1er, à l'est, monte vers le sud
+    flight(-10.5, 1, 1);  // 1er -> 2e, à l'ouest, monte vers le nord
+    flight(10.5, -1, 2);  // 2e -> 3e, à l'est, monte vers le sud
+    flight(-10.5, 1, 3);  // 3e -> toit, à l'ouest, monte vers le nord
+    // garde-corps dorés du bord de l'atrium (niveaux 1-3)
+    for (let f = 1; f <= 3; f++) {
+      hdeco(BOX, GOLD, BX, LV[f] + 0.5, BZ - 4.18, 8.36, 0.14, 0.1);
+      hdeco(BOX, GOLD, BX, LV[f] + 0.5, BZ + 4.18, 8.36, 0.14, 0.1);
+      hdeco(BOX, GOLD, BX - 4.18, LV[f] + 0.5, BZ, 0.1, 0.14, 8.36);
+      hdeco(BOX, GOLD, BX + 4.18, LV[f] + 0.5, BZ, 0.1, 0.14, 8.36);
+    }
 
     // ---- FENÊTRES : verre sombre + encadrement et sill or, sur les 4 faces
     const win = (wall, u, f) => {
@@ -3483,6 +3548,11 @@ function buildSpyPOI(p) {
     makeStructBox(BX, 26.65, BZ + 10, 26, 0.8, 0.5, stoneM(), oStone);
     makeStructBox(BX + 13, 26.65, BZ, 0.5, 0.8, 20, stoneM(), oStone);
     makeStructBox(BX - 13, 26.65, BZ, 0.5, 0.8, 20, stoneM(), oStone);
+    // garde-corps doré du bord du trou d'atrium, sur le toit
+    hdeco(BOX, GOLD, BX, 27.15, BZ - 4.18, 8.36, 0.14, 0.1);
+    hdeco(BOX, GOLD, BX, 27.15, BZ + 4.18, 8.36, 0.14, 0.1);
+    hdeco(BOX, GOLD, BX - 4.18, 27.15, BZ, 0.1, 0.14, 8.36);
+    hdeco(BOX, GOLD, BX + 4.18, 27.15, BZ, 0.1, 0.14, 8.36);
 
     // ---- PORTIQUE D'ENTRÉE (façade sud) : 4 colonnes cannelées + fronton
     for (const cx of [-7.5, -2.5, 2.5, 7.5]) {
@@ -3506,23 +3576,79 @@ function buildSpyPOI(p) {
       hdeco(BOX, 0xffffff, BX + fx + 1.1, 29.9, BZ + fz + 0.05, 0.7, 0.7, 0.02);
     }
 
-    // ---- DÔME VITRÉ (atrium) sur le toit
-    hdeco(CYL_GEO, 0x1f2430, BX, 26.95, BZ, 7.5, 0.6, 7.5);
-    hdeco(CYL_GEO, 0x6fd0ff, BX, 28.35, BZ, 6.4, 2.4, 6.4);
-    hdeco(BOX, GOLD, BX, 27.05, BZ, 7.0, 0.25, 0.25);
-    hdeco(BOX, GOLD, BX, 27.05, BZ, 0.25, 0.25, 7.0);
-    propDisc(BX, 26.65, BZ, 3.75, 0.9);
-    propDisc(BX, 27.55, BZ, 3.2, 2.4);
+    // ---- ATRIUM CENTRAL : statue dorée de Midas tenant un globe, dressée
+    // dans son bassin au centre du hall — l'atrium est ouvert du RDC au toit
+    // (le « hollow centre » de l'Agence), la statue dépasse du 1er étage.
+    {
+      // bassin de pierre + eau (le socle de la statue au milieu)
+      hdeco(CYL_GEO, 0x39404c, BX, LV[0] + 0.35, BZ, 6.4, 0.7, 6.4);
+      hdeco(CYL_GEO, 0x3fa9ff, BX, LV[0] + 0.68, BZ, 6.1, 0.1, 6.1); // eau : affleure au-dessus de la pierre (9,78 > 9,75)
+      propDisc(BX, LV[0], BZ, 3.2, 0.8); // bassin : solide (bord haut de 0,8 : infranchissable)
+      // anneau doré au sol autour du bassin (emblème du hall)
+      hdeco(CYL_GEO, GOLD, BX, LV[0] + 0.03, BZ, 8.6, 0.06, 8.6);
+      // socle (posé sur le bassin : visible de 9,75 à 10,15)
+      hdeco(BOX, 0x2c313c, BX, LV[0] + 0.95, BZ, 2.2, 0.6, 2.2);
+      propBox(BX, LV[0] + 0.7, BZ, 1.1, 1.1, 0.4); // socle : solide (9,75-10,15)
+      // statue (groupe scène, or métallique) : Midas portant le globe sur le
+      // dos — origine du groupe = dessus du socle (10,15)
+      const st = new THREE.Group();
+      const gM = matC(0xffc400, { metalness: 0.85, roughness: 0.2 });
+      const dM = matC(0x2c313c, { metalness: 0.5 });
+      addBox(st, 0.45, 1.75, 0.45, -0.28, 0.875, 0, gM); // jambe gauche
+      addBox(st, 0.45, 1.75, 0.45, 0.28, 0.875, 0, gM);  // jambe droite
+      addBox(st, 1.3, 1.7, 0.7, 0, 2.6, 0, gM);         // torse
+      const aL = addBox(st, 0.35, 1.5, 0.35, -0.72, 3.35, -0.3, gM); aL.rotation.x = -0.45; // bras gauche vers le globe
+      const aR = addBox(st, 0.35, 1.5, 0.35, 0.72, 3.35, -0.3, gM); aR.rotation.x = -0.45; // bras droit
+      addBox(st, 0.55, 0.6, 0.55, 0, 3.75, 0.05, dM);  // tête (costume sombre)
+      addBox(st, 0.7, 0.12, 0.7, 0, 4.12, 0.05, gM);   // chapeau haut de forme
+      const globe = new THREE.Mesh(new THREE.SphereGeometry(0.85, 20, 14), matC(0x3fa9ff, { metalness: 0.3, roughness: 0.25, emissive: 0x0c3555, emissiveIntensity: 0.4 }));
+      globe.position.set(0, 4.3, -0.75); globe.castShadow = true; st.add(globe);
+      st.position.set(BX, LV[0] + 1.1, BZ); scene.add(st);
+      // un rayon doré au sol au pied de la statue (les mains de Midas)
+      hdeco(BOX, GOLD, BX, LV[0] + 0.035, BZ, 2.6, 0.06, 0.5);
+      // éclairage de la statue depuis le bassin
+      const stL = new THREE.PointLight(0xffd76e, 7, 16); stL.position.set(BX, LV[0] + 4.5, BZ); scene.add(stL);
+    }
 
-    // ---- ANCIEN PARVIS : statue dorée de Midas sur le chemin de l'entrée
-    const sx = BX, sz = BZ + 20;
-    hdeco(BOX, 0x39404c, sx, p.h, sz, 3.2, 0.5, 3.2);
-    hdeco(BOX, 0x2c313c, sx, p.h + 0.5, sz, 2.4, 0.6, 2.4);
-    hdeco(BOX, 0xffc400, sx, p.h + 1.1, sz, 0.9, 1.7, 0.5);
-    hdeco(BOX, 0xffc400, sx, p.h + 2.8, sz, 0.6, 0.6, 0.6);
-    hdeco(BOX, 0x3fa9ff, sx, p.h + 3.7, sz, 1.1, 1.1, 1.1);
-    propBox(sx, p.h, sz, 1.4, 1.4, 1.1); // socle : solide
-    // chemin pavé du portique à la statue
+    // ---- INTÉRIEUR : accueil du RDC + aménagement des étages autour de l'atrium
+    // accueil (banque d'accueil) entre la porte et l'atrium, côté est du hall
+    hdeco(BOX, 0x2c313c, BX + 4.6, LV[0] + 0.5, BZ + 6.6, 3.2, 1.0, 0.9);
+    hdeco(BOX, GOLD, BX + 4.6, LV[0] + 0.99, BZ + 6.6, 3.3, 0.08, 1.0);
+    propBox(BX + 4.6, LV[0], BZ + 6.6, 1.6, 0.45, 1.0);
+    hdeco(BOX, 0x1a1a22, BX + 4.6, LV[0] + 1.35, BZ + 7.15, 1.4, 0.8, 0.08);
+    hdeco(BOX, 0x3fa9ff, BX + 4.6, LV[0] + 1.35, BZ + 7.1, 1.3, 0.7, 0.04);
+    // 1er étage : BUREAU DE MIDAS (aile nord, face à l'atrium)
+    hdeco(BOX, 0x2c313c, BX - 1.4, LV[1] + 0.4, BZ - 6.5, 3.2, 0.8, 1.3);
+    hdeco(BOX, GOLD, BX - 1.4, LV[1] + 0.79, BZ - 6.5, 3.3, 0.07, 1.4);
+    propBox(BX - 1.4, LV[1], BZ - 6.5, 1.6, 0.65, 0.8);
+    hdeco(BOX, 0x1a1a22, BX - 1.4, LV[1] + 1.15, BZ - 7.2, 2.0, 1.1, 0.08); // écran mural
+    hdeco(BOX, 0x3fa9ff, BX - 1.4, LV[1] + 1.15, BZ - 7.14, 1.9, 1.0, 0.04);
+    hdeco(CYL_GEO, 0x2c313c, BX - 3.4, LV[1] + 0.3, BZ - 6.5, 0.7, 0.6, 0.7); // fauteuil de Midas
+    // 1er étage : SALLE DE RÉUNION (aile sud)
+    hdeco(BOX, 0x39404c, BX + 1.4, LV[1] + 0.36, BZ + 6.4, 3.4, 0.12, 1.5); // plateau
+    hdeco(BOX, 0x2c313c, BX + 1.4, LV[1] + 0.15, BZ + 6.4, 3.0, 0.3, 0.3);   // pied central
+    propBox(BX + 1.4, LV[1], BZ + 6.4, 1.7, 0.75, 0.6);
+    for (const s of [-1, 1]) hdeco(BOX, 0x22262f, BX + 1.4 + s * 1.1, LV[1] + 0.3, BZ + 5.3, 0.55, 0.6, 0.55); // chaises
+    // 2e étage : postes d'agents (bureaux + écrans) dans les quatre coins
+    for (const [wx, wz] of [[-6, -6.5], [6, -6.5], [-6, 6.5], [6, 6.5]]) {
+      hdeco(BOX, 0x39404c, BX + wx, LV[2] + 0.4, BZ + wz, 1.8, 0.08, 0.9);
+      hdeco(BOX, 0x2c313c, BX + wx, LV[2] + 0.2, BZ + wz, 1.6, 0.4, 0.7);
+      propBox(BX + wx, LV[2], BZ + wz, 0.9, 0.45, 0.8);
+      hdeco(BOX, 0x1a1a22, BX + wx, LV[2] + 0.75, BZ + wz - 0.5, 1.3, 0.7, 0.06);
+      hdeco(BOX, 0x3fa9ff, BX + wx, LV[2] + 0.75, BZ + wz - 0.46, 1.2, 0.6, 0.03);
+    }
+    // 3e étage : salon des agents (canapés + table basse + plantes)
+    for (const s of [-1, 1]) {
+      hdeco(BOX, 0x4a3826, BX, LV[3] + 0.35, BZ + s * 6.2, 4.4, 0.7, 1.1); // canapé
+      propBox(BX, LV[3], BZ + s * 6.2, 2.2, 0.55, 0.7);
+      hdeco(CYL_GEO, 0x2d5a35, BX + s * 8, LV[3] + 0.45, BZ + s * 6.2, 1.0, 0.9, 1.0); // plante
+      propBox(BX + s * 8, LV[3], BZ + s * 6.2, 0.5, 0.5, 0.9);
+    }
+    hdeco(BOX, 0x2c313c, BX, LV[3] + 0.3, BZ + 4.9, 1.6, 0.1, 0.9); // table basse
+    propBox(BX, LV[3], BZ + 4.9, 0.8, 0.45, 0.35);
+
+    // ---- PARVIS : chemin pavé du portique vers l'entrée + braseros + haies
+    // (la statue de Midas est désormais DANS le hall, au centre de l'atrium)
     hdeco(BOX, 0xd8d4c8, BX, p.h + 0.03, BZ + 17.5, 6, 0.06, 9);
     // braseros de part et d'autre du chemin (façon Agence de Fortnite)
     for (const bxp of [-8, 8]) {
@@ -3555,14 +3681,19 @@ function buildSpyPOI(p) {
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 2.6), new THREE.MeshBasicMaterial({ map: signTex }));
     sign.position.set(BX, 12.9, BZ + 10.56); scene.add(sign);
 
-    // ---- éclairage : hall, sous-sol et façade
+    // ---- éclairage : hall, étages de l'atrium, sous-sol et façade
     const hallL = new THREE.PointLight(0xffe0b8, 10, 26); hallL.position.set(BX, 12, BZ); scene.add(hallL);
+    for (let f = 1; f <= 3; f++) {
+      const lE = new THREE.PointLight(0xffe0b8, 5, 15); lE.position.set(BX + 7, LV[f] + 3, BZ); scene.add(lE);
+      const lW = new THREE.PointLight(0xffe0b8, 5, 15); lW.position.set(BX - 7, LV[f] + 3, BZ); scene.add(lW);
+    }
     const baseL = new THREE.PointLight(0x7fd0ff, 9, 24); baseL.position.set(BX, 7.2, BZ); scene.add(baseL);
     const stairL = new THREE.PointLight(0xffc98a, 5, 14); stairL.position.set(BX - 10.5, 6.5, BZ - 4); scene.add(stairL);
     const faceL = new THREE.PointLight(0xffe0b8, 8, 20); faceL.position.set(BX, 14, BZ + 16); scene.add(faceL);
 
     // ---- COFFRE-FORT AU SOUS-SOL (la cave est à 3,65 au-dessus de la dalle)
-    buildVault(p, { x: BX, y: 3.65, z: BZ });
+    // derrière la PORTE CIRCULAIRE DORÉE (style Agence de Fortnite)
+    buildVault(p, { x: BX, y: 3.65, z: BZ }, 'agency');
     // cabine téléphonique de l'agent près du parvis
     buildPhoneBooth(p, { x: BX + 16, y: p.h, z: BZ + 6 });
 
@@ -5642,7 +5773,7 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto,
+window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
 // storm est aussi exposé directement : window.__game.storm
 

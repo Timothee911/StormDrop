@@ -467,6 +467,109 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let door = false;
     if (down && vA) door = walkTo(-6, 4, 50) && walkTo(-1, 4.5, 40);
     R.push(["porte du coffre-fort atteignable à pied", door && p.alive && p.grounded && !!vA && Math.hypot(p.pos.x - vA.x, p.pos.z - (vA.z + 5)) < 3, 'x=' + p.pos.x.toFixed(1) + ' z=' + p.pos.z.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
+    // ATRIUM CENTRAL : chute depuis le ciel au centre du bâtiment — on doit
+    // traverser les trous des dalles (toit, 3e, 2e, 1er) et atterrir sur le
+    // bassin/piedestal de la statue (≈10), PAS sur le toit (26,65)
+    p.pos.set(0, 40, 0); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = false;
+    let landed = 0;
+    for (let i = 0; i < 120; i++) { window.advanceTime(150); if (p.grounded) { landed = p.pos.y; break; } }
+    R.push(['atrium ouvert du toit au RDC', p.grounded && landed > 9 && landed < 11.5, 'y=' + p.pos.y.toFixed(1)]);
+    // STATUE de Midas dans l'atrium (groupe or posé sur le socle, ~10,15)
+    const statue = G.scene.children.find((o) => o.isGroup && Math.abs(o.position.x) < 0.6 && Math.abs(o.position.z) < 0.6 && Math.abs(o.position.y - 10.15) < 0.6 && o.children.length >= 8);
+    R.push(['statue de Midas dans l\u2019atrium', !!statue, statue ? 'y=' + statue.position.y.toFixed(1) + ' enfants=' + statue.children.length : 'absente']);
+    // PORTE CIRCULAIRE dorée du coffre-fort (style Agence de Fortnite)
+    R.push(['porte circulaire du coffre-fort', !!vA && !!vA.door && (vA.door.maxX - vA.door.minX) > 2.5, vA && vA.door ? 'largeur=' + (vA.door.maxX - vA.door.minX).toFixed(1) : 'absente']);
+    // ESCALIER OUVERT RDC -> 1er : volée est qui monte vers le sud
+    p.pos.set(10.5, 9.2, -6.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(300);
+    let up1 = false;
+    G.setCam(Math.PI, -0.15); // regarde plein sud
+    G.keys.KeyW = true;
+    for (let i = 0; i < 120; i++) {
+      window.advanceTime(150);
+      if (!p.alive) break;
+      // arrivée complète : pieds au niveau du 1er (13,45) ET sortie sur la dalle
+      if (p.pos.y > 13.3 && p.pos.z > 5.5) { up1 = true; break; }
+    }
+    G.keys.KeyW = false;
+    R.push(['escalier RDC -> 1er praticable (arrivée complète sur la dalle)', up1 && p.alive && p.grounded && Math.abs(p.pos.y - 13.45) < 0.2, 'y=' + p.pos.y.toFixed(1) + ' z=' + p.pos.z.toFixed(1)]);
+    // ESCALIERS OUVERTS 1er -> 2e -> 3e -> toit (volées alternées ouest/est)
+    const LV = [9.05, 13.45, 17.85, 22.25, 26.65];
+    const flights = [
+      ['1er->2e', -10.5, 0, 6.5],      // volée ouest, monte vers le nord
+      ['2e->3e', 10.5, Math.PI, -6.5], // volée est, monte vers le sud
+      ['3e->toit', -10.5, 0, 6.5],     // volée ouest, monte vers le nord
+    ];
+    let fIdx = 1;
+    for (const [fName, cx, yaw, z0] of flights) {
+      const y0 = LV[fIdx], y1 = LV[fIdx + 1];
+      p.pos.set(cx, y0 + 0.15, z0); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+      window.advanceTime(300);
+      G.setCam(yaw, -0.15); G.keys.KeyW = true;
+      let ok = false;
+      // arrivée complète : pieds au niveau exact du palier (y1) ET sortie sur
+      // la dalle au-delà du palier (z > 5.5 au sud, z < -5.5 au nord)
+      for (let i = 0; i < 120; i++) {
+        window.advanceTime(150);
+        if (!p.alive) break;
+        const exitZ = yaw === Math.PI ? p.pos.z > 5.5 : p.pos.z < -5.5;
+        if (p.pos.y > y1 - 0.15 && p.grounded && exitZ) { ok = true; break; }
+      }
+      G.keys.KeyW = false;
+      R.push(['escalier ' + fName + ' praticable (arrivée complète sur la dalle)', ok && p.alive && Math.abs(p.pos.y - y1) < 0.2, 'y=' + p.pos.y.toFixed(1)]);
+      fIdx++;
+    }
+    // DESCENTE 2e -> 1er (volée ouest, on descend vers le sud)
+    p.pos.set(-10.5, 17.85 + 0.15, -6.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(300);
+    G.setCam(Math.PI, -0.15); G.keys.KeyW = true;
+    let downL = false;
+    // arrivée complète : pieds au niveau exact de la dalle du 1er (13,45)
+    for (let i = 0; i < 120; i++) {
+      window.advanceTime(150);
+      if (!p.alive) break;
+      if (p.pos.y < 13.65 && p.grounded) { downL = true; break; }
+    }
+    G.keys.KeyW = false;
+    R.push(['descente 2e -> 1er praticable (arrivée à 13,45)', downL && p.alive && Math.abs(p.pos.y - 13.45) < 0.25, 'y=' + p.pos.y.toFixed(1)]);
+    // COFFRE-FORT : verrouillé sans carte, ouvrable avec carte, entrée à pied
+    const vB = G.vaults.find((v) => v.poi.key === 'agency');
+    const vaultR = { lockedOk: false, openOk: false, meshGone: false, inOk: false, chest: false };
+    if (vB) {
+      p.keycards = {};
+      G.openVault(vB);
+      vaultR.lockedOk = !vB.open;
+      p.keycards = { agency: 1 };
+      G.openVault(vB);
+      vaultR.openOk = vB.open === true && vB.door && vB.door.alive === false;
+      vaultR.meshGone = !G.scene.children.includes(vB.door.mesh);
+      p.pos.set(0, 3.8, 5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+      window.advanceTime(300);
+      G.setCam(0, -0.1); G.keys.KeyW = true;
+      for (let i = 0; i < 60; i++) {
+        window.advanceTime(150);
+        if (!p.alive) break;
+        if (p.pos.z < -1 && p.pos.y < 4.5) { vaultR.inOk = true; break; }
+      }
+      G.keys.KeyW = false;
+      // coffres du coffre-fort présents (objets coffre : c.x/c.z, pas c.pos).
+      // NB : une fois la porte ouverte, les IA (bots/coéquipiers) peuvent piller les coffres —
+      // on vérifie la PRÉSENCE (vaultRef), pas l'état « non ouvert ».
+      vaultR.chest = !!G.chests.find((c) => c.vaultRef === vB && Math.hypot(c.x, c.z + 1.2) < 3 && c.y < 5);
+    }
+    R.push(['coffre-fort verrouillé sans carte', vaultR.lockedOk, '']);
+    R.push(['coffre-fort ouvert avec carte (porte retirée)', vaultR.openOk && vaultR.meshGone, '']);
+    R.push(["entrée du coffre-fort à pied + coffres présents", vaultR.inOk && vaultR.chest, 'y=' + p.pos.y.toFixed(1) + ' z=' + p.pos.z.toFixed(1)]);
+    // ASSERTION ANTI-NaN : tous les colliders box vivants ont des bornes finies
+    const nanBad = [];
+    const t = (c, src) => {
+      if (!c || !c.alive || c.type !== 'box') return;
+      if (['minX', 'maxX', 'minY', 'maxY', 'minZ', 'maxZ'].some((k) => !Number.isFinite(c[k]))) nanBad.push(src);
+    };
+    for (const c of G.structs) t(c, 'struct');
+    for (const c of G.propCols) t(c, 'prop');
+    for (const v of G.vaults) t(v.door, 'vaultDoor');
+    R.push(['aucun collider avec bornes non finies (régression NaN)', nanBad.length === 0, nanBad.join(',')]);
     return R.map((r) => (r[1] ? 'PASS' : 'FAIL') + '|' + r[0] + '|' + (r[2] ?? '')).join('\n');
   });
   // --- 9. Victoire possible avec des hommes de main vivants ---
