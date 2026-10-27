@@ -286,22 +286,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   check('grappin tiré et propulse le joueur', grap.fired === true && grap.vel > 8, JSON.stringify(grap));
 
-  // --- 9bis. La Grotte : POI reculé vers la côte EST, plateau à 13,4, rampe à
-  // ciel ouvert qui descend jusqu'au niveau de l'eau, caverne dont le sol est
-  // SOUS la mer, reliée à la mer ouverte par la porte d'eau (calanque) ---
+  // --- 9bis. La Grotte : caverne SÈCHE entièrement cachée sous la montagne —
+  // plus d'ouverture côté île (tranchée et cheminée condamnées), la seule
+  // entrée est la bouche du crâne au fond d'un canyon sec qui descend vers la
+  // mer. Le sol de la caverne est surélevé (3,4) : on n'y nage jamais ---
   const cave = await frame.evaluate(() => {
     const G = window.__game, p = G.player, R = [];
     G.storm.dmg = 0; // test ciblé : la tempête ne doit pas tuer le joueur ici
-    // le plateau du POI est à ~13,4 (la montagne d'origine est remplacée)
+    // le plateau du POI reste à ~13,4 (la montagne recouvre la caverne)
     const t1 = G.terrainH(220, 150), t2 = G.terrainH(240, 150);
     R.push(['plateau du POI à 13,4', t1 > 12 && t1 < 14.5 && t2 > 12 && t2 < 14.5, 'y=' + t1.toFixed(1) + '/' + t2.toFixed(1)]);
-    // la grande rampe est creusée dans le plateau (mi-parcours)
-    R.push(['rampe creusée dans le plateau', G.terrainH(220, 165) < 8.5 && G.terrainH(220, 165) > 5, 'y=' + G.terrainH(220, 165).toFixed(1)]);
-    // le trou béant traverse la voûte : le terrain s'effondre jusqu'au sol de la caverne
-    R.push(['trou béant dans la voûte', G.terrainH(269, 165) < 0, 'y=' + G.terrainH(269, 165).toFixed(1)]);
+    // PLUS DE TRANCHÉE côté île : l'axe de l'ancienne rampe (z 165) est du
+    // terrain plein jusqu'au pied de la montagne (l'ancienne bouche ouest)
+    R.push(['ancienne rampe rebouchée (pas de tranchée)', G.terrainH(220, 165) > 11 && G.terrainH(250, 165) > 8, 'y=' + G.terrainH(220, 165).toFixed(1) + '/' + G.terrainH(250, 165).toFixed(1)]);
+    // le creusement sous la caverne reste SOUS le sol de la salle (caché)
+    R.push(['creusement caché sous le sol de la caverne', G.terrainH(269, 165) < 3.2, 'y=' + G.terrainH(269, 165).toFixed(1)]);
     // ANTI « SOL INVISIBLE » : le maillage rendu doit épouser terrainH (±2 m).
-    // Si le rendu et la physique divergent, le joueur marche dans le vide ou
-    // traverse le sol — c'est exactement le bug signalé sur la grotte.
     {
       const tm = G.terrainMesh, TH = G.THREE, rc = new TH.Raycaster(), dn = new TH.Vector3(0, -1, 0);
       let worst = 0, n = 0;
@@ -314,88 +314,77 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     // les hommes de main ne perturbent pas la marche de test (Brutus reste en place)
     for (const c of G.chars) if (c.alive && c.hench && !c.boss) G.damage(c, 999999, null, false, 'test');
-    // DESCENTE RÉELLE : on marche depuis le haut de la rampe (plateau ouest)
-    // jusqu'à la caverne en passant par la bouche du crâne — le joueur doit
-    // rester au sol tout du long et atteindre la caverne (sol sous l'eau)
-    let walkOK = true, airFrames = 0;
-    p.pos.set(199, 13.5, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    G.setCam(-Math.PI / 2, -0.25); // regarde plein est (bas de la rampe)
+    // LA GROTTE EST CACHÉE : la voûte est PLEINE — un raycast vers le ciel
+    // depuis 5 points du sol de la caverne doit toucher la roche (jamais le
+    // ciel), et depuis le sommet de l'ancienne cheminée le raycast vers le bas
+    // s'arrête sur la montagne (plus de trou béant)
+    {
+      const TH = G.THREE, rc = new TH.Raycaster(), up = new TH.Vector3(0, 1, 0);
+      let covered = 0;
+      for (const [sx, sz] of [[269,165],[263,160],[274,170],[262,168],[275,158]]) {
+        rc.set(new TH.Vector3(sx, 3.9, sz), up); rc.far = 14;
+        if (rc.intersectObject(G.grottoRockMesh, false)[0]) covered++;
+      }
+      R.push(['voûte pleine au-dessus de la caverne (5 rayons)', covered === 5, covered + '/5 couverts']);
+      rc.set(new TH.Vector3(269, 32, 165), new TH.Vector3(0, -1, 0)); rc.far = 40;
+      const top = rc.intersectObject(G.grottoRockMesh, false)[0];
+      R.push(['ancienne cheminée fermée (montagne pleine)', !!top && top.distance < 15, top ? 'roche à ' + top.distance.toFixed(1) + ' m sous le sommet' : 'aucune roche']);
+    }
+    // ENTRÉE UNIQUE À PIED SEC : depuis le canyon (bas de la pente, côté mer)
+    // on remonte jusqu'à la caverne EN PASSANT DANS LA BOUCHE DU CRÂNE — le
+    // joueur reste au sol, ne nage jamais et arrive sur le sol sec (3,4)
+    p.pos.set(294, 1.0, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    G.setCam(Math.PI / 2, 0); // regarde plein ouest (vers la bouche du crâne)
+    let swamEntree = false;
+    G.keys.KeyW = true;
+    for (let i = 0; i < 110; i++) {
+      window.advanceTime(150);
+      if (p.inWater) swamEntree = true;
+      if (!p.alive) break;
+      if (p.pos.x < 278) break;
+    }
+    G.keys.KeyW = false;
+    R.push(['canyon -> bouche du crâne -> caverne à pied', p.alive && p.grounded && p.pos.x < 279 && p.pos.y > 3 && !swamEntree, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded + ' swam=' + swamEntree]);
+    // la caverne est SÈCHE : plus de patauge ni de natation, sol plat à 3,4
+    R.push(['caverne sèche (sol 3,4, au-dessus de la mer)', p.inWater === false && Math.abs(p.pos.y - 3.4) < 0.6, 'y=' + p.pos.y.toFixed(1) + ' inWater=' + p.inWater]);
+    // RETOUR : la sortie se remonte dans l'autre sens jusqu'au canyon
+    G.setCam(-Math.PI / 2, 0); // regarde plein est (vers la mer)
+    let swamRetour = false;
+    G.keys.KeyW = true;
+    for (let i = 0; i < 110; i++) {
+      window.advanceTime(150);
+      if (p.inWater) swamRetour = true;
+      if (!p.alive) break;
+      if (p.pos.x > 291) break;
+    }
+    G.keys.KeyW = false;
+    R.push(['retour caverne -> canyon à pied', p.alive && p.grounded && p.pos.x > 290 && !swamRetour, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded + ' swam=' + swamRetour]);
+    // CÔTÉ ÎLE CONDAMNÉ : depuis le plateau ouest on marche vers l'est — le
+    // joueur bute sur la montagne pleine, il ne peut plus descendre dans la
+    // caverne (l'ancienne bouche ouest est murée)
+    p.pos.set(210, 13.5, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    G.setCam(-Math.PI / 2, -0.1); // regarde plein est (montagne)
     G.keys.KeyW = true;
     for (let i = 0; i < 90; i++) {
       window.advanceTime(150);
-      if (!p.alive) { walkOK = false; R.push(['joueur vivant dans la rampe', false, 'mort au pas ' + i]); break; }
-      if (p.mode === 'ground' && !p.grounded) airFrames++;
-      if (p.pos.x > 258) break;
-    }
-    G.keys.KeyW = false;
-    R.push(['descente de la rampe au sol', walkOK && airFrames < 3 && p.pos.x > 255 && p.pos.y < 1, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + ' air=' + airFrames]);
-    // le joueur patauge dans la caverne : le sol est SOUS le niveau de la mer
-    R.push(["caverne au niveau de l'eau (patauge)", p.inWater === true && Math.abs(p.pos.y + 0.6) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' inWater=' + p.inWater]);
-    // REMONTÉE RÉELLE : la rampe se monte dans l'autre sens jusqu'au plateau
-    G.setCam(Math.PI / 2, -0.1); // regarde plein ouest (haut de la rampe)
-    G.keys.KeyW = true;
-    // ~57 m de montée à ~4 m/s ≈ 14,5 s : 120 pas de 150 ms laissent la marge.
-    // Arrêt à x<199 : sur la pente, y(199) ≈ 12,6 > 12,5 (l'assertion exige
-    // d'être HAUT sur la rampe, près du plateau 13,4).
-    for (let i = 0; i < 120; i++) {
-      window.advanceTime(150);
-      if (!p.alive || p.pos.x < 199) break;
-    }
-    G.keys.KeyW = false;
-    R.push(['remontée de la rampe', p.alive && p.pos.y > 12.5 && p.pos.x < 208, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
-    // PORTE D'EAU : depuis la calanque (mer ouverte), on entre dans la
-    // caverne À PIED en passant DANS LA BOUCHE DU CRÂNE (façade face à
-    // l'océan) — la grotte est connectée à l'eau
-    p.pos.set(302, -0.4, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    window.advanceTime(200);
-    R.push(["calanque reliée à la mer (patauge)", p.inWater === true && p.alive, 'y=' + p.pos.y.toFixed(1) + ' inWater=' + p.inWater]);
-    G.setCam(Math.PI / 2, 0); // regarde plein ouest (vers la porte d'eau)
-    G.keys.KeyW = true;
-    let gated = false;
-    // ~26 m à ~1,9 m/s dans l'eau ≈ 14 s : 140 pas de 150 ms laissent
-    // la marge nécessaire sans affaiblir le test (le joueur doit rester au sol)
-    for (let i = 0; i < 140; i++) {
-      window.advanceTime(150);
       if (!p.alive) break;
-      if (p.pos.x < 276) { gated = true; break; }
     }
     G.keys.KeyW = false;
-    R.push(["porte d'eau : mer -> caverne à pied", gated && p.alive && p.grounded, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
-    // le joueur est bien SOUS la voûte dans la caverne : un raycast vertical
-    // depuis le sol de la caverne doit toucher la roche de la voûte (la caverne
-    // est bien couverte, « en dessous de la carte »)
-    p.pos.set(281, -0.4, 155); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    window.advanceTime(300);
-    {
-      const TH = G.THREE, rc = new TH.Raycaster();
-      rc.set(new TH.Vector3(281, 0.5, 155), new TH.Vector3(0, 1, 0));
-      rc.far = 14;
-      const hit = rc.intersectObject(G.grottoRockMesh, false)[0];
-      R.push(['caverne couverte par la voûte', p.grounded && !!hit && hit.distance < 13, 'roche à ' + (hit ? hit.distance.toFixed(1) : 'aucune') + ' m au-dessus']);
-    }
-    // sol de la caverne : dalle plate à -0,6 (SOUS le niveau de la mer)
-    p.pos.set(269, -0.3, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    window.advanceTime(300);
-    R.push(['sol de la caverne à -0,6 (sous la mer)', p.grounded && Math.abs(p.pos.y + 0.6) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
-    // saut dans le trou béant : chute de 14 m, dégâts de chute négligeables
-    p.pos.set(269, 13.2, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
-    window.advanceTime(1500);
-    R.push(['chute dans le trou béant survivable', p.alive && p.hp > 70 && p.grounded && Math.abs(p.pos.y + 0.6) < 1, 'hp=' + p.hp.toFixed(0) + ' y=' + p.pos.y.toFixed(1)]);
-    // Brutus garde la caverne depuis son QG (surélevé au-dessus du sol)
+    // la montagne pleine arrête le joueur AVANT la paroi ouest de la caverne
+    // (x ~256) : aucune descente possible vers la salle
+    R.push(['côté île condamné (montagne infranchissable)', p.alive && p.pos.x < 256.5 && p.pos.y > 2, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
+    // Brutus garde la caverne depuis le sol sec de la caverne (3,4)
     const brutus = G.henchmen.find((c) => c.alive && c.boss && c.name === 'Brutus');
-    R.push(['Brutus garde la caverne', !!brutus && brutus.pos.y < 6, brutus ? 'y=' + brutus.pos.y.toFixed(1) : 'absent']);
-    // coffre-fort de la Grotte au sol de la caverne (sous l'eau)
+    R.push(['Brutus garde la caverne', !!brutus && brutus.pos.y > 2.5 && brutus.pos.y < 6, brutus ? 'y=' + brutus.pos.y.toFixed(1) : 'absent']);
+    // coffre-fort de la Grotte posé sur le sol sec de la caverne (3,4)
     const vg = G.vaults.find((v) => v.poi.key === 'grotto');
-    R.push(['coffre-fort dans la caverne', !!vg && vg.y < 6, vg ? 'y=' + vg.y.toFixed(1) : 'absent']);
+    R.push(['coffre-fort dans la caverne sèche', !!vg && vg.y > 2.5 && vg.y < 4.5, vg ? 'y=' + vg.y.toFixed(1) : 'absent']);
     // crâne de l'Ombre : façade PLEINE sur la face EST de la montagne, FACE À
-    // L'OCÉAN — la bouche du crâne EST la porte d'eau (paroi x 281,8-284,2,
-    // tempes z 149.5-180.5, dôme jusqu'à y ~20 : émerge devant la montagne,
-    // côté mer)
+    // L'OCÉAN — la bouche du crâne est l'entrée sèche (paroi x 281,8-284,2,
+    // tempes z 149.5-180.5, dôme jusqu'à y ~24, socle au sol sec 3,4 : le crâne
+    // max.x <= 286) — il émerge devant la montagne et regarde l'océan
     const sb = G.grottoSkullBounds;
-    // (le dôme du front du crâne dépasse volontiers ~0,4 m devant la façade :
-    // max.x <= 286) — le crâne reste bien ancré dans le contrefort EST et son
-    // centre est côté mer (x > 275) : il regarde l'océan
-    R.push(["crâne de l'Ombre face à l'océan (falaise est)", !!sb && sb.min.x >= 281 && sb.max.x <= 286 && (sb.min.x + sb.max.x) / 2 > 275 && sb.min.y <= -0.05 && sb.max.y >= 17 && sb.min.z <= 155 && sb.max.z >= 175, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
+    R.push(["crâne de l'Ombre face à l'océan (falaise est)", !!sb && sb.min.x >= 281 && sb.max.x <= 286 && (sb.min.x + sb.max.x) / 2 > 275 && sb.min.y >= 3 && sb.max.y >= 21 && sb.min.z <= 155 && sb.max.z >= 175, sb ? 'x ' + sb.min.x.toFixed(1) + '-' + sb.max.x.toFixed(1) + ' y ' + sb.min.y.toFixed(1) + '-' + sb.max.y.toFixed(1) + ' z ' + sb.min.z.toFixed(1) + '-' + sb.max.z.toFixed(1) : 'absent']);
     // les maisons (bunkers) sont bien posées : terrain plat sous toute l'emprise
     {
       let flat = true, worst = 0;
@@ -406,19 +395,43 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       }
       R.push(['bunkers posés sur terrain plat', flat, 'écart max ' + worst.toFixed(2) + ' m']);
     }
-    // passerelle métallique du mur sud : praticable
-    p.pos.set(267.3, 3.4, 176.7); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    // passerelle métallique du mur sud : praticable (tablier à 7,2)
+    p.pos.set(267.3, 7.4, 176.7); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(200);
-    R.push(['passerelle du mur sud praticable', p.grounded && Math.abs(p.pos.y - 3.2) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    R.push(['passerelle du mur sud praticable', p.grounded && Math.abs(p.pos.y - 7.2) < 0.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
     // escalier d'accès de la passerelle : marches praticables
-    // posé sur la 3e marche (sommet à 1,85) : le joueur doit y rester debout
-    p.pos.set(259.8, 1.9, 171.8); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    // posé sur la 3e marche (sommet à 4,5) : le joueur doit y rester debout
+    p.pos.set(259.8, 4.7, 170.4); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(200);
-    R.push(['escalier de la passerelle praticable', p.grounded && p.pos.y > 0.5 && p.pos.y < 2.5, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
-    // conteneur de fret : solide (cover au bord de l'eau)
-    p.pos.set(274, 2.4, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    R.push(['escalier de la passerelle praticable', p.grounded && p.pos.y > 4.0 && p.pos.y < 5.0, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // ACCÈS RÉEL au tablier : depuis le sol de la caverne on monte l'escalier
+    // jusqu'au tablier (7,2), puis on redescend — l'escalier est bien connecté
+    p.pos.set(259.8, 3.6, 166.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    G.setCam(Math.PI, -0.1); // regarde plein sud (vers l'escalier)
+    let swamDeck = false;
+    G.keys.KeyW = true;
+    for (let i = 0; i < 80; i++) {
+      window.advanceTime(150);
+      if (p.inWater) swamDeck = true;
+      if (!p.alive) break;
+      if (p.pos.z > 176.2 && p.pos.y > 6.9) break;
+    }
+    G.keys.KeyW = false;
+    R.push(['escalier : sol -> tablier de la passerelle praticable', p.alive && p.grounded && p.pos.z > 175.5 && p.pos.y > 6.9 && !swamDeck, 'x=' + p.pos.x.toFixed(1) + ' z=' + p.pos.z.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    G.setCam(0, -0.1); // regarde plein nord (descente)
+    G.keys.KeyW = true;
+    for (let i = 0; i < 80; i++) {
+      window.advanceTime(150);
+      if (p.inWater) swamDeck = true;
+      if (!p.alive) break;
+      if (p.pos.z < 168) break;
+    }
+    G.keys.KeyW = false;
+    R.push(['redescente du tablier -> sol de la caverne', p.alive && p.grounded && p.pos.z < 169 && Math.abs(p.pos.y - 3.4) < 0.6 && !swamDeck, 'z=' + p.pos.z.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    // conteneur de fret : solide (cover au sol sec de la caverne, sommet 6,2)
+    p.pos.set(274, 6.4, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(200);
-    R.push(['conteneur de fret solide', p.grounded && Math.abs(p.pos.y - 2.2) < 0.6, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
+    R.push(['conteneur de fret solide', p.grounded && Math.abs(p.pos.y - 6.2) < 0.6, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
     // pas de dégâts de zone en début de partie : on doit rester en vie
     // (Brutus riposte — seule la survie est vérifiée)
     window.advanceTime(1500);
