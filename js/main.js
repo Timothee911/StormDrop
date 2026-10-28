@@ -3397,21 +3397,28 @@ function finishGrotto() {
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
     // ---- L'AGENCE : refonte totale extérieur + intérieur pour coller à
-    // l'Agence de Fortnite (Chapitre 2 Saison 2) : grand bâtiment blanc-crème
-    // à bandes dorées, hautes fenêtres sombres à encadrements or, portique
-    // d'entrée à colonnes sur la façade sud avec fronton et enseigne « THE
-    // AGENCY », braseros, drapeaux GHOST bleus aux quatre coins, hélipad à
-    // l'ouest. INTÉRIEUR : ATRIUM CENTRAL OUVERT DU RDC AU TOIT (le « hollow
-    // centre ») avec la statue dorée de Midas tenant un globe dans son
-    // bassin, bureau de Midas et salles de réunion aux étages desservis par
-    // des ESCALIERS OUVERTS (RDC -> 1er -> 2e -> 3e -> toit). Le COFFRE-FORT
-    // est au SOUS-SOL (AGENCY_BASE, voir world.js) derrière la PORTE
-    // CIRCULAIRE DORÉE, avec son terminal de scan d'empreinte.
+    // l'Agence de Fortnite (Chapitre 2 Saison 2) : grand bâtiment gris-beige
+    // clair à bandes dorées, HAUTES FENÊTRES ÉTROITES en niches avec pilastres,
+    // portique d'entrée à colonnes sur la façade sud avec fronton et enseigne
+    // « THE AGENCY », braseros, tourniquets de sécurité, drapeaux GHOST bleus
+    // aux quatre coins du toit, AILES EST/OUEST en retrait (silhouette en
+    // gradins comme le vrai bâtiment), statue ATLAS chromée devant l'entrée,
+    // HÉLIPAD SURÉLEVÉ au nord-est sur pilotis d'acier avec escalier. INTÉRIEUR
+    // : ATRIUM CENTRAL OUVERT DU RDC AU TOIT (le « hollow centre ») en MARBRE
+    // NOIR brillant avec colonnes sombres massives et bannières GHOST bleues,
+    // statue dorée de Midas agenouillé tenant le globe au-dessus de sa tête
+    // dans son bassin lumineux, bureau de Midas (chaise dorée) et salles de
+    // réunion aux étages desservis par des ESCALIERS OUVERTS (RDC -> 1er ->
+    // 2e -> 3e -> toit). Le COFFRE-FORT est au SOUS-SOL (AGENCY_BASE, voir
+    // world.js) derrière la PORTE CIRCULAIRE DORÉE, avec son terminal de scan
+    // d'empreinte.
     const A = AGENCY_BASE;
     const BX = p.x, BZ = p.z;                 // centre du bâtiment
     const LV = [9.05, 13.45, 17.85, 22.25, 26.65]; // base de chaque niveau + toit (LV[4], pour le palier de la dernière volée)
-    const FH = 4.4, WALL = 0xf4f1ea, GOLD = 0xffc400, GLASS = 0x27313f;
+    const FH = 4.4, WALL = 0xdcd6c8, GOLD = 0xffc400, GLASS = 0x27313f;
     const stoneM = () => matC(WALL, { roughness: 0.8 });
+    // marbre noir brillant (sols du hall et des étages, comme la vraie Agence)
+    const floorM = () => matC(0x15171c, { roughness: 0.18, metalness: 0.35 });
     const oStone = { hp: 420, mat: 'stone' };
     curHouse = { boxes: [], deco: [], mesh: null };
 
@@ -3434,9 +3441,10 @@ function buildSpyPOI(p) {
       makeStructBox(BX - 10.5, top - 0.9, BZ + 1.0 - (i + 0.5) * 0.85, 4, 0.9, 0.85, stairM, { indestructible: true });
     }
     // dalle du rez-de-chaussée (8,6 -> 9,05) avec le trou de l'escalier
-    makeStructBox(BX + 2.25, 8.6, BZ, 21.5, 0.45, 20, stoneM(), oStone);            // partie est
-    makeStructBox(BX - 10.75, 8.6, BZ + 5.5, 4.5, 0.45, 9, stoneM(), oStone);      // bande ouest nord du trou
-    makeStructBox(BX - 10.75, 8.6, BZ - 9.75, 4.5, 0.45, 0.5, stoneM(), oStone);   // bande ouest sud du trou
+    // (marbre noir brillant, comme le hall de la vraie Agence)
+    makeStructBox(BX + 2.25, 8.6, BZ, 21.5, 0.45, 20, floorM(), oStone);            // partie est
+    makeStructBox(BX - 10.75, 8.6, BZ + 5.5, 4.5, 0.45, 9, floorM(), oStone);      // bande ouest nord du trou
+    makeStructBox(BX - 10.75, 8.6, BZ - 9.75, 4.5, 0.45, 0.5, floorM(), oStone);   // bande ouest sud du trou
     // seuil de la porte : la dalle du RDC s'étend sous l'épaisseur du mur sud
     makeStructBox(BX, 8.6, BZ + 10.375, 6, 0.45, 0.75, stoneM(), { indestructible: true });
     // soubassement (plinth) : terrasse de pierre autour du bâtiment qui masque
@@ -3475,7 +3483,7 @@ function buildSpyPOI(p) {
     const ringSlab = (y, stairSide) => {
       // bords affleurants aux murs (faces internes x ±12,75, z ±9,75) : aucune
       // fente sombre ne reste entre dalle et mur
-      const mk = (cx, cz, w, d) => makeStructBox(BX + cx, y, BZ + cz, w, 0.45, d, stoneM(), oStone);
+      const mk = (cx, cz, w, d) => makeStructBox(BX + cx, y, BZ + cz, w, 0.45, d, floorM(), oStone);
       if (stairSide === 'E') {
         mk(-8.625, 0, 8.25, 19.5);      // bande ouest (x -12,75..-4,5)
         mk(6.25, 0, 3.5, 19.5);        // bande est intérieure (x 4,5..8)
@@ -3510,31 +3518,51 @@ function buildSpyPOI(p) {
     flight(-10.5, 1, 1);  // 1er -> 2e, à l'ouest, monte vers le nord
     flight(10.5, -1, 2);  // 2e -> 3e, à l'est, monte vers le sud
     flight(-10.5, 1, 3);  // 3e -> toit, à l'ouest, monte vers le nord
-    // garde-corps dorés du bord de l'atrium (niveaux 1-3)
+    // garde-corps du bord de l'atrium (niveaux 1-3) : barres sombres + liseré or
     for (let f = 1; f <= 3; f++) {
-      hdeco(BOX, GOLD, BX, LV[f] + 0.5, BZ - 4.18, 8.36, 0.14, 0.1);
-      hdeco(BOX, GOLD, BX, LV[f] + 0.5, BZ + 4.18, 8.36, 0.14, 0.1);
-      hdeco(BOX, GOLD, BX - 4.18, LV[f] + 0.5, BZ, 0.1, 0.14, 8.36);
-      hdeco(BOX, GOLD, BX + 4.18, LV[f] + 0.5, BZ, 0.1, 0.14, 8.36);
+      for (const [hx, hz, w, d] of [[0, -4.18, 8.36, 0.1], [0, 4.18, 8.36, 0.1], [-4.18, 0, 0.1, 8.36], [4.18, 0, 0.1, 8.36]]) {
+        hdeco(BOX, 0x1a1c22, BX + hx, LV[f] + 0.5, BZ + hz, w, 0.1, d);
+        hdeco(BOX, GOLD, BX + hx, LV[f] + 0.62, BZ + hz, w === 0.1 ? 0.14 : w, 0.06, d === 0.1 ? 0.14 : d);
+      }
     }
 
-    // ---- FENÊTRES : verre sombre + encadrement et sill or, sur les 4 faces
+    // ---- FENÊTRES ÉTROITES (comme la vraie Agence) : hautes niches verticales
+    // en verre sombre à encadrement or, séparées par des PILASTRES de pierre,
+    // avec meneaux dorés (3 panneaux par fenêtre)
     const win = (wall, u, f) => {
       const ly = LV[f], w = wall === 'N' || wall === 'S';
       // niveau 0 : murs de 1,0 m -> fenêtres affleurant la face extérieure
       const off = f === 0 ? (w ? 10.47 : 13.47) : (w ? 10.28 : 13.28);
       const px = w ? BX + u : (wall === 'E' ? BX + off : BX - off);
       const pz = w ? (wall === 'S' ? BZ + off : BZ - off) : BZ + u;
-      const sx = w ? 2.2 : 0.12, sz = w ? 0.12 : 2.2;
+      const sx = w ? 1.15 : 0.14, sz = w ? 0.14 : 1.15;
       const col = (wall === 'N' ? cN : wall === 'S' ? cS : wall === 'E' ? cE : cW)[f];
       const par = Array.isArray(col) ? null : col;
-      hdeco(BOX, GLASS, px, ly + 2.2, pz, sx, 2.4, sz, 0, 0, 0, par);
-      hdeco(BOX, GOLD, px, ly + 0.95, pz, w ? 2.6 : 0.16, 0.16, w ? 0.16 : 2.6, 0, 0, 0, par);
+      hdeco(BOX, GLASS, px, ly + 1.95, pz, sx, 3.1, sz, 0, 0, 0, par);
+      hdeco(BOX, GOLD, px, ly + 0.5, pz, w ? 1.45 : 0.18, 0.14, w ? 0.18 : 1.45, 0, 0, 0, par); // allège or
+      // meneaux : la fenêtre est divisée en 3 panneaux verticaux
+      for (const m of [-0.38, 0.38]) {
+        hdeco(BOX, WALL, px + (w ? m : 0), ly + 1.95, pz + (w ? 0 : m), w ? 0.06 : 0.14, 3.1, w ? 0.14 : 0.06, 0, 0, 0, par);
+      }
     };
     for (let f = 0; f < 4; f++) {
-      const usNS = [-9.5, -4.75, 0, 4.75, 9.5], usEW = [-5, 0, 5];
+      const usNS = [-10.5, -7, -3.5, 0, 3.5, 7, 10.5], usEW = [-6, -2, 2, 6];
       for (const u of usNS) { if (f === 0 && Math.abs(u) < 3) continue; win('N', u, f); win('S', u, f); }
       for (const u of usEW) win('E', u, f), win('W', u, f);
+    }
+    // pilastres de pierre entre les fenêtres (rythme de façade de l'Agence)
+    for (let f = 0; f < 4; f++) {
+      const ly = LV[f];
+      for (const u of [-8.75, -5.25, -1.75, 1.75, 5.25, 8.75]) {
+        const off = f === 0 ? 10.44 : 10.25;
+        hdeco(BOX, WALL, BX + u, ly + FH / 2, BZ - off, 0.55, FH, 0.14);
+        hdeco(BOX, WALL, BX + u, ly + FH / 2, BZ + off, 0.55, FH, 0.14);
+      }
+      for (const u of [-4, 0, 4]) {
+        const off = f === 0 ? 13.44 : 13.25;
+        hdeco(BOX, WALL, BX + off, ly + FH / 2, BZ + u, 0.14, FH, 0.55);
+        hdeco(BOX, WALL, BX - off, ly + FH / 2, BZ + u, 0.14, FH, 0.55);
+      }
     }
     // bandes dorées entre les niveaux + corniche du toit
     for (const y of [13.45, 17.85, 22.25, 26.65]) {
@@ -3548,21 +3576,77 @@ function buildSpyPOI(p) {
     makeStructBox(BX, 26.65, BZ + 10, 26, 0.8, 0.5, stoneM(), oStone);
     makeStructBox(BX + 13, 26.65, BZ, 0.5, 0.8, 20, stoneM(), oStone);
     makeStructBox(BX - 13, 26.65, BZ, 0.5, 0.8, 20, stoneM(), oStone);
-    // garde-corps doré du bord du trou d'atrium, sur le toit
-    hdeco(BOX, GOLD, BX, 27.15, BZ - 4.18, 8.36, 0.14, 0.1);
-    hdeco(BOX, GOLD, BX, 27.15, BZ + 4.18, 8.36, 0.14, 0.1);
-    hdeco(BOX, GOLD, BX - 4.18, 27.15, BZ, 0.1, 0.14, 8.36);
-    hdeco(BOX, GOLD, BX + 4.18, 27.15, BZ, 0.1, 0.14, 8.36);
+    // garde-corps du bord du trou d'atrium, sur le toit : barres sombres à liseré or
+    for (const [hx, hz, w, d] of [[0, -4.18, 8.36, 0.1], [0, 4.18, 8.36, 0.1], [-4.18, 0, 0.1, 8.36], [4.18, 0, 0.1, 8.36]]) {
+      hdeco(BOX, 0x1a1c22, BX + hx, 27.0, BZ + hz, w, 0.8, d);
+      hdeco(BOX, GOLD, BX + hx, 27.42, BZ + hz, w === 0.1 ? 0.14 : w, 0.08, d === 0.1 ? 0.14 : d);
+    }
+
+    // ---- COLONNES SOMBRES MASSIVES (comme la vraie Agence) : cylindres gris
+    // anthracite qui montent de niveau en niveau autour de l'atrium, encadrant
+    // le corridor central et la statue — 4 par niveau (RDC et étages 1-3)
+    for (let f = 0; f < 4; f++) {
+      for (const [cx, cz] of [[-5.5, -3], [5.5, -3], [-5.5, 3], [5.5, 3]]) {
+        hdeco(CYL_GEO, 0x3a4048, BX + cx, LV[f] + FH / 2, BZ + cz, 0.8, FH, 0.8);
+        propBox(BX + cx, LV[f], BZ + cz, 0.42, 0.42, FH); // colonne : solide
+        hdeco(BOX, WALL, BX + cx, LV[f] + 0.08, BZ + cz, 1.15, 0.16, 1.15); // base
+        hdeco(BOX, WALL, BX + cx, LV[f] + FH - 0.08, BZ + cz, 1.15, 0.16, 1.15); // chapiteau
+      }
+    }
+
+    // ---- LAMBRIS SOMBRE BAS (wainscot) le long des murs intérieurs de
+    // chaque niveau (deux tons comme la vraie Agence : soubassement anthracite
+    // + murs clairs) ; au RDC, la façade sud laisse la porte libre
+    for (let f = 0; f < 4; f++) {
+      const ly = LV[f];
+      hdeco(BOX, 0x3a3f47, BX, ly + 0.65, BZ - 9.78, 25.4, 1.3, 0.07); // mur nord
+      hdeco(BOX, 0x3a3f47, BX + 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur est
+      hdeco(BOX, 0x3a3f47, BX - 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur ouest
+      if (f === 0) { // segments de part et d'autre de la porte (x -3..3)
+        hdeco(BOX, 0x3a3f47, BX - 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
+        hdeco(BOX, 0x3a3f47, BX + 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
+      } else hdeco(BOX, 0x3a3f47, BX, ly + 0.65, BZ + 9.78, 25.4, 1.3, 0.07); // mur sud
+    }
+
+    // ---- BANNIÈRES GHOST BLEUES suspendues dans l'atrium (niveaux 1-3,
+    // comme les étendards bleus de la vraie Agence)
+    {
+      const bTex = canvasTex((g, s) => {
+        g.fillStyle = '#1f3a8a'; g.fillRect(0, 0, s, s);
+        g.strokeStyle = '#ffc400'; g.lineWidth = Math.floor(s * 0.035);
+        g.strokeRect(s * 0.07, s * 0.05, s * 0.86, s * 0.9);
+        // emblème GHOST : spectre arrondi avec deux yeux
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.arc(s / 2, s * 0.42, s * 0.2, Math.PI, 0);
+        g.lineTo(s * 0.7, s * 0.62); g.lineTo(s * 0.62, s * 0.56);
+        g.lineTo(s * 0.54, s * 0.62); g.lineTo(s * 0.46, s * 0.56);
+        g.lineTo(s * 0.38, s * 0.62); g.lineTo(s * 0.3, s * 0.62);
+        g.closePath(); g.fill();
+        g.fillStyle = '#1f3a8a';
+        g.beginPath(); g.arc(s * 0.44, s * 0.4, s * 0.035, 0, 7); g.arc(s * 0.56, s * 0.4, s * 0.035, 0, 7); g.fill();
+      }, 128);
+      const bMat = new THREE.MeshBasicMaterial({ map: bTex, side: THREE.DoubleSide });
+      const banner = (x, y, z, ry) => {
+        const b = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 3.3), bMat);
+        b.position.set(x, y, z); b.rotation.y = ry; scene.add(b);
+      };
+      for (let f = 1; f <= 3; f++) {
+        const y = LV[f] + 2.4;
+        banner(BX, y, BZ - 4.6, 0); banner(BX, y, BZ + 4.6, Math.PI);
+        banner(BX - 4.6, y, BZ, Math.PI / 2); banner(BX + 4.6, y, BZ, -Math.PI / 2);
+      }
+    }
 
     // ---- PORTIQUE D'ENTRÉE (façade sud) : 4 colonnes cannelées + fronton
     for (const cx of [-7.5, -2.5, 2.5, 7.5]) {
-      hdeco(CYL_GEO, 0xf4f1ea, BX + cx, p.h + 2.25, BZ + 13.5, 1.0, 4.5, 1.0);
+      hdeco(CYL_GEO, WALL, BX + cx, p.h + 2.25, BZ + 13.5, 1.0, 4.5, 1.0);
       hdeco(BOX, GOLD, BX + cx, p.h + 4.5, BZ + 13.5, 1.6, 0.5, 1.6);   // chapiteau
       hdeco(BOX, 0x3a404c, BX + cx, p.h + 0.25, BZ + 13.5, 1.6, 0.5, 1.6); // base
       propBox(BX + cx, p.h, BZ + 13.5, 0.8, 0.8, 4.6); // colonne : solide
     }
     makeStructBox(BX, 13.45, BZ + 12.5, 18, 0.45, 5, stoneM(), oStone); // dalle du portique
-    hdeco(PRISM_GEO, 0xf4f1ea, BX, 13.9, BZ + 12.5, 18, 1.8, 5);       // fronton
+    hdeco(PRISM_GEO, WALL, BX, 13.9, BZ + 12.5, 18, 1.8, 5);       // fronton
     hdeco(BOX, GOLD, BX, 13.95, BZ + 15.05, 18.4, 0.22, 0.3);           // rive dorée du fronton
     // emblème GHOST doré au centre du fronton
     hdeco(CYL_GEO, GOLD, BX, 15.1, BZ + 12.5, 1.5, 0.25, 1.5, Math.PI / 2, 0, 0);
@@ -3576,41 +3660,54 @@ function buildSpyPOI(p) {
       hdeco(BOX, 0xffffff, BX + fx + 1.1, 29.9, BZ + fz + 0.05, 0.7, 0.7, 0.02);
     }
 
-    // ---- ATRIUM CENTRAL : statue dorée de Midas tenant un globe, dressée
-    // dans son bassin au centre du hall — l'atrium est ouvert du RDC au toit
-    // (le « hollow centre » de l'Agence), la statue dépasse du 1er étage.
+    // ---- ATRIUM CENTRAL : statue dorée de Midas agenouillé (pose « Atlas » de
+    // la vraie Agence : les deux bras tendus portent le globe au-dessus de la
+    // tête), dressée dans son bassin rectangulaire lumineux au centre du hall
+    // — l'atrium est ouvert du RDC au toit (le « hollow centre » de l'Agence),
+    // la statue dépasse du 1er étage.
     {
-      // bassin de pierre + eau (le socle de la statue au milieu)
-      hdeco(CYL_GEO, 0x39404c, BX, LV[0] + 0.35, BZ, 6.4, 0.7, 6.4);
-      hdeco(CYL_GEO, 0x3fa9ff, BX, LV[0] + 0.68, BZ, 6.1, 0.1, 6.1); // eau : affleure au-dessus de la pierre (9,78 > 9,75)
-      propDisc(BX, LV[0], BZ, 3.2, 0.8); // bassin : solide (bord haut de 0,8 : infranchissable)
+      // bassin rectangulaire en pierre + eau lumineuse (le socle au milieu)
+      hdeco(BOX, 0x39404c, BX, LV[0] + 0.35, BZ, 6.2, 0.7, 5.2);
+      hdeco(BOX, 0x3fa9ff, BX, LV[0] + 0.71, BZ, 5.7, 0.08, 4.7); // eau : affleure au-dessus de la pierre (9,78 > 9,75)
+      propBox(BX, LV[0], BZ, 3.1, 2.6, 0.8); // bassin : solide (bord haut de 0,8 : infranchissable)
       // anneau doré au sol autour du bassin (emblème du hall)
-      hdeco(CYL_GEO, GOLD, BX, LV[0] + 0.03, BZ, 8.6, 0.06, 8.6);
-      // socle (posé sur le bassin : visible de 9,75 à 10,15)
-      hdeco(BOX, 0x2c313c, BX, LV[0] + 0.95, BZ, 2.2, 0.6, 2.2);
-      propBox(BX, LV[0] + 0.7, BZ, 1.1, 1.1, 0.4); // socle : solide (9,75-10,15)
-      // statue (groupe scène, or métallique) : Midas portant le globe sur le
-      // dos — origine du groupe = dessus du socle (10,15)
+      hdeco(BOX, GOLD, BX, LV[0] + 0.03, BZ, 9.2, 0.06, 8.2);
+      // socle blanc à degrés (posé sur le bassin : visible de 9,75 à 10,15)
+      hdeco(BOX, 0xe8e6df, BX, LV[0] + 0.88, BZ, 2.5, 0.25, 2.0);
+      hdeco(BOX, 0xe8e6df, BX, LV[0] + 1.13, BZ, 1.9, 0.25, 1.5);
+      propBox(BX, LV[0] + 0.7, BZ, 0.95, 0.75, 0.45); // socle : solide (9,75-10,2)
+      // statue (groupe scène, or métallique) : Midas agenouillé portant le
+      // globe au-dessus de lui — origine du groupe = dessus du socle (10,15)
       const st = new THREE.Group();
       const gM = matC(0xffc400, { metalness: 0.85, roughness: 0.2 });
       const dM = matC(0x2c313c, { metalness: 0.5 });
-      addBox(st, 0.45, 1.75, 0.45, -0.28, 0.875, 0, gM); // jambe gauche
-      addBox(st, 0.45, 1.75, 0.45, 0.28, 0.875, 0, gM);  // jambe droite
-      addBox(st, 1.3, 1.7, 0.7, 0, 2.6, 0, gM);         // torse
-      const aL = addBox(st, 0.35, 1.5, 0.35, -0.72, 3.35, -0.3, gM); aL.rotation.x = -0.45; // bras gauche vers le globe
-      const aR = addBox(st, 0.35, 1.5, 0.35, 0.72, 3.35, -0.3, gM); aR.rotation.x = -0.45; // bras droit
-      addBox(st, 0.55, 0.6, 0.55, 0, 3.75, 0.05, dM);  // tête (costume sombre)
-      addBox(st, 0.7, 0.12, 0.7, 0, 4.12, 0.05, gM);   // chapeau haut de forme
+      addBox(st, 0.45, 0.9, 0.75, -0.42, 0.45, 0.15, gM);  // jambe agenouillée
+      addBox(st, 0.45, 0.75, 0.45, 0.28, 0.375, -0.5, gM); // jambe avant pliée
+      addBox(st, 1.3, 1.7, 0.7, 0, 1.75, -0.1, gM);        // torse dressé
+      const aL = addBox(st, 0.35, 1.6, 0.35, -0.5, 3.1, -0.1, gM); aL.rotation.x = 0.35; // bras gauche vers le globe
+      const aR = addBox(st, 0.35, 1.6, 0.35, 0.5, 3.1, -0.1, gM); aR.rotation.x = 0.35;  // bras droit
+      addBox(st, 0.55, 0.6, 0.55, 0, 2.9, 0.05, dM);      // tête (costume sombre)
+      addBox(st, 0.8, 0.16, 0.8, 0, 3.3, 0.05, gM);       // col du chapeau
+      addBox(st, 1.1, 0.12, 1.1, 0, 3.38, 0.05, gM);      // bord du chapeau
       const globe = new THREE.Mesh(new THREE.SphereGeometry(0.85, 20, 14), matC(0x3fa9ff, { metalness: 0.3, roughness: 0.25, emissive: 0x0c3555, emissiveIntensity: 0.4 }));
-      globe.position.set(0, 4.3, -0.75); globe.castShadow = true; st.add(globe);
+      globe.position.set(0, 4.6, 0); globe.castShadow = true; st.add(globe);
       st.position.set(BX, LV[0] + 1.1, BZ); scene.add(st);
       // un rayon doré au sol au pied de la statue (les mains de Midas)
       hdeco(BOX, GOLD, BX, LV[0] + 0.035, BZ, 2.6, 0.06, 0.5);
-      // éclairage de la statue depuis le bassin
+      // éclairage de la statue depuis le bassin + projecteurs sous-marins cyan
       const stL = new THREE.PointLight(0xffd76e, 7, 16); stL.position.set(BX, LV[0] + 4.5, BZ); scene.add(stL);
+      const uw1 = new THREE.PointLight(0x3fd0ff, 2.5, 7); uw1.position.set(BX - 2, LV[0] + 0.5, BZ - 1.4); scene.add(uw1);
+      const uw2 = new THREE.PointLight(0x3fd0ff, 2.5, 7); uw2.position.set(BX + 2, LV[0] + 0.5, BZ + 1.4); scene.add(uw2);
     }
 
     // ---- INTÉRIEUR : accueil du RDC + aménagement des étages autour de l'atrium
+    // tourniquets de sécurité blancs de part et d'autre de la porte (comme
+    // l'entrée de la vraie Agence) avec bandeau LED vert
+    for (const tx of [-2.6, 2.6]) {
+      hdeco(BOX, 0xe8e6df, BX + tx, LV[0] + 0.55, BZ + 8.3, 0.9, 1.1, 0.55);
+      hdeco(BOX, 0x2bd94a, BX + tx, LV[0] + 1.05, BZ + 8.3, 0.7, 0.08, 0.05);
+      propBox(BX + tx, LV[0], BZ + 8.3, 0.45, 0.28, 1.1);
+    }
     // accueil (banque d'accueil) entre la porte et l'atrium, côté est du hall
     hdeco(BOX, 0x2c313c, BX + 4.6, LV[0] + 0.5, BZ + 6.6, 3.2, 1.0, 0.9);
     hdeco(BOX, GOLD, BX + 4.6, LV[0] + 0.99, BZ + 6.6, 3.3, 0.08, 1.0);
@@ -3624,11 +3721,37 @@ function buildSpyPOI(p) {
     hdeco(BOX, 0x1a1a22, BX - 1.4, LV[1] + 1.15, BZ - 7.2, 2.0, 1.1, 0.08); // écran mural
     hdeco(BOX, 0x3fa9ff, BX - 1.4, LV[1] + 1.15, BZ - 7.14, 1.9, 1.0, 0.04);
     hdeco(CYL_GEO, 0x2c313c, BX - 3.4, LV[1] + 0.3, BZ - 6.5, 0.7, 0.6, 0.7); // fauteuil de Midas
-    // 1er étage : SALLE DE RÉUNION (aile sud)
+    // 1er étage : SALLE DE RÉUNION (aile sud) — avec la CHAISE DORÉE de Midas
+    // à la tête de la table, un coffre doré sur la table et deux lampes
+    // suspendues en globes blancs (comme la salle de briefing de la vraie Agence)
     hdeco(BOX, 0x39404c, BX + 1.4, LV[1] + 0.36, BZ + 6.4, 3.4, 0.12, 1.5); // plateau
     hdeco(BOX, 0x2c313c, BX + 1.4, LV[1] + 0.15, BZ + 6.4, 3.0, 0.3, 0.3);   // pied central
     propBox(BX + 1.4, LV[1], BZ + 6.4, 1.7, 0.75, 0.6);
     for (const s of [-1, 1]) hdeco(BOX, 0x22262f, BX + 1.4 + s * 1.1, LV[1] + 0.3, BZ + 5.3, 0.55, 0.6, 0.55); // chaises
+    hdeco(BOX, GOLD, BX + 1.4, LV[1] + 1.0, BZ + 6.4, 0.7, 0.5, 0.45);      // coffre doré sur la table
+    { const chL = new THREE.PointLight(0xffd76e, 2.5, 6); chL.position.set(BX + 1.4, LV[1] + 1.4, BZ + 6.4); scene.add(chL); }
+    // chaise dorée de Midas à la tête sud de la table (l'icône de l'Agence)
+    hdeco(CYL_GEO, GOLD, BX + 1.4, LV[1] + 0.3, BZ + 8.2, 0.55, 0.6, 0.55);
+    hdeco(BOX, GOLD, BX + 1.4, LV[1] + 1.1, BZ + 8.55, 0.9, 1.0, 0.16);
+    hdeco(BOX, GOLD, BX + 1.4, LV[1] + 0.62, BZ + 8.2, 0.8, 0.08, 0.6);
+    propBox(BX + 1.4, LV[1], BZ + 8.2, 0.45, 0.4, 1.2);
+    // lampes suspendues : globes blancs au bout de tiges noires
+    for (const gx of [-0.6, 3.4]) {
+      hdeco(BOX, 0x1a1a22, BX + gx, LV[1] + 3.0, BZ + 6.4, 0.05, 1.4, 0.05);
+      const gl = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), matC(0xf4f2ea, { emissive: 0xfff4d6, emissiveIntensity: 0.7 }));
+      gl.position.set(BX + gx, LV[1] + 2.2, BZ + 6.4); scene.add(gl);
+      const gll = new THREE.PointLight(0xfff0c8, 3, 8); gll.position.set(BX + gx, LV[1] + 2.2, BZ + 6.4); scene.add(gll);
+    }
+    // bancs blancs et jardinières le long des balcons des niveaux 1-3
+    for (let f = 1; f <= 3; f++) {
+      for (const s of [-1, 1]) {
+        hdeco(BOX, 0xe8e6df, BX + s * 7.5, LV[f] + 0.28, BZ + 8.6, 2.4, 0.55, 0.6); // banc blanc
+        propBox(BX + s * 7.5, LV[f], BZ + 8.6, 1.2, 0.3, 0.5);
+        hdeco(BOX, 0x2c313c, BX + s * 7.5, LV[f] + 0.45, BZ + 7.4, 1.4, 0.9, 1.4); // jardinière
+        hdeco(BOX, 0x2d5a35, BX + s * 7.5, LV[f] + 1.0, BZ + 7.4, 1.2, 0.5, 1.2); // plante
+        propBox(BX + s * 7.5, LV[f], BZ + 7.4, 0.7, 0.7, 0.9);
+      }
+    }
     // 2e étage : postes d'agents (bureaux + écrans) dans les quatre coins
     for (const [wx, wz] of [[-6, -6.5], [6, -6.5], [-6, 6.5], [6, 6.5]]) {
       hdeco(BOX, 0x39404c, BX + wx, LV[2] + 0.4, BZ + wz, 1.8, 0.08, 0.9);
@@ -3667,17 +3790,166 @@ function buildSpyPOI(p) {
       hdeco(BOX, 0x1a1a22, BX + cx2, 12.2, BZ + cz2, 0.5, 0.4, 0.8);
       hdeco(BOX, 0xff1e42, BX + cx2, 12.2, BZ + cz2 + (cz2 > 0 ? 0.42 : -0.42), 0.18, 0.18, 0.18);
     }
+
+    // ---- AILES EST/OUEST (silhouette en gradins comme la vraie Agence) :
+    // ailes basses de 2 niveaux collées aux flancs du bloc central, avec
+    // toits plats sombres, fenêtres étroites et plaques GHOST dorées
+    for (const s of [-1, 1]) {
+      const wx = BX + s * 17; // centre d'aile : x ±17 (de 13 à 21)
+      makeStructBox(BX + s * 21, 9.0, BZ, 1.0, 8.85, 20, stoneM(), oStone);   // mur extérieur (x ±21)
+      makeStructBox(wx, 9.0, BZ - 10, 8, 8.85, 1.0, stoneM(), oStone);   // mur nord
+      makeStructBox(wx, 9.0, BZ + 10, 8, 8.85, 1.0, stoneM(), oStone);   // mur sud
+      // toit plat sombre (gravier) + corniche dorée
+      makeStructBox(wx, 17.4, BZ, 8.5, 0.45, 21, stoneM(), oStone);
+      hdeco(BOX, 0x2a2d33, wx, 17.86, BZ, 8.4, 0.06, 20.9);
+      hdeco(BOX, GOLD, wx, 17.78, BZ + 10.15, 8.6, 0.28, 0.14);
+      hdeco(BOX, GOLD, wx, 17.78, BZ - 10.15, 8.6, 0.28, 0.14);
+      // fenêtres étroites sur les deux niveaux, face extérieure (x ±21,5)
+      for (let f = 0; f < 2; f++) {
+        for (const u of [-6, -2, 2, 6]) {
+          hdeco(BOX, GLASS, BX + s * 21.53, 11.0 + f * 4.4, BZ + u, 0.14, 3.1, 1.15);
+          hdeco(BOX, GOLD, BX + s * 21.53, 9.5 + f * 4.4, BZ + u, 0.18, 0.14, 1.45);
+        }
+      }
+      // plaque GHOST dorée au centre de l'aile
+      hdeco(CYL_GEO, GOLD, BX + s * 21.56, 15.6, BZ, 1.1, 0.22, 1.1, 0, 0, Math.PI / 2);
+      hdeco(BOX, 0x101319, BX + s * 21.6, 15.6, BZ, 0.06, 0.7, 0.7);
+      // dalle du 1er étage dans l'aile (marbre noir, comme les mezzanines)
+      makeStructBox(wx, 13.0, BZ, 7.5, 0.45, 19.5, floorM(), oStone);
+      // fenêtres étroites sur les faces sud et nord de l'aile
+      for (let f = 0; f < 2; f++) {
+        for (const u of [-2.8, 0, 2.8]) {
+          for (const zs of [10.53, -10.53]) {
+            hdeco(BOX, GLASS, wx + u, 11.0 + f * 4.4, BZ + zs, 1.15, 3.1, 0.14);
+            hdeco(BOX, GOLD, wx + u, 9.5 + f * 4.4, BZ + zs, 1.45, 0.14, 0.18);
+          }
+        }
+      }
+      // éclairage intérieur de l'aile
+      const wingL = new THREE.PointLight(0xffe0b8, 4, 14); wingL.position.set(wx, 15.8, BZ); scene.add(wingL);
+    }
+
+    // ---- TOIT DU BLOC CENTRAL : surface gravier sombre + groupes de
+    // climatisation + garde-corps déjà en place ; le gravier est découpé
+    // selon les rectangles de la dalle annulaire pour laisser OUVERTS le
+    // trou de l'atrium (x ±4,5, z ±4) et la sortie de l'escalier ouest
+    for (const [cx, cz, w, d] of [[8.625, 0, 8.25, 19.5], [-6.25, 0, 3.5, 19.5], [-10.375, -7.625, 4.75, 4.25], [-10.375, 7.625, 4.75, 4.25], [0, -6.875, 9, 5.75], [0, 6.875, 9, 5.75]]) {
+      hdeco(BOX, 0x2a2d33, BX + cx, 26.71, BZ + cz, w - 0.3, 0.06, d - 0.3);
+    }
+    for (const [ax, az] of [[8.5, -7], [-8.5, 6], [2, -7.5], [-2, 7.5]]) {
+      hdeco(BOX, 0x4a4f58, BX + ax, 27.15, BZ + az, 1.3, 0.85, 1.05);
+      hdeco(CYL_GEO, 0x39404c, BX + ax, 27.62, BZ + az, 0.42, 0.14, 0.42);
+    }
+
+    // ---- STATUE ATLAS CHROMÉE devant l'entrée (comme la vraie Agence) :
+    // figure agenouillée portant le globe au-dessus d'elle, au bout du
+    // parvis, encadrée de deux arbres taillés et de deux bancs bleus
+    {
+      const st2 = new THREE.Group();
+      const cM = matC(0xc8ccd4, { metalness: 0.9, roughness: 0.15 });
+      const dS = matC(0x3a4048, { metalness: 0.4 });
+      addBox(st2, 0.5, 1.0, 0.8, -0.45, 0.5, 0.2, cM);   // jambe agenouillée
+      addBox(st2, 0.5, 0.8, 0.5, 0.3, 0.4, -0.55, cM);   // jambe avant pliée
+      addBox(st2, 1.4, 1.8, 0.75, 0, 1.85, -0.1, cM);    // torse
+      const bL = addBox(st2, 0.38, 1.7, 0.38, -0.55, 3.3, -0.1, cM); bL.rotation.x = 0.3;
+      const bR = addBox(st2, 0.38, 1.7, 0.38, 0.55, 3.3, -0.1, cM); bR.rotation.x = 0.3;
+      addBox(st2, 0.6, 0.65, 0.6, 0, 3.05, 0.05, dS);    // tête
+      const globe2 = new THREE.Mesh(new THREE.SphereGeometry(0.95, 20, 14), matC(0x3fa9ff, { metalness: 0.4, roughness: 0.2, emissive: 0x0c3555, emissiveIntensity: 0.5 }));
+      globe2.position.set(0, 4.95, 0); globe2.castShadow = true; st2.add(globe2);
+      st2.scale.set(0.65, 0.65, 0.65);
+      st2.position.set(BX, p.h + 0.9, BZ + 23); scene.add(st2);
+      // socle métallique
+      hdeco(BOX, 0x3a4048, BX, p.h + 0.4, BZ + 23, 2.6, 0.8, 2.6);
+      propBox(BX, p.h, BZ + 23, 1.3, 1.3, 0.85);
+      const st2L = new THREE.PointLight(0xbfd8ff, 4, 12); st2L.position.set(BX, p.h + 4.2, BZ + 23); scene.add(st2L);
+      // deux arbres taillés sur touffes d'herbe + deux bancs bleus incurvés
+      for (const tx of [-3.8, 3.8]) {
+        hdeco(CYL_GEO, 0x6b4a2c, BX + tx, p.h + 1.2, BZ + 23, 0.22, 2.4, 0.22);
+        hdeco(CYL_GEO, 0x2d5a35, BX + tx, p.h + 2.7, BZ + 23, 1.3, 1.4, 1.3);
+        hdeco(CYL_GEO, 0x2d5a35, BX + tx, p.h + 3.7, BZ + 23, 0.9, 0.9, 0.9);
+        propBox(BX + tx, p.h, BZ + 23, 0.25, 0.25, 3.9);
+      }
+      for (const bx of [-3.2, 3.2]) {
+        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.3, BZ + 20.8, 1.8, 0.12, 0.6);
+        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.55, BZ + 21.1, 0.5, 0.5, 0.12);
+        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.55, BZ + 20.5, 0.5, 0.5, 0.12);
+        propBox(BX + bx, p.h, BZ + 20.8, 0.9, 0.35, 0.5);
+      }
+    }
     { const H = curHouse; curHouse = null; finishHouse(H); }
 
-    // ---- enseigne « THE AGENCY » au-dessus de la porte (texture canvas)
-    const signTex = canvasTex((g, s) => {
-      g.fillStyle = '#101319'; g.fillRect(0, 0, s, s);
-      g.fillStyle = '#ffc400'; g.font = `bold ${Math.floor(s * 0.24)}px Georgia, serif`;
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('THE AGENCY', s / 2, s * 0.42);
-      g.fillStyle = '#8d929a'; g.font = `bold ${Math.floor(s * 0.1)}px Georgia, serif`;
-      g.fillText('CONFIDENTIAL · EYES ONLY', s / 2, s * 0.72);
-    }, 256);
+    // ---- HÉLIPAD SURÉLEVÉ au nord-est (comme la vraie Agence) : plateforme
+    // octogonale sombre sur pilotis d'acier avec escalier, feux jaunes de
+    // bord, cercle jaune + H, bidons de carburant rouge et blanc
+    {
+      const HX = BX + 24, HZ = BZ - 19, PT = 11.05; // plateforme : dessus à 11,45 (au-delà de l'aile est, approche libre)
+      curHouse = { boxes: [], deco: [], mesh: null };
+      // pilotis d'acier + entretoises
+      for (const [lx, lz] of [[-3.6, -3.6], [3.6, -3.6], [-3.6, 3.6], [3.6, 3.6]]) {
+        makeStructBox(HX + lx, p.h, HZ + lz, 0.5, PT - p.h, 0.5, matC(0x2c313c, { metalness: 0.4, roughness: 0.5 }), { indestructible: true });
+        hdeco(BOX, 0x2c313c, HX + lx, p.h + 1.1, HZ, 0.18, 0.18, 7.2);
+        hdeco(BOX, 0x2c313c, HX, p.h + 1.1, HZ + lz, 7.2, 0.18, 0.18);
+      }
+      // plateforme (dessus à 11,45) + surface gravier
+      makeStructBox(HX, PT, HZ, 9.5, 0.4, 9.5, matC(0x33383f, { metalness: 0.35, roughness: 0.6 }), { indestructible: true });
+      hdeco(BOX, 0x2a2d33, HX, PT + 0.41, HZ, 9.3, 0.04, 9.3);
+      // cercle jaune + H (texture canvas)
+      const hTex = canvasTex((g, s) => {
+        g.fillStyle = '#2a2d33'; g.fillRect(0, 0, s, s);
+        g.strokeStyle = '#ffc400'; g.lineWidth = Math.floor(s * 0.05);
+        g.beginPath(); g.arc(s / 2, s / 2, s * 0.32, 0, 7); g.stroke();
+        g.fillStyle = '#ffc400';
+        g.font = `bold ${Math.floor(s * 0.5)}px Arial`;
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('H', s / 2, s / 2);
+      }, 256);
+      const hDec = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 6.4), new THREE.MeshBasicMaterial({ map: hTex }));
+      hDec.rotation.x = -Math.PI / 2; hDec.position.set(HX, PT + 0.46, HZ); scene.add(hDec);
+      // garde-corps périmétriques (ouverture au milieu de la face sud pour l'escalier)
+      for (const [hx, hz, w, d] of [[0, -4.5, 9.4, 0.1], [-3.15, 4.5, 2.7, 0.1], [3.15, 4.5, 2.7, 0.1], [-4.5, 0, 0.1, 8.2], [4.5, 0, 0.1, 8.2]]) {
+        hdeco(BOX, 0x1a1c22, HX + hx, PT + 0.75, HZ + hz, w, 0.9, d);
+        hdeco(BOX, 0x1a1c22, HX + hx, PT + 0.5, HZ + hz, w, 0.08, d);
+      }
+      // feux de bord jaunes aux quatre coins
+      for (const [ex, ez] of [[-3.9, -3.9], [3.9, -3.9], [-3.9, 3.9], [3.9, 3.9]]) {
+        hdeco(BOX, 0xffc400, HX + ex, PT + 0.5, HZ + ez, 0.22, 0.22, 0.22);
+        const el = new THREE.PointLight(0xffc400, 1.2, 5); el.position.set(HX + ex, PT + 0.8, HZ + ez); scene.add(el);
+      }
+      // bidons de carburant rouge et blanc + cage
+      hdeco(BOX, 0xb03a2e, HX + 3.1, PT + 0.65, HZ + 3.2, 0.7, 0.8, 0.7);
+      hdeco(BOX, 0xe8e6df, HX + 2.3, PT + 0.65, HZ + 3.2, 0.7, 0.8, 0.7);
+      hdeco(BOX, 0x4a4f58, HX + 2.7, PT + 1.15, HZ + 3.2, 1.8, 0.08, 1.0);
+      // ESCALIER D'ACIER : 5 marches qui descendent vers le chemin (au sud)
+      for (let i = 0; i < 5; i++) {
+        const top = PT + 0.4 - 0.45 * (i + 1);
+        makeStructBox(HX, top - 0.45, HZ + 5.4 + i * 0.9, 3.2, 0.45, 0.9, matC(0x2c313c, { metalness: 0.4, roughness: 0.55 }), { indestructible: true });
+      }
+      // rampe de l'escalier
+      for (const rx of [-1.7, 1.7]) {
+        hdeco(BOX, 0x1a1c22, HX + rx, PT + 0.35, HZ + 7.4, 0.08, 0.75, 5.2);
+      }
+      // chemin pavé balisé du parvis nord de l'Agence vers l'escalier
+      hdeco(BOX, 0xd8d4c8, HX, p.h + 0.03, HZ + 10.5, 3.6, 0.06, 5);
+      for (const s of [-1, 1]) {
+        hdeco(BOX, 0xe8e6df, HX + s * 2.1, p.h + 0.45, HZ + 10.5, 0.3, 0.9, 4.6);
+        hdeco(BOX, 0xe8e6df, HX + s * 2.1, p.h + 0.75, HZ + 8.0, 0.3, 0.5, 0.3);
+        hdeco(BOX, 0xe8e6df, HX + s * 2.1, p.h + 0.75, HZ + 12.9, 0.3, 0.5, 0.3);
+      }
+      { const H = curHouse; curHouse = null; finishHouse(H); }
+    }
+
+    // ---- enseigne « THE AGENCY » au-dessus de la porte (texture canvas
+    // large : le plan 7,5 x 2,6 doit garder ses proportions de texte)
+    const signCanvas = document.createElement('canvas');
+    signCanvas.width = 768; signCanvas.height = 266;
+    const sg = signCanvas.getContext('2d');
+    sg.fillStyle = '#101319'; sg.fillRect(0, 0, 768, 266);
+    sg.fillStyle = '#ffc400'; sg.font = 'bold 62px Georgia, serif';
+    sg.textAlign = 'center'; sg.textBaseline = 'middle';
+    sg.fillText('THE AGENCY', 384, 108);
+    sg.fillStyle = '#8d929a'; sg.font = 'bold 26px Georgia, serif';
+    sg.fillText('CONFIDENTIAL · EYES ONLY', 384, 190);
+    const signTex = new THREE.CanvasTexture(signCanvas);
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 2.6), new THREE.MeshBasicMaterial({ map: signTex }));
     sign.position.set(BX, 12.9, BZ + 10.56); scene.add(sign);
 
@@ -3694,15 +3966,8 @@ function buildSpyPOI(p) {
     // ---- COFFRE-FORT AU SOUS-SOL (la cave est à 3,65 au-dessus de la dalle)
     // derrière la PORTE CIRCULAIRE DORÉE (style Agence de Fortnite)
     buildVault(p, { x: BX, y: 3.65, z: BZ }, 'agency');
-    // cabine téléphonique de l'agent près du parvis
-    buildPhoneBooth(p, { x: BX + 16, y: p.h, z: BZ + 6 });
-
-    // ---- hélipad à l'ouest du bâtiment
-    curHouse = { boxes: [], deco: [], mesh: null };
-    hdeco(CYL_GEO, 0x2c313c, BX - 15, p.h + 0.06, BZ + 13, 9, 0.12, 9);
-    hdeco(BOX, 0xffc400, BX - 15, p.h + 0.14, BZ + 13, 3.4, 0.06, 0.8);
-    hdeco(BOX, 0xffc400, BX - 15, p.h + 0.14, BZ + 13, 0.8, 0.06, 3.4);
-    { const H = curHouse; curHouse = null; finishHouse(H); }
+    // cabine téléphonique de l'agent près du parvis (côté est de la terrasse)
+    buildPhoneBooth(p, { x: BX + 11.5, y: p.h, z: BZ + 13 });
 
     // ---- coffres et butin du hall (le reste est dans le coffre-fort)
     spawnChest(BX - 6, LV[0] + 0.05, BZ - 4);

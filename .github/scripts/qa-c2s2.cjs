@@ -554,6 +554,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     G.keys.KeyW = false;
     R.push(['descente 2e -> 1er praticable (arrivée à 13,45)', downL && p.alive && Math.abs(p.pos.y - 13.45) < 0.25, 'y=' + p.pos.y.toFixed(1)]);
+    // NOUVEAUTÉS v44 : statue d'Atlas extérieure, hélipad sur pilotis, ailes E/O
+    const agP = G.POIS.find((q) => q.key === 'agency');
+    const atlas = G.scene.children.find((o) => o.isGroup && Math.abs(o.position.x - agP.x) < 0.6 && Math.abs(o.position.z - (agP.z + 23)) < 0.6 && Math.abs(o.position.y - (agP.h + 0.9)) < 0.6 && o.children.length >= 6);
+    R.push(["statue d'Atlas chromée devant l'entrée", !!atlas, atlas ? 'enfants=' + atlas.children.length : 'absente']);
+    const pad = G.structs.find((c) => c.type === 'box' && c.minY > 11 && c.minY < 11.1 && Math.abs((c.minX + c.maxX) / 2 - (agP.x + 24)) < 0.5 && Math.abs((c.minZ + c.maxZ) / 2 - (agP.z - 19)) < 0.5);
+    R.push(['hélipad sur pilotis au nord-est', !!pad, pad ? 'dessus=' + (+pad.maxY.toFixed(2)) : 'absent']);
+    // hélipad : montée à pied par l'escalier (depuis l'extérieur) puis redescente
+    p.pos.set(agP.x + 24, agP.h + 0.15, agP.z - 3); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    window.advanceTime(300);
+    G.setCam(0, -0.15); G.keys.KeyW = true;
+    let padUp = false;
+    for (let i = 0; i < 200; i++) {
+      window.advanceTime(150);
+      if (!p.alive) break;
+      if (p.pos.y > 11.3 && p.grounded && p.pos.z < agP.z - 14 && p.pos.z > agP.z - 19.5) { padUp = true; break; }
+    }
+    G.keys.KeyW = false;
+    R.push(["hélipad : montée à pied par l'escalier (plateau à 11,45)", padUp && p.alive && p.pos.y > 11.3, 'y=' + p.pos.y.toFixed(1) + ' z=' + p.pos.z.toFixed(1)]);
+    G.setCam(Math.PI, -0.15); G.keys.KeyW = true;
+    let padDown = false;
+    for (let i = 0; i < 200; i++) {
+      window.advanceTime(150);
+      if (!p.alive) break;
+      if (p.pos.y < agP.h + 0.5 && p.grounded) { padDown = true; break; }
+    }
+    G.keys.KeyW = false;
+    R.push(['hélipad : redescente par l\'escalier', padDown && p.alive && padUp, 'y=' + p.pos.y.toFixed(1)]);
+    const wing = (s) => G.structs.find((c) => c.type === 'box' && Math.abs(c.minY - agP.h) < 0.1 && Math.abs((c.minX + c.maxX) / 2 - (agP.x + s * 21)) < 0.15 && Math.abs(c.maxX - c.minX - 1) < 0.05);
+    R.push(['ailes est/ouest en gradins', !!wing(1) && !!wing(-1), 'E=' + (!!wing(1)) + ' O=' + (!!wing(-1))]);
     return R.map((r) => (r[1] ? 'PASS' : 'FAIL') + '|' + r[0] + '|' + (r[2] ?? '')).join('\n');
   });
   // --- 9quater. L'Agence : coffre-fort (verrouillage, ouverture, entrée) + anti-NaN
