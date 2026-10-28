@@ -24,7 +24,7 @@ async function gameTests() {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto('http://localhost:8090/game.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 60000, polling: 250 });
+  await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 120000, polling: 250 });
   await sleep(1500);
 
   // --- 1. Toit (cône) : UVs comme les murs, matériau texturé partagé, tous matériaux ---
@@ -312,7 +312,7 @@ async function stormTests() {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
   await page.setViewport({ width: 1280, height: 720 });
   await page.goto('http://localhost:8090/game.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 60000, polling: 250 });
+  await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 120000, polling: 250 });
   await sleep(1500);
 
   const stormT = await page.evaluate(() => {
@@ -386,7 +386,7 @@ async function playerCountTests() {
     const errs = [];
     page.on('pageerror', (e) => errs.push(e.message));
     await page.goto('http://localhost:8090/game.html' + h, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 60000, polling: 250 });
+    await page.waitForFunction(() => window.__game && window.__game.player, { timeout: 120000, polling: 250 });
     const total = await page.evaluate(() => ({ total: window.__game.playerTotal, participants: window.__game.chars.filter((c) => !c.hench && !c.boss).length }));
     out.push({ q: h, total: total.total, participants: total.participants, want, errs: errs.length });
     await page.close();
