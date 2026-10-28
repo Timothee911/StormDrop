@@ -2562,7 +2562,7 @@ function fire(ch, origin, dir, ads) {
   const it = ch.item; if (!it || it.kind !== 'weapon') return false;
   const W = WEAPONS[it.id];
   if (ch.cool > 0 || ch.reloading > 0) return false;
-  // tirer fait sauter le déguisement d'homme de main
+  // tirer fait sauter le déguisement d'Ombre
   if (ch.isPlayer && ch.disguise) setDisguise(ch, false, true);
   if (W.melee) return melee(ch, origin, dir);
   if (it.mag <= 0) { startReload(ch); return false; }
@@ -2711,7 +2711,7 @@ function kill(t, attacker, wname) {
       showCenter(`${t.name.toUpperCase()} ÉLIMINÉ`, 'Arme mythique + carte d\'accès au coffre-fort', 2.6);
     }
   } else if (t.hench && attacker && attacker.isPlayer) {
-    addXP('Homme de main éliminé', 60);
+    addXP('Ombre éliminée', 60);
   }
   t.slots = [t.slots[0], null, null, null, null, null];
   if (attacker && attacker.isPlayer && t !== attacker && !t.hench) { sfx('elim', 0.7); showCenter(`${t.name} éliminé`, `${alive} joueurs restants`, 1.8); addXP('Élimination', 250); }
@@ -2840,6 +2840,47 @@ function canSee(a, b) {
   const h = castRay(_o, _dir, dist + 1, a);
   return h && h.type === 'char' && h.char === b;
 }
+// =====================================================================
+// ÉVITEMENT DES MURS : plus aucun bot ne doit rester bloqué contre un mur.
+// pathClear() reprend EXACTEMENT les règles horizontales de physics()
+// (CH_R, CH_H, STEP) pour des points situés devant le personnage : un collider
+// n'est un mur que s'il dépasse le pas (maxY > pieds + STEP) tout en restant
+// sous la tête (minY < pieds + CH_H) — marches et rampes ne comptent donc pas.
+// steerWalls() dévie le wish vers la première direction libre (alternance
+// gauche/droite, angles croissants) et GARDE cette déviation tant que la voie
+// directe reste bloquée : le bot longe le mur au lieu d'osciller, et reprend
+// son cap dès que la voie est dégagée.
+// =====================================================================
+const tmpNavCols = [];
+function pathClear(ch, nx, nz) {
+  const cx = ch.pos.x + nx * 1.2, cz = ch.pos.z + nz * 1.2;
+  queryCols(cx, cz, 2.0, tmpNavCols);
+  for (const c of tmpNavCols) {
+    if (c.type !== 'box' || !c.alive || c.passable) continue;
+    if (ch.pos.y + CH_H <= c.minY || ch.pos.y + STEP >= c.maxY) continue; // même test que physics()
+    for (const dist of [0.7, 1.7]) {
+      const px = ch.pos.x + nx * dist, pz = ch.pos.z + nz * dist;
+      const qx = clamp(px, c.minX, c.maxX), qz = clamp(pz, c.minZ, c.maxZ);
+      if ((px - qx) * (px - qx) + (pz - qz) * (pz - qz) < (CH_R + 0.1) * (CH_R + 0.1)) return false;
+    }
+  }
+  return true;
+}
+function steerWalls(ch, wish) {
+  const d = Math.hypot(wish.x, wish.z);
+  if (d < 1e-4) return;
+  const nx = wish.x / d, nz = wish.z / d;
+  if (pathClear(ch, nx, nz)) { ch.avoidX = 0; return; } // voie directe dégagée
+  if (ch.avoidX) { // déviation en cours encore praticable : on la garde (pas d'oscillation)
+    const l = Math.hypot(ch.avoidX, ch.avoidZ);
+    if (l > 1e-4 && pathClear(ch, ch.avoidX / l, ch.avoidZ / l)) { wish.set(ch.avoidX, 0, ch.avoidZ); return; }
+  }
+  for (const a of [0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.2, -2.2, 2.8, -2.8]) {
+    const rx = nx * Math.cos(a) - nz * Math.sin(a), rz = nx * Math.sin(a) + nz * Math.cos(a);
+    if (pathClear(ch, rx, rz)) { ch.avoidX = rx; ch.avoidZ = rz; wish.set(rx, 0, rz); return; }
+  }
+  ch.avoidX = 0; // cerné de toutes parts : le débloquage existant (saut/rampe/nouveau cap) prend le relais
+}
 function botThink(b, dt) {
   b.think -= dt; b.buildCd -= dt; b.react -= dt;
   if (b.think <= 0) {
@@ -2946,15 +2987,37 @@ function botThink(b, dt) {
     b.lastP.copy(b.pos); b.stuckT = 0;
   }
   if (b.inWater) speed *= 0.55;
+  // évitement des murs : appliqué après toutes les décisions de mouvement
+  // (poursuite, strafe, waypoint) pour que le bot longe les obstacles
+  if (wish.lengthSq() > 0.01) steerWalls(b, wish);
   const acc = b.grounded ? 12 : 3;
   b.vel.x = lerp(b.vel.x, wish.x * speed, Math.min(1, acc * dt));
   b.vel.z = lerp(b.vel.z, wish.z * speed, Math.min(1, acc * dt));
 }
 function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
 // =====================================================================
-// Hommes de main & boss (POI espions) : patrouillent leur POI, ignorent
-// les joueurs déguisés, passent à l'attaque si on les touche.
+// Ombres & boss (POI espions) : patrouillent leur POI en suivant une ROUTINE
+// FIXE (toujours les mêmes endroits, dans le même ordre), ignorent les joueurs
+// déguisés, passent à l'attaque si on les touche, puis reprennent leur circuit.
 // =====================================================================
+// Circuit de patrouille FIXE de chaque POI espion : points praticables choisis
+// à la main sur la surface réelle (hall de l'Agence en évitant bassin et
+// escalier, pont du Yacht, plateforme de La Plateforme, caverne de la Grotte,
+// tour du manoir du Requin). Les PNJ y spawnent aussi : jamais dans un mur.
+function spyPatrol(p) {
+  const rel = {
+    agency: [[0, 7.5], [8, 7.5], [10, 0], [8, -7], [0, -7.5], [-6, -7], [-10, 5], [-6, 7.5]],
+    yacht: [[-8, 2], [0, 2.6], [8, 2], [8, -2], [0, -2.6], [-8, -2]],
+    rig: [[-6, 4], [0, 4.6], [6, 4], [6, -4], [0, -4.6], [-6, -4]],
+    grotto: [[-7, 6], [0, 8], [7, 6], [7, -4], [0, -8], [-7, -4]],
+    // Le Requin : tour du manoir en passant devant la terrasse et derrière
+    shark: [[0, 14], [13, 8], [14, -2], [10, -20], [0, -21], [-10, -20], [-14, -2], [-13, 8]],
+  }[p.key];
+  if (!rel) return null;
+  const cx = p.key === 'grotto' ? GROTTO.cavernX : p.x;
+  const cz = p.key === 'grotto' ? GROTTO.cavernZ : p.z;
+  return rel.map(([dx, dz]) => ({ x: cx + dx, z: cz + dz }));
+}
 function alertHenchmen(poi, attacker) {
   if (!attacker || !attacker.alive || attacker.hench) return; // jamais de riposte contre son propre camp
   for (const c of chars) {
@@ -2980,9 +3043,14 @@ function henchThink(h, dt) {
       h.seeing = canSee(h, h.target);
       if (!h.seeing) h.lostT += 0.45; else h.lostT = 0;
     }
-    // patrouille : point aléatoire dans le POI (ou sur le pont/platform pour les structures surélevées)
+    // patrouille : ROUTINE FIXE du POI — quand personne n'est détecté, ombres
+    // et boss rejouent toujours le même circuit (mêmes endroits, même ordre) ;
+    // l'index n'avance qu'en patrouille, le circuit reprend après un combat
     if (!h.target && (!h.wp || Math.hypot(h.wp.x - h.pos.x, h.wp.z - h.pos.z) < 3)) {
-      if (h.wpBox) h.wp = { x: h.wpBox.x + rand(-h.wpBox.hx, h.wpBox.hx), z: h.wpBox.z + rand(-h.wpBox.hz, h.wpBox.hz) };
+      if (h.route && h.route.length) {
+        h.routeIdx = (h.routeIdx + 1) % h.route.length;
+        h.wp = { x: h.route[h.routeIdx].x, z: h.route[h.routeIdx].z };
+      } else if (h.wpBox) h.wp = { x: h.wpBox.x + rand(-h.wpBox.hx, h.wpBox.hx), z: h.wpBox.z + rand(-h.wpBox.hz, h.wpBox.hz) };
       else { const p = h.henchPoi; h.wp = { x: p.x + rand(-p.r * 0.8, p.r * 0.8), z: p.z + rand(-p.r * 0.8, p.r * 0.8) }; }
     }
     if (!h.target && h.heals > 0 && h.shield < 50 && h.mode === 'ground') { h.heals--; h.shield = Math.min(100, h.shield + 50); }
@@ -3022,6 +3090,8 @@ function henchThink(h, dt) {
     if (d > 0.5) { wish.set(dx / d, 0, dz / d); h.yaw = lerpAngle(h.yaw, Math.atan2(-dx, -dz), Math.min(1, dt * 5)); }
   }
   if (h.inWater) speed *= 0.55;
+  // évitement des murs (comme les autres bots) : l'ombre longe les obstacles
+  if (wish.lengthSq() > 0.01) steerWalls(h, wish);
   const acc = h.grounded ? 12 : 3;
   h.vel.x = lerp(h.vel.x, wish.x * speed, Math.min(1, acc * dt));
   h.vel.z = lerp(h.vel.z, wish.z * speed, Math.min(1, acc * dt));
@@ -3295,9 +3365,9 @@ function buildVault(p, at, style) {
     const dGrp = new THREE.Group();
     const goldM = matC(0xffc400, { metalness: 0.4, roughness: 0.4, emissive: 0xd9a400, emissiveIntensity: 0.85 });
     const doorL = new THREE.PointLight(0xffd76e, 12, 14); doorL.position.set(vx, vy + 2.4, vz + 5.2); scene.add(doorL); // éclaire la porte depuis l'avant
-    const rim = new THREE.Mesh(CYL_GEO, matC(0x2c313c, { metalness: 0.5 })); rim.scale.set(4.4, 0.7, 4.4); rim.rotation.x = Math.PI / 2; rim.position.set(0, 1.85, 0); dGrp.add(rim);
+    const rim = new THREE.Mesh(CYL_GEO, matC(0x7d8490, { metalness: 0.5 })); rim.scale.set(4.4, 0.7, 4.4); rim.rotation.x = Math.PI / 2; rim.position.set(0, 1.85, 0); dGrp.add(rim);
     const face = new THREE.Mesh(CYL_GEO, goldM); face.scale.set(3.8, 0.5, 3.8); face.rotation.x = Math.PI / 2; face.position.set(0, 1.85, 0.45); dGrp.add(face);
-    const hub = new THREE.Mesh(CYL_GEO, matC(0x39404c, { metalness: 0.6 })); hub.scale.set(1.1, 0.8, 1.1); hub.rotation.x = Math.PI / 2; hub.position.set(0, 1.85, 0.6); dGrp.add(hub);
+    const hub = new THREE.Mesh(CYL_GEO, matC(0x7d8490, { metalness: 0.6 })); hub.scale.set(1.1, 0.8, 1.1); hub.rotation.x = Math.PI / 2; hub.position.set(0, 1.85, 0.6); dGrp.add(hub);
     for (let k = 0; k < 4; k++) { const sp = new THREE.Mesh(BOX, goldM); sp.scale.set(0.45, 3.3, 0.55); sp.position.set(0, 1.85, 0.6); sp.rotation.z = k * Math.PI / 4; dGrp.add(sp); } // rayons en relief devant la face
     dGrp.position.set(vx, vy, vz + 3.35); dGrp.traverse((m) => { m.castShadow = true; }); scene.add(dGrp);
     door = addCollider({ type: 'box', minX: vx - 1.4, maxX: vx + 1.4, minY: vy, maxY: vy + 3.7, minZ: vz + 3.05, maxZ: vz + 4.4 }); // couvre toute la porte décalée (face + moyeu)
@@ -3308,7 +3378,7 @@ function buildVault(p, at, style) {
   // bandeau lumineux + terminal de scan au-dessus de la porte
   hdeco(BOX, 0xffc400, vx, vy + 3.75, vz + 3.6, 2.4, 0.18, 0.12, 0, 0, 0, null);
   const term = new THREE.Group();
-  addBox(term, 0.5, 0.9, 0.4, 0, 0.45, 0, matC(0x22262f, { metalness: 0.5 }));
+  addBox(term, 0.5, 0.9, 0.4, 0, 0.45, 0, matC(0x6d7480, { metalness: 0.5 }));
   addBox(term, 0.3, 0.2, 0.06, 0, 0.75, 0.21, matC(0x39ff88, { emissive: 0x39ff88, emissiveIntensity: 1.2 })); // écran côté sud : visible en arrivant de la salle
   term.position.set(vx + 2.1, vy + 1.2, vz + 3.9); scene.add(term);
   const c1 = spawnChest(vx - 1.4, vy + 0.05, vz - 1.2); c1.vault = true;
@@ -3405,7 +3475,7 @@ function buildSpyPOI(p) {
     // gradins comme le vrai bâtiment), statue ATLAS chromée devant l'entrée,
     // HÉLIPAD SURÉLEVÉ au nord-est sur pilotis d'acier avec escalier. INTÉRIEUR
     // : ATRIUM CENTRAL OUVERT DU RDC AU TOIT (le « hollow centre ») en MARBRE
-    // NOIR brillant avec colonnes sombres massives et bannières GHOST bleues,
+    // CLAIR brillant avec colonnes gris perle et bannières GHOST bleues,
     // statue dorée de Midas agenouillé tenant le globe au-dessus de sa tête
     // dans son bassin lumineux, bureau de Midas (chaise dorée) et salles de
     // réunion aux étages desservis par des ESCALIERS OUVERTS (RDC -> 1er ->
@@ -3417,8 +3487,8 @@ function buildSpyPOI(p) {
     const LV = [9.05, 13.45, 17.85, 22.25, 26.65]; // base de chaque niveau + toit (LV[4], pour le palier de la dernière volée)
     const FH = 4.4, WALL = 0xdcd6c8, GOLD = 0xffc400, GLASS = 0x27313f;
     const stoneM = () => matC(WALL, { roughness: 0.8 });
-    // marbre noir brillant (sols du hall et des étages, comme la vraie Agence)
-    const floorM = () => matC(0x15171c, { roughness: 0.18, metalness: 0.35 });
+    // marbre clair brillant (sols du hall et des étages — plus aucun noir à l'Agence)
+    const floorM = () => matC(0xd9d4c7, { roughness: 0.2, metalness: 0.05 });
     const oStone = { hp: 420, mat: 'stone' };
     curHouse = { boxes: [], deco: [], mesh: null };
 
@@ -3426,22 +3496,22 @@ function buildSpyPOI(p) {
     // 3,45 (world.js). Murs de cave épais (leur face interne affleure le bord
     // de la fouille, aucune bande de terrain ne dépasse), dalle au sol,
     // escalier de 12 marches qui descend du hall, coffre-fort au centre.
-    const baseM = matC(0x494f5a, { metalness: 0.3, roughness: 0.6 });
+    const baseM = matC(0x6d7480, { metalness: 0.3, roughness: 0.6 });
     makeStructBox(BX, A.floor, BZ - 10, 26, 8.6 - A.floor, 1.0, baseM, { indestructible: true }); // mur nord
     makeStructBox(BX, A.floor, BZ + 10, 26, 8.6 - A.floor, 1.0, baseM, { indestructible: true }); // mur sud
     makeStructBox(BX - 13, A.floor, BZ, 1.0, 8.6 - A.floor, 20, baseM, { indestructible: true }); // mur ouest
     makeStructBox(BX + 13, A.floor, BZ, 1.0, 8.6 - A.floor, 20, baseM, { indestructible: true }); // mur est
     // dalle du sol de la cave (dessus à 3,65 : les marches y arrivent pile)
-    makeStructBox(BX, A.floor, BZ, 25, 0.2, 19, matC(0x39404c, { metalness: 0.2 }), { indestructible: true });
+    makeStructBox(BX, A.floor, BZ, 25, 0.2, 19, matC(0x707780, { metalness: 0.2 }), { indestructible: true });
     // escalier : 12 marches de 0,45 qui descendent vers le nord, à l'ouest du
     // hall (trou dans la dalle du RDC : x -12,5..-8,5, z -9,5..+1)
-    const stairM = matC(0x5a616c, { metalness: 0.35, roughness: 0.55 });
+    const stairM = matC(0x7d8490, { metalness: 0.35, roughness: 0.55 });
     for (let i = 0; i < 12; i++) {
       const top = LV[0] - 0.45 * (i + 1);
       makeStructBox(BX - 10.5, top - 0.9, BZ + 1.0 - (i + 0.5) * 0.85, 4, 0.9, 0.85, stairM, { indestructible: true });
     }
     // dalle du rez-de-chaussée (8,6 -> 9,05) avec le trou de l'escalier
-    // (marbre noir brillant, comme le hall de la vraie Agence)
+    // (marbre clair brillant, comme le hall de l'Agence)
     makeStructBox(BX + 2.25, 8.6, BZ, 21.5, 0.45, 20, floorM(), oStone);            // partie est
     makeStructBox(BX - 10.75, 8.6, BZ + 5.5, 4.5, 0.45, 9, floorM(), oStone);      // bande ouest nord du trou
     makeStructBox(BX - 10.75, 8.6, BZ - 9.75, 4.5, 0.45, 0.5, floorM(), oStone);   // bande ouest sud du trou
@@ -3506,7 +3576,7 @@ function buildSpyPOI(p) {
     // ---- ESCALIERS OUVERTS (façon Agence) : 4 volées alternées est/ouest,
     // 11 marches de 0,4 + palier d'arrivée qui s'aligne sur la dalle
     // supérieure. sgn -1 : monte vers le nord ; +1 : vers le sud.
-    const stairM2 = matC(0x5a616c, { metalness: 0.35, roughness: 0.55 });
+    const stairM2 = matC(0x7d8490, { metalness: 0.35, roughness: 0.55 });
     const flight = (cx, sgn, f) => {
       for (let i = 0; i < 11; i++) {
         const top = LV[f] + 0.4 * (i + 1);
@@ -3518,10 +3588,10 @@ function buildSpyPOI(p) {
     flight(-10.5, 1, 1);  // 1er -> 2e, à l'ouest, monte vers le nord
     flight(10.5, -1, 2);  // 2e -> 3e, à l'est, monte vers le sud
     flight(-10.5, 1, 3);  // 3e -> toit, à l'ouest, monte vers le nord
-    // garde-corps du bord de l'atrium (niveaux 1-3) : barres sombres + liseré or
+    // garde-corps du bord de l'atrium (niveaux 1-3) : barres claires + liseré or
     for (let f = 1; f <= 3; f++) {
       for (const [hx, hz, w, d] of [[0, -4.18, 8.36, 0.1], [0, 4.18, 8.36, 0.1], [-4.18, 0, 0.1, 8.36], [4.18, 0, 0.1, 8.36]]) {
-        hdeco(BOX, 0x1a1c22, BX + hx, LV[f] + 0.5, BZ + hz, w, 0.1, d);
+        hdeco(BOX, 0x9aa0a8, BX + hx, LV[f] + 0.5, BZ + hz, w, 0.1, d);
         hdeco(BOX, GOLD, BX + hx, LV[f] + 0.62, BZ + hz, w === 0.1 ? 0.14 : w, 0.06, d === 0.1 ? 0.14 : d);
       }
     }
@@ -3576,36 +3646,36 @@ function buildSpyPOI(p) {
     makeStructBox(BX, 26.65, BZ + 10, 26, 0.8, 0.5, stoneM(), oStone);
     makeStructBox(BX + 13, 26.65, BZ, 0.5, 0.8, 20, stoneM(), oStone);
     makeStructBox(BX - 13, 26.65, BZ, 0.5, 0.8, 20, stoneM(), oStone);
-    // garde-corps du bord du trou d'atrium, sur le toit : barres sombres à liseré or
+    // garde-corps du bord du trou d'atrium, sur le toit : barres claires à liseré or
     for (const [hx, hz, w, d] of [[0, -4.18, 8.36, 0.1], [0, 4.18, 8.36, 0.1], [-4.18, 0, 0.1, 8.36], [4.18, 0, 0.1, 8.36]]) {
-      hdeco(BOX, 0x1a1c22, BX + hx, 27.0, BZ + hz, w, 0.8, d);
+      hdeco(BOX, 0x9aa0a8, BX + hx, 27.0, BZ + hz, w, 0.8, d);
       hdeco(BOX, GOLD, BX + hx, 27.42, BZ + hz, w === 0.1 ? 0.14 : w, 0.08, d === 0.1 ? 0.14 : d);
     }
 
-    // ---- COLONNES SOMBRES MASSIVES (comme la vraie Agence) : cylindres gris
-    // anthracite qui montent de niveau en niveau autour de l'atrium, encadrant
+    // ---- COLONNES MASSIVES GRIS PERLE (comme la vraie Agence) : cylindres
+    // clairs qui montent de niveau en niveau autour de l'atrium, encadrant
     // le corridor central et la statue — 4 par niveau (RDC et étages 1-3)
     for (let f = 0; f < 4; f++) {
       for (const [cx, cz] of [[-5.5, -3], [5.5, -3], [-5.5, 3], [5.5, 3]]) {
-        hdeco(CYL_GEO, 0x3a4048, BX + cx, LV[f] + FH / 2, BZ + cz, 0.8, FH, 0.8);
+        hdeco(CYL_GEO, 0xb6b0a2, BX + cx, LV[f] + FH / 2, BZ + cz, 0.8, FH, 0.8);
         propBox(BX + cx, LV[f], BZ + cz, 0.42, 0.42, FH); // colonne : solide
         hdeco(BOX, WALL, BX + cx, LV[f] + 0.08, BZ + cz, 1.15, 0.16, 1.15); // base
         hdeco(BOX, WALL, BX + cx, LV[f] + FH - 0.08, BZ + cz, 1.15, 0.16, 1.15); // chapiteau
       }
     }
 
-    // ---- LAMBRIS SOMBRE BAS (wainscot) le long des murs intérieurs de
-    // chaque niveau (deux tons comme la vraie Agence : soubassement anthracite
+    // ---- LAMBRIS CLAIR BAS (wainscot) le long des murs intérieurs de
+    // chaque niveau (deux tons comme la vraie Agence : soubassement gris perle
     // + murs clairs) ; au RDC, la façade sud laisse la porte libre
     for (let f = 0; f < 4; f++) {
       const ly = LV[f];
-      hdeco(BOX, 0x3a3f47, BX, ly + 0.65, BZ - 9.78, 25.4, 1.3, 0.07); // mur nord
-      hdeco(BOX, 0x3a3f47, BX + 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur est
-      hdeco(BOX, 0x3a3f47, BX - 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur ouest
+      hdeco(BOX, 0xcac4b4, BX, ly + 0.65, BZ - 9.78, 25.4, 1.3, 0.07); // mur nord
+      hdeco(BOX, 0xcac4b4, BX + 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur est
+      hdeco(BOX, 0xcac4b4, BX - 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur ouest
       if (f === 0) { // segments de part et d'autre de la porte (x -3..3)
-        hdeco(BOX, 0x3a3f47, BX - 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
-        hdeco(BOX, 0x3a3f47, BX + 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
-      } else hdeco(BOX, 0x3a3f47, BX, ly + 0.65, BZ + 9.78, 25.4, 1.3, 0.07); // mur sud
+        hdeco(BOX, 0xcac4b4, BX - 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
+        hdeco(BOX, 0xcac4b4, BX + 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
+      } else hdeco(BOX, 0xcac4b4, BX, ly + 0.65, BZ + 9.78, 25.4, 1.3, 0.07); // mur sud
     }
 
     // ---- BANNIÈRES GHOST BLEUES suspendues dans l'atrium (niveaux 1-3,
@@ -3650,7 +3720,7 @@ function buildSpyPOI(p) {
     hdeco(BOX, GOLD, BX, 13.95, BZ + 15.05, 18.4, 0.22, 0.3);           // rive dorée du fronton
     // emblème GHOST doré au centre du fronton
     hdeco(CYL_GEO, GOLD, BX, 15.1, BZ + 12.5, 1.5, 0.25, 1.5, Math.PI / 2, 0, 0);
-    hdeco(BOX, 0x101319, BX, 15.15, BZ + 12.42, 0.9, 1.0, 0.08);
+    hdeco(BOX, 0x1f3a8a, BX, 15.15, BZ + 12.42, 0.9, 1.0, 0.08);
 
     // ---- DRAPEAUX GHOST bleus aux quatre coins du toit
     for (const [fx, fz] of [[-11.5, -8.5], [11.5, -8.5], [-11.5, 8.5], [11.5, 8.5]]) {
@@ -3667,7 +3737,7 @@ function buildSpyPOI(p) {
     // la statue dépasse du 1er étage.
     {
       // bassin rectangulaire en pierre + eau lumineuse (le socle au milieu)
-      hdeco(BOX, 0x39404c, BX, LV[0] + 0.35, BZ, 6.2, 0.7, 5.2);
+      hdeco(BOX, 0xa8adb4, BX, LV[0] + 0.35, BZ, 6.2, 0.7, 5.2);
       hdeco(BOX, 0x3fa9ff, BX, LV[0] + 0.71, BZ, 5.7, 0.08, 4.7); // eau : affleure au-dessus de la pierre (9,78 > 9,75)
       propBox(BX, LV[0], BZ, 3.1, 2.6, 0.8); // bassin : solide (bord haut de 0,8 : infranchissable)
       // anneau doré au sol autour du bassin (emblème du hall)
@@ -3680,7 +3750,7 @@ function buildSpyPOI(p) {
       // globe au-dessus de lui — origine du groupe = dessus du socle (10,15)
       const st = new THREE.Group();
       const gM = matC(0xffc400, { metalness: 0.85, roughness: 0.2 });
-      const dM = matC(0x2c313c, { metalness: 0.5 });
+      const dM = matC(0x51607a, { metalness: 0.5 });
       addBox(st, 0.45, 0.9, 0.75, -0.42, 0.45, 0.15, gM);  // jambe agenouillée
       addBox(st, 0.45, 0.75, 0.45, 0.28, 0.375, -0.5, gM); // jambe avant pliée
       addBox(st, 1.3, 1.7, 0.7, 0, 1.75, -0.1, gM);        // torse dressé
@@ -3709,25 +3779,25 @@ function buildSpyPOI(p) {
       propBox(BX + tx, LV[0], BZ + 8.3, 0.45, 0.28, 1.1);
     }
     // accueil (banque d'accueil) entre la porte et l'atrium, côté est du hall
-    hdeco(BOX, 0x2c313c, BX + 4.6, LV[0] + 0.5, BZ + 6.6, 3.2, 1.0, 0.9);
+    hdeco(BOX, 0x8a8f98, BX + 4.6, LV[0] + 0.5, BZ + 6.6, 3.2, 1.0, 0.9);
     hdeco(BOX, GOLD, BX + 4.6, LV[0] + 0.99, BZ + 6.6, 3.3, 0.08, 1.0);
     propBox(BX + 4.6, LV[0], BZ + 6.6, 1.6, 0.45, 1.0);
-    hdeco(BOX, 0x1a1a22, BX + 4.6, LV[0] + 1.35, BZ + 7.15, 1.4, 0.8, 0.08);
+    hdeco(BOX, 0x46536e, BX + 4.6, LV[0] + 1.35, BZ + 7.15, 1.4, 0.8, 0.08);
     hdeco(BOX, 0x3fa9ff, BX + 4.6, LV[0] + 1.35, BZ + 7.1, 1.3, 0.7, 0.04);
     // 1er étage : BUREAU DE MIDAS (aile nord, face à l'atrium)
-    hdeco(BOX, 0x2c313c, BX - 1.4, LV[1] + 0.4, BZ - 6.5, 3.2, 0.8, 1.3);
+    hdeco(BOX, 0x8a8f98, BX - 1.4, LV[1] + 0.4, BZ - 6.5, 3.2, 0.8, 1.3);
     hdeco(BOX, GOLD, BX - 1.4, LV[1] + 0.79, BZ - 6.5, 3.3, 0.07, 1.4);
     propBox(BX - 1.4, LV[1], BZ - 6.5, 1.6, 0.65, 0.8);
-    hdeco(BOX, 0x1a1a22, BX - 1.4, LV[1] + 1.15, BZ - 7.2, 2.0, 1.1, 0.08); // écran mural
+    hdeco(BOX, 0x46536e, BX - 1.4, LV[1] + 1.15, BZ - 7.2, 2.0, 1.1, 0.08); // écran mural
     hdeco(BOX, 0x3fa9ff, BX - 1.4, LV[1] + 1.15, BZ - 7.14, 1.9, 1.0, 0.04);
-    hdeco(CYL_GEO, 0x2c313c, BX - 3.4, LV[1] + 0.3, BZ - 6.5, 0.7, 0.6, 0.7); // fauteuil de Midas
+    hdeco(CYL_GEO, 0x8a8f98, BX - 3.4, LV[1] + 0.3, BZ - 6.5, 0.7, 0.6, 0.7); // fauteuil de Midas
     // 1er étage : SALLE DE RÉUNION (aile sud) — avec la CHAISE DORÉE de Midas
     // à la tête de la table, un coffre doré sur la table et deux lampes
     // suspendues en globes blancs (comme la salle de briefing de la vraie Agence)
-    hdeco(BOX, 0x39404c, BX + 1.4, LV[1] + 0.36, BZ + 6.4, 3.4, 0.12, 1.5); // plateau
-    hdeco(BOX, 0x2c313c, BX + 1.4, LV[1] + 0.15, BZ + 6.4, 3.0, 0.3, 0.3);   // pied central
+    hdeco(BOX, 0xa8adb4, BX + 1.4, LV[1] + 0.36, BZ + 6.4, 3.4, 0.12, 1.5); // plateau
+    hdeco(BOX, 0x8a8f98, BX + 1.4, LV[1] + 0.15, BZ + 6.4, 3.0, 0.3, 0.3);   // pied central
     propBox(BX + 1.4, LV[1], BZ + 6.4, 1.7, 0.75, 0.6);
-    for (const s of [-1, 1]) hdeco(BOX, 0x22262f, BX + 1.4 + s * 1.1, LV[1] + 0.3, BZ + 5.3, 0.55, 0.6, 0.55); // chaises
+    for (const s of [-1, 1]) hdeco(BOX, 0x9aa1ab, BX + 1.4 + s * 1.1, LV[1] + 0.3, BZ + 5.3, 0.55, 0.6, 0.55); // chaises
     hdeco(BOX, GOLD, BX + 1.4, LV[1] + 1.0, BZ + 6.4, 0.7, 0.5, 0.45);      // coffre doré sur la table
     { const chL = new THREE.PointLight(0xffd76e, 2.5, 6); chL.position.set(BX + 1.4, LV[1] + 1.4, BZ + 6.4); scene.add(chL); }
     // chaise dorée de Midas à la tête sud de la table (l'icône de l'Agence)
@@ -3735,9 +3805,9 @@ function buildSpyPOI(p) {
     hdeco(BOX, GOLD, BX + 1.4, LV[1] + 1.1, BZ + 8.55, 0.9, 1.0, 0.16);
     hdeco(BOX, GOLD, BX + 1.4, LV[1] + 0.62, BZ + 8.2, 0.8, 0.08, 0.6);
     propBox(BX + 1.4, LV[1], BZ + 8.2, 0.45, 0.4, 1.2);
-    // lampes suspendues : globes blancs au bout de tiges noires
+    // lampes suspendues : globes blancs au bout de tiges gris perle
     for (const gx of [-0.6, 3.4]) {
-      hdeco(BOX, 0x1a1a22, BX + gx, LV[1] + 3.0, BZ + 6.4, 0.05, 1.4, 0.05);
+      hdeco(BOX, 0x8d929a, BX + gx, LV[1] + 3.0, BZ + 6.4, 0.05, 1.4, 0.05);
       const gl = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), matC(0xf4f2ea, { emissive: 0xfff4d6, emissiveIntensity: 0.7 }));
       gl.position.set(BX + gx, LV[1] + 2.2, BZ + 6.4); scene.add(gl);
       const gll = new THREE.PointLight(0xfff0c8, 3, 8); gll.position.set(BX + gx, LV[1] + 2.2, BZ + 6.4); scene.add(gll);
@@ -3747,17 +3817,17 @@ function buildSpyPOI(p) {
       for (const s of [-1, 1]) {
         hdeco(BOX, 0xe8e6df, BX + s * 7.5, LV[f] + 0.28, BZ + 8.6, 2.4, 0.55, 0.6); // banc blanc
         propBox(BX + s * 7.5, LV[f], BZ + 8.6, 1.2, 0.3, 0.5);
-        hdeco(BOX, 0x2c313c, BX + s * 7.5, LV[f] + 0.45, BZ + 7.4, 1.4, 0.9, 1.4); // jardinière
+        hdeco(BOX, 0x8a8f98, BX + s * 7.5, LV[f] + 0.45, BZ + 7.4, 1.4, 0.9, 1.4); // jardinière
         hdeco(BOX, 0x2d5a35, BX + s * 7.5, LV[f] + 1.0, BZ + 7.4, 1.2, 0.5, 1.2); // plante
         propBox(BX + s * 7.5, LV[f], BZ + 7.4, 0.7, 0.7, 0.9);
       }
     }
     // 2e étage : postes d'agents (bureaux + écrans) dans les quatre coins
     for (const [wx, wz] of [[-6, -6.5], [6, -6.5], [-6, 6.5], [6, 6.5]]) {
-      hdeco(BOX, 0x39404c, BX + wx, LV[2] + 0.4, BZ + wz, 1.8, 0.08, 0.9);
-      hdeco(BOX, 0x2c313c, BX + wx, LV[2] + 0.2, BZ + wz, 1.6, 0.4, 0.7);
+      hdeco(BOX, 0xa8adb4, BX + wx, LV[2] + 0.4, BZ + wz, 1.8, 0.08, 0.9);
+      hdeco(BOX, 0x8a8f98, BX + wx, LV[2] + 0.2, BZ + wz, 1.6, 0.4, 0.7);
       propBox(BX + wx, LV[2], BZ + wz, 0.9, 0.45, 0.8);
-      hdeco(BOX, 0x1a1a22, BX + wx, LV[2] + 0.75, BZ + wz - 0.5, 1.3, 0.7, 0.06);
+      hdeco(BOX, 0x46536e, BX + wx, LV[2] + 0.75, BZ + wz - 0.5, 1.3, 0.7, 0.06);
       hdeco(BOX, 0x3fa9ff, BX + wx, LV[2] + 0.75, BZ + wz - 0.46, 1.2, 0.6, 0.03);
     }
     // 3e étage : salon des agents (canapés + table basse + plantes)
@@ -3767,7 +3837,7 @@ function buildSpyPOI(p) {
       hdeco(CYL_GEO, 0x2d5a35, BX + s * 8, LV[3] + 0.45, BZ + s * 6.2, 1.0, 0.9, 1.0); // plante
       propBox(BX + s * 8, LV[3], BZ + s * 6.2, 0.5, 0.5, 0.9);
     }
-    hdeco(BOX, 0x2c313c, BX, LV[3] + 0.3, BZ + 4.9, 1.6, 0.1, 0.9); // table basse
+    hdeco(BOX, 0x8a8f98, BX, LV[3] + 0.3, BZ + 4.9, 1.6, 0.1, 0.9); // table basse
     propBox(BX, LV[3], BZ + 4.9, 0.8, 0.45, 0.35);
 
     // ---- PARVIS : chemin pavé du portique vers l'entrée + braseros + haies
@@ -3775,7 +3845,7 @@ function buildSpyPOI(p) {
     hdeco(BOX, 0xd8d4c8, BX, p.h + 0.03, BZ + 17.5, 6, 0.06, 9);
     // braseros de part et d'autre du chemin (façon Agence de Fortnite)
     for (const bxp of [-8, 8]) {
-      hdeco(CYL_GEO, 0x39404c, BX + bxp, p.h + 0.5, BZ + 16, 1.2, 1.0, 1.2);
+      hdeco(CYL_GEO, 0xa8adb4, BX + bxp, p.h + 0.5, BZ + 16, 1.2, 1.0, 1.2);
       hdeco(CYL_GEO, 0xff8c1a, BX + bxp, p.h + 1.1, BZ + 16, 0.7, 0.25, 0.7);
       propBox(BX + bxp, p.h, BZ + 16, 1.0, 1.0, 1.1);
       const fl = new THREE.PointLight(0xff9a2e, 5, 14); fl.position.set(BX + bxp, p.h + 1.6, BZ + 16); scene.add(fl);
@@ -3787,7 +3857,7 @@ function buildSpyPOI(p) {
     }
     // caméras de surveillance aux quatre coins du bâtiment
     for (const [cx2, cz2] of [[-12.8, -9.8], [12.8, -9.8], [-12.8, 9.8], [12.8, 9.8]]) {
-      hdeco(BOX, 0x1a1a22, BX + cx2, 12.2, BZ + cz2, 0.5, 0.4, 0.8);
+      hdeco(BOX, 0x46536e, BX + cx2, 12.2, BZ + cz2, 0.5, 0.4, 0.8);
       hdeco(BOX, 0xff1e42, BX + cx2, 12.2, BZ + cz2 + (cz2 > 0 ? 0.42 : -0.42), 0.18, 0.18, 0.18);
     }
 
@@ -3801,7 +3871,7 @@ function buildSpyPOI(p) {
       makeStructBox(wx, 9.0, BZ + 10, 8, 8.85, 1.0, stoneM(), oStone);   // mur sud
       // toit plat sombre (gravier) + corniche dorée
       makeStructBox(wx, 17.4, BZ, 8.5, 0.45, 21, stoneM(), oStone);
-      hdeco(BOX, 0x2a2d33, wx, 17.86, BZ, 8.4, 0.06, 20.9);
+      hdeco(BOX, 0x8d929a, wx, 17.86, BZ, 8.4, 0.06, 20.9);
       hdeco(BOX, GOLD, wx, 17.78, BZ + 10.15, 8.6, 0.28, 0.14);
       hdeco(BOX, GOLD, wx, 17.78, BZ - 10.15, 8.6, 0.28, 0.14);
       // fenêtres étroites sur les deux niveaux, face extérieure (x ±21,5)
@@ -3813,8 +3883,8 @@ function buildSpyPOI(p) {
       }
       // plaque GHOST dorée au centre de l'aile
       hdeco(CYL_GEO, GOLD, BX + s * 21.56, 15.6, BZ, 1.1, 0.22, 1.1, 0, 0, Math.PI / 2);
-      hdeco(BOX, 0x101319, BX + s * 21.6, 15.6, BZ, 0.06, 0.7, 0.7);
-      // dalle du 1er étage dans l'aile (marbre noir, comme les mezzanines)
+      hdeco(BOX, 0x1f3a8a, BX + s * 21.6, 15.6, BZ, 0.06, 0.7, 0.7);
+      // dalle du 1er étage dans l'aile (marbre clair, comme les mezzanines)
       makeStructBox(wx, 13.0, BZ, 7.5, 0.45, 19.5, floorM(), oStone);
       // fenêtres étroites sur les faces sud et nord de l'aile
       for (let f = 0; f < 2; f++) {
@@ -3834,11 +3904,11 @@ function buildSpyPOI(p) {
     // selon les rectangles de la dalle annulaire pour laisser OUVERTS le
     // trou de l'atrium (x ±4,5, z ±4) et la sortie de l'escalier ouest
     for (const [cx, cz, w, d] of [[8.625, 0, 8.25, 19.5], [-6.25, 0, 3.5, 19.5], [-10.375, -7.625, 4.75, 4.25], [-10.375, 7.625, 4.75, 4.25], [0, -6.875, 9, 5.75], [0, 6.875, 9, 5.75]]) {
-      hdeco(BOX, 0x2a2d33, BX + cx, 26.71, BZ + cz, w - 0.3, 0.06, d - 0.3);
+      hdeco(BOX, 0x8d929a, BX + cx, 26.71, BZ + cz, w - 0.3, 0.06, d - 0.3);
     }
     for (const [ax, az] of [[8.5, -7], [-8.5, 6], [2, -7.5], [-2, 7.5]]) {
-      hdeco(BOX, 0x4a4f58, BX + ax, 27.15, BZ + az, 1.3, 0.85, 1.05);
-      hdeco(CYL_GEO, 0x39404c, BX + ax, 27.62, BZ + az, 0.42, 0.14, 0.42);
+      hdeco(BOX, 0x9aa0a8, BX + ax, 27.15, BZ + az, 1.3, 0.85, 1.05);
+      hdeco(CYL_GEO, 0xa8adb4, BX + ax, 27.62, BZ + az, 0.42, 0.14, 0.42);
     }
 
     // ---- STATUE ATLAS CHROMÉE devant l'entrée (comme la vraie Agence) :
@@ -3847,7 +3917,7 @@ function buildSpyPOI(p) {
     {
       const st2 = new THREE.Group();
       const cM = matC(0xc8ccd4, { metalness: 0.9, roughness: 0.15 });
-      const dS = matC(0x3a4048, { metalness: 0.4 });
+      const dS = matC(0x51607a, { metalness: 0.4 });
       addBox(st2, 0.5, 1.0, 0.8, -0.45, 0.5, 0.2, cM);   // jambe agenouillée
       addBox(st2, 0.5, 0.8, 0.5, 0.3, 0.4, -0.55, cM);   // jambe avant pliée
       addBox(st2, 1.4, 1.8, 0.75, 0, 1.85, -0.1, cM);    // torse
@@ -3859,7 +3929,7 @@ function buildSpyPOI(p) {
       st2.scale.set(0.65, 0.65, 0.65);
       st2.position.set(BX, p.h + 0.9, BZ + 23); scene.add(st2);
       // socle métallique
-      hdeco(BOX, 0x3a4048, BX, p.h + 0.4, BZ + 23, 2.6, 0.8, 2.6);
+      hdeco(BOX, 0xa8adb4, BX, p.h + 0.4, BZ + 23, 2.6, 0.8, 2.6);
       propBox(BX, p.h, BZ + 23, 1.3, 1.3, 0.85);
       const st2L = new THREE.PointLight(0xbfd8ff, 4, 12); st2L.position.set(BX, p.h + 4.2, BZ + 23); scene.add(st2L);
       // deux arbres taillés sur touffes d'herbe + deux bancs bleus incurvés
@@ -3886,16 +3956,16 @@ function buildSpyPOI(p) {
       curHouse = { boxes: [], deco: [], mesh: null };
       // pilotis d'acier + entretoises
       for (const [lx, lz] of [[-3.6, -3.6], [3.6, -3.6], [-3.6, 3.6], [3.6, 3.6]]) {
-        makeStructBox(HX + lx, p.h, HZ + lz, 0.5, PT - p.h, 0.5, matC(0x2c313c, { metalness: 0.4, roughness: 0.5 }), { indestructible: true });
-        hdeco(BOX, 0x2c313c, HX + lx, p.h + 1.1, HZ, 0.18, 0.18, 7.2);
-        hdeco(BOX, 0x2c313c, HX, p.h + 1.1, HZ + lz, 7.2, 0.18, 0.18);
+        makeStructBox(HX + lx, p.h, HZ + lz, 0.5, PT - p.h, 0.5, matC(0x8a8f98, { metalness: 0.4, roughness: 0.5 }), { indestructible: true });
+        hdeco(BOX, 0x8a8f98, HX + lx, p.h + 1.1, HZ, 0.18, 0.18, 7.2);
+        hdeco(BOX, 0x8a8f98, HX, p.h + 1.1, HZ + lz, 7.2, 0.18, 0.18);
       }
       // plateforme (dessus à 11,45) + surface gravier
-      makeStructBox(HX, PT, HZ, 9.5, 0.4, 9.5, matC(0x33383f, { metalness: 0.35, roughness: 0.6 }), { indestructible: true });
-      hdeco(BOX, 0x2a2d33, HX, PT + 0.41, HZ, 9.3, 0.04, 9.3);
+      makeStructBox(HX, PT, HZ, 9.5, 0.4, 9.5, matC(0x8a8f98, { metalness: 0.35, roughness: 0.6 }), { indestructible: true });
+      hdeco(BOX, 0x8d929a, HX, PT + 0.41, HZ, 9.3, 0.04, 9.3);
       // cercle jaune + H (texture canvas)
       const hTex = canvasTex((g, s) => {
-        g.fillStyle = '#2a2d33'; g.fillRect(0, 0, s, s);
+        g.fillStyle = '#8d929a'; g.fillRect(0, 0, s, s);
         g.strokeStyle = '#ffc400'; g.lineWidth = Math.floor(s * 0.05);
         g.beginPath(); g.arc(s / 2, s / 2, s * 0.32, 0, 7); g.stroke();
         g.fillStyle = '#ffc400';
@@ -3907,8 +3977,8 @@ function buildSpyPOI(p) {
       hDec.rotation.x = -Math.PI / 2; hDec.position.set(HX, PT + 0.46, HZ); scene.add(hDec);
       // garde-corps périmétriques (ouverture au milieu de la face sud pour l'escalier)
       for (const [hx, hz, w, d] of [[0, -4.5, 9.4, 0.1], [-3.15, 4.5, 2.7, 0.1], [3.15, 4.5, 2.7, 0.1], [-4.5, 0, 0.1, 8.2], [4.5, 0, 0.1, 8.2]]) {
-        hdeco(BOX, 0x1a1c22, HX + hx, PT + 0.75, HZ + hz, w, 0.9, d);
-        hdeco(BOX, 0x1a1c22, HX + hx, PT + 0.5, HZ + hz, w, 0.08, d);
+        hdeco(BOX, 0x9aa0a8, HX + hx, PT + 0.75, HZ + hz, w, 0.9, d);
+        hdeco(BOX, 0x9aa0a8, HX + hx, PT + 0.5, HZ + hz, w, 0.08, d);
       }
       // feux de bord jaunes aux quatre coins
       for (const [ex, ez] of [[-3.9, -3.9], [3.9, -3.9], [-3.9, 3.9], [3.9, 3.9]]) {
@@ -3918,15 +3988,15 @@ function buildSpyPOI(p) {
       // bidons de carburant rouge et blanc + cage
       hdeco(BOX, 0xb03a2e, HX + 3.1, PT + 0.65, HZ + 3.2, 0.7, 0.8, 0.7);
       hdeco(BOX, 0xe8e6df, HX + 2.3, PT + 0.65, HZ + 3.2, 0.7, 0.8, 0.7);
-      hdeco(BOX, 0x4a4f58, HX + 2.7, PT + 1.15, HZ + 3.2, 1.8, 0.08, 1.0);
+      hdeco(BOX, 0x9aa0a8, HX + 2.7, PT + 1.15, HZ + 3.2, 1.8, 0.08, 1.0);
       // ESCALIER D'ACIER : 5 marches qui descendent vers le chemin (au sud)
       for (let i = 0; i < 5; i++) {
         const top = PT + 0.4 - 0.45 * (i + 1);
-        makeStructBox(HX, top - 0.45, HZ + 5.4 + i * 0.9, 3.2, 0.45, 0.9, matC(0x2c313c, { metalness: 0.4, roughness: 0.55 }), { indestructible: true });
+        makeStructBox(HX, top - 0.45, HZ + 5.4 + i * 0.9, 3.2, 0.45, 0.9, matC(0x8a8f98, { metalness: 0.4, roughness: 0.55 }), { indestructible: true });
       }
       // rampe de l'escalier
       for (const rx of [-1.7, 1.7]) {
-        hdeco(BOX, 0x1a1c22, HX + rx, PT + 0.35, HZ + 7.4, 0.08, 0.75, 5.2);
+        hdeco(BOX, 0x9aa0a8, HX + rx, PT + 0.35, HZ + 7.4, 0.08, 0.75, 5.2);
       }
       // chemin pavé balisé du parvis nord de l'Agence vers l'escalier
       hdeco(BOX, 0xd8d4c8, HX, p.h + 0.03, HZ + 10.5, 3.6, 0.06, 5);
@@ -3943,11 +4013,11 @@ function buildSpyPOI(p) {
     const signCanvas = document.createElement('canvas');
     signCanvas.width = 768; signCanvas.height = 266;
     const sg = signCanvas.getContext('2d');
-    sg.fillStyle = '#101319'; sg.fillRect(0, 0, 768, 266);
+    sg.fillStyle = '#1f3a8a'; sg.fillRect(0, 0, 768, 266);
     sg.fillStyle = '#ffc400'; sg.font = 'bold 62px Georgia, serif';
     sg.textAlign = 'center'; sg.textBaseline = 'middle';
     sg.fillText('THE AGENCY', 384, 108);
-    sg.fillStyle = '#8d929a'; sg.font = 'bold 26px Georgia, serif';
+    sg.fillStyle = '#c9d6f2'; sg.font = 'bold 26px Georgia, serif';
     sg.fillText('CONFIDENTIAL · EYES ONLY', 384, 190);
     const signTex = new THREE.CanvasTexture(signCanvas);
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 2.6), new THREE.MeshBasicMaterial({ map: signTex }));
@@ -3972,9 +4042,20 @@ function buildSpyPOI(p) {
     // ---- coffres et butin du hall (le reste est dans le coffre-fort)
     spawnChest(BX - 6, LV[0] + 0.05, BZ - 4);
     spawnChest(BX + 7, LV[0] + 0.05, BZ + 3);
+    // ---- coffres des étages : deux par niveau (1er, 2e, 3e), posés à l'écart
+    // du mobilier, des colonnes et des trous d'escalier/atrium
+    spawnChest(BX - 8, LV[1] + 0.05, BZ - 7);
+    spawnChest(BX + 7.5, LV[1] + 0.05, BZ + 5.5);
+    spawnChest(BX - 6.25, LV[2] + 0.05, BZ);
+    spawnChest(BX + 9, LV[2] + 0.05, BZ + 6.5);
+    spawnChest(BX - 8, LV[3] + 0.05, BZ);
+    spawnChest(BX, LV[3] + 0.05, BZ - 8.5);
     ammoBoxes.push(spawnAmmoBox(BX + 2, LV[0] + 0.05, BZ - 6));
     lootSpots.push({ x: BX, y: LV[0] + 0.6, z: BZ - 5 });
     lootSpots.push({ x: BX - 8, y: LV[0] + 0.6, z: BZ + 4 });
+    lootSpots.push({ x: BX - 8, y: LV[1] + 0.6, z: BZ - 7 });
+    lootSpots.push({ x: BX + 9, y: LV[2] + 0.6, z: BZ + 6.5 });
+    lootSpots.push({ x: BX - 8, y: LV[3] + 0.6, z: BZ });
   } else if (p.key === 'shark') {
     // manoir moderne blanc à toits plats (la Sky Villa) : rez creux + terrasse
     curHouse = { boxes: [], deco: [], mesh: null };
@@ -4546,22 +4627,31 @@ function startGame() {
     bots.push(b);
     if (b.mate) mates.push(b);
   }
-  // hommes de main & boss des POI espions (hors compteur de joueurs)
+  // ombres & boss des POI espions (hors compteur de joueurs) : ils spawnent
+  // sur les points de leur circuit de patrouille fixe (jamais dans un mur)
   for (const p of POIS) {
     if (!p.spy) continue;
     const cfg = SPY_STAFF[p.key];
+    const route = spyPatrol(p);
     // point d'appui : le pont du Yacht ou la plateforme de La Plateforme, sinon le terrain
-    let sx, sy, sz, wpBox = null;
-    if (p.key === 'yacht') { const yd = Math.max(terrainH(p.x, p.z), 2.4); sy = yd + 1.5; sx = p.x + rand(-10, 10); sz = p.z + rand(-3, 3); wpBox = { x: p.x, z: p.z, hx: 11, hz: 3.5 }; }
-    else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; sx = p.x + rand(-8, 8); sz = p.z + rand(-6, 6); wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
-    // La Grotte : Brutus et ses hommes de main gardent la caverne souterraine
-    else if (p.key === 'grotto') { sx = GROTTO.cavernX + 4; sz = GROTTO.cavernZ - 8; sy = GROTTO.floor1 + 3.6 + 0.1; wpBox = { x: GROTTO.cavernX, z: GROTTO.cavernZ, hx: 10, hz: 10 }; }
+    let sy, wpBox = null;
+    if (p.key === 'yacht') { const yd = Math.max(terrainH(p.x, p.z), 2.4); sy = yd + 1.5; wpBox = { x: p.x, z: p.z, hx: 11, hz: 3.5 }; }
+    else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
+    // La Grotte : Brutus et ses ombres gardent la caverne souterraine
+    else if (p.key === 'grotto') { sy = GROTTO.floor1 + 3.6 + 0.1; wpBox = { x: GROTTO.cavernX, z: GROTTO.cavernZ, hx: 10, hz: 10 }; }
     // L'Agence : le boss garde le hall du rez-de-chaussée (le coffre-fort est en sous-sol)
-    else if (p.key === 'agency') { sx = p.x + rand(-6, 6); sz = p.z + rand(-3, 3); sy = p.h + 0.15; wpBox = { x: p.x, z: p.z, hx: 10, hz: 7 }; }
-    else { const bp = randomLandPoint(p.x, p.z, p.r * 0.3); sx = bp.x; sz = bp.z; sy = Math.max(terrainH(sx, sz), 2.4) + 0.1; }
+    else if (p.key === 'agency') { sy = p.h + 0.15; wpBox = { x: p.x, z: p.z, hx: 10, hz: 7 }; }
+    else sy = null; // terrain : hauteur calculée au point de spawn
+    const spawnAt = (w) => {
+      if (sy !== null && sy !== undefined) return sy;
+      return Math.max(terrainH(w.x, w.z), 2.4) + 0.1;
+    };
+    const bossW = route ? route[0] : { x: p.x + rand(-6, 6), z: p.z + rand(-3, 3) };
     const boss = new Char(cfg.boss, false, { skin: cfg.skin, backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
     boss.hench = true; boss.boss = true; boss.bossPoi = p; boss.henchPoi = p; boss.wpBox = wpBox;
-    boss.pos.set(sx, sy, sz);
+    boss.lodPhase = 0; boss.lodAcc = 0; // sinon les PNJ éloignés de la caméra ne pensent plus (NaN % 4)
+    if (route) { boss.route = route; boss.routeIdx = 0; }
+    boss.pos.set(bossW.x, spawnAt(bossW), bossW.z);
     boss.mode = 'ground'; boss.grounded = true; boss.mesh.visible = true;
     boss.hp = cfg.hp; boss.shield = cfg.shield; boss.heals = 3;
     boss.slots[1] = { kind: 'weapon', id: cfg.weapon, rarity: 5, mag: 0 }; boss.slots[1].mag = magOf(boss.slots[1]);
@@ -4570,12 +4660,13 @@ function startGame() {
     boss.skill = 1.05; boss.think = rand(0.5); boss.react = 0; boss.strafe = 1; boss.strafeT = 0; boss.burst = 0; boss.stuckT = 0; boss.stuckN = 0; boss.lastP = new THREE.Vector3(); boss.lostT = 0; boss.buildCd = 0; boss.alert = 0;
     addNameTag(boss, cfg.boss);
     for (let i = 0; i < cfg.hench; i++) {
-      const h = new Char('Homme de main', false, { skin: 'ombre', backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
+      const h = new Char('Ombre', false, { skin: 'ombre', backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
       h.hench = true; h.henchPoi = p; h.bossRef = boss; h.wpBox = wpBox;
-      const hx2 = wpBox ? wpBox.x + rand(-wpBox.hx, wpBox.hx) : null;
-      const hz2 = wpBox ? wpBox.z + rand(-wpBox.hz, wpBox.hz) : null;
-      if (wpBox) h.pos.set(hx2, sy, hz2);
-      else { const hp2 = randomLandPoint(p.x, p.z, p.r * 0.8); h.pos.set(hp2.x, Math.max(terrainH(hp2.x, hp2.z), 2.4) + 0.1, hp2.z); }
+      h.lodPhase = i % 4; h.lodAcc = 0; // mise à jour des PNJ éloignés (comme les bots)
+      // spawn sur le circuit (décalé pour ne pas s'empiler) : jamais dans un mur
+      const w = route ? route[(i + 1) % route.length] : (() => { const bp = randomLandPoint(p.x, p.z, p.r * 0.8); return { x: bp.x, z: bp.z }; })();
+      if (route) { h.route = route; h.routeIdx = (i + 1) % route.length; }
+      h.pos.set(w.x, spawnAt(w), w.z);
       h.mode = 'ground'; h.grounded = true; h.mesh.visible = true;
       h.hp = 100; h.shield = 50; h.heals = 1;
       h.slots[1] = randWeaponItem(1); h.cur = 1; h.armed = true;
@@ -4769,7 +4860,7 @@ function openVault(v) {
   addXP('Coffre-fort ouvert', 300);
   showCenter('COFFRE-FORT OUVERT', `Le butin de ${v.poi.name} est à toi`, 2.2);
 }
-// Déguisement d'homme de main (cabine téléphonique rouge)
+// Déguisement d'Ombre (cabine téléphonique rouge)
 function setDisguise(ch, on, broke) {
   if (!ch || !ch.isPlayer || ch.disguise === on) return;
   ch.disguise = on;

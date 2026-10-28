@@ -57,12 +57,104 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     };
   });
   check('5 boss vivants + étiquette', staff.bosses.length === 5 && staff.bosses.every((b) => b.alive && b.tag), JSON.stringify(staff.bosses.map((b) => b.name + ':' + b.w)));
-  check('hommes de main spawnés', staff.henchAlive >= 14, 'total=' + staff.hench + ' vivants=' + staff.henchAlive);
+  check('ombres spawnées', staff.henchAlive >= 14, 'total=' + staff.hench + ' vivants=' + staff.henchAlive);
   const yachtRig = staff.bosses.filter((b) => b.poi === 'yacht' || b.poi === 'rig');
   // pont du Yacht à sol+1,4 m ; plateforme de La Plateforme à sol+12,2 m
   check('boss du Yacht/Plateforme sur leur structure', yachtRig.length === 2 && yachtRig.every((b) => b.poi === 'yacht' ? Math.abs(b.y - (b.ground + 1.4)) < 0.8 : Math.abs(b.y - (b.ground + 12.2)) < 1), JSON.stringify(yachtRig.map((b) => b.poi + ':y=' + b.y + '/sol=' + b.ground)));
   const agencyBoss = staff.bosses.find((b) => b.poi === 'agency');
   check("boss de l'Agence dans le hall", agencyBoss && Math.abs(agencyBoss.y - 9.05) < 1.2, 'y=' + (agencyBoss && agencyBoss.y) + ' sol=' + (agencyBoss && agencyBoss.ground));
+
+  // --- 2bis. Ombres : nom, spawn sur le circuit (jamais dans le bassin) ---
+  const ombres = await frame.evaluate(() => {
+    const G = window.__game;
+    const ag = G.POIS.find((p) => p.key === 'agency');
+    const team = G.henchmen.filter((c) => c.alive && c.henchPoi.key === 'agency');
+    // le bassin de l'atrium (solide, ~3,1 x 2,6) : personne ne doit y spawn
+    const inBasin = team.filter((c) => Math.hypot(c.pos.x - ag.x, c.pos.z - ag.z) < 3.6);
+    const onRoute = team.filter((c) => c.route && c.route.some((w) => Math.hypot(w.x - c.pos.x, w.z - c.pos.z) < 1.5));
+    return {
+      names: G.henchmen.filter((c) => c.alive && !c.boss).every((c) => c.name === 'Ombre'),
+      spawnClear: inBasin.length === 0,
+      onRoute: onRoute.length,
+      team: team.length,
+    };
+  });
+  check('PNJ nommés « Ombre »', ombres.names === true);
+  check("ombres de l'Agence sur leur circuit, hors du bassin", ombres.spawnClear === true && ombres.onRoute === ombres.team, JSON.stringify(ombres));
+
+  // --- 2ter. Coffres des étages de l'Agence (2 par niveau en plus du hall) ---
+  const floorChests = await frame.evaluate(() => {
+    const G = window.__game;
+    const ag = G.POIS.find((p) => p.key === 'agency');
+    const cs = G.chests.filter((c) => !c.vault && !c.opened && Math.abs(c.x - ag.x) < 14 && Math.abs(c.z - ag.z) < 11);
+    return {
+      hall: cs.filter((c) => c.y < 10).length,
+      f1: cs.filter((c) => c.y > 13 && c.y < 14).length,
+      f2: cs.filter((c) => c.y > 17 && c.y < 18.5).length,
+      f3: cs.filter((c) => c.y > 21 && c.y < 23).length,
+      total: cs.length,
+    };
+  });
+  check("coffres à l'Agence : 2 par étage (hall, 1er, 2e, 3e)", floorChests.hall >= 2 && floorChests.f1 >= 2 && floorChests.f2 >= 2 && floorChests.f3 >= 2, JSON.stringify(floorChests));
+
+  // --- 2quat. Routine de patrouille fixe : sans cible, circuit rejoué dans l'ordre ---
+  // (au lancement, tout le monde est dans le bus : aucune détection possible)
+  const routine = await frame.evaluate(() => {
+    const G = window.__game;
+    const team = G.henchmen.filter((c) => c.alive && c.henchPoi.key === 'agency');
+    for (const c of team) { c.target = null; c.lostT = 0; }
+    const start = team.map((c) => c.routeIdx);
+    // quelques avancées groupées (chaque appel déclenche un rendu headless coûteux)
+    let ok = true;
+    for (let step = 0; step < 8; step++) {
+      window.advanceTime(1500);
+      for (const c of team) {
+        if (!c.alive || c.target) { ok = false; continue; }
+        const w = c.wp;
+        if (!w) continue;
+        // le cap courant doit être le point du circuit à l'index courant
+        const r = c.route[c.routeIdx];
+        if (Math.hypot(r.x - w.x, r.z - w.z) > 0.6) ok = false;
+      }
+    }
+    advanced = team.some((c, i) => c.routeIdx !== start[i]);
+    return { ok, advanced, idx: team.map((c) => c.routeIdx), start };
+  });
+  check('routine de patrouille fixe (mêmes endroits, même ordre)', routine.ok === true && routine.advanced === true, JSON.stringify(routine));
+
+  // --- 2quin. Évitement des murs : un mur construit entre le PNJ et son cap,
+  // il doit le contourner (et non s'y bloquer) et atteindre son objectif ---
+  const wallAvoid = await frame.evaluate(() => {
+    const G = window.__game;
+    const ag = G.POIS.find((p) => p.key === 'agency');
+    const mk = (ch) => {
+      ch.target = null; ch.lostT = 0; ch.think = 1e9; ch.mats.wood = 50;
+      ch.pos.set(ag.x - 40, Math.max(G.terrainH(ag.x - 40, ag.z), 2.4) + 0.1, ag.z); ch.vel.set(0, 0, 0);
+      ch.mode = 'ground'; ch.grounded = true; ch.wp = { x: ag.x - 30, z: ag.z };
+      // mur en bois à ~2 m devant, en travers du chemin (cellule de construction)
+      ch.yaw = -Math.PI / 2; // face à l'est (+x)
+      const r = G.computeTarget(ch, 'wall', 0);
+      G.placeBuild(ch, 'wall', r.cx, r.cz, r.y, r.d, 'wood');
+    };
+    const run = (ch, wp) => {
+      let reached = false;
+      for (let i = 0; i < 10 && !reached && ch.alive; i++) {
+        ch.wp = { x: wp.x, z: wp.z }; // le cap reste imposé (même si l'IA le remplace)
+        window.advanceTime(2500);
+        reached = Math.hypot(ch.pos.x - wp.x, ch.pos.z - wp.z) < 2.5;
+      }
+      return { reached, x: +ch.pos.x.toFixed(1), z: +ch.pos.z.toFixed(1), blocked: ch.blocked };
+    };
+    const h = G.henchmen.find((c) => c.alive && c.henchPoi.key === 'agency' && !c.boss);
+    const b = G.bots.find((c) => c.alive);
+    if (!h || !b) return { skip: true };
+    mk(h); mk(b);
+    const ombreRes = run(h, { x: ag.x - 30, z: ag.z });
+    const botRes = run(b, { x: ag.x - 30, z: ag.z });
+    return { ombreRes, botRes };
+  });
+  check("l'Ombre contourne un mur au lieu de s'y bloquer", wallAvoid.skip !== true && wallAvoid.ombreRes.reached === true, JSON.stringify(wallAvoid));
+  check('le bot contourne un mur au lieu de s\u2019y bloquer', wallAvoid.skip !== true && wallAvoid.botRes.reached === true, JSON.stringify(wallAvoid));
 
   // --- 3. Compteur : les PNJ ne comptent pas comme joueurs ---
   const counts = await frame.evaluate(() => {

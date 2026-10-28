@@ -4,7 +4,9 @@ Battle royale web complet en Three.js, jouable dans le navigateur et installable
 
 ## Saison Espions (v4)
 
-Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Requin, Le Yacht, La Grotte, La Plateforme) patrouillés par des hommes de main et cinq boss mythiques (Midas, Skye, Meowscles, Brutus, TNTina). Les boss lâchent une arme mythique et une carte d'accès qui ouvre le coffre-fort de leur POI (ligne bleue guide sur la carte). Les cabines téléphoniques rouges donnent un déguisement d'homme de main — tirer ou être touché le casse.
+Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Requin, Le Yacht, La Grotte, La Plateforme) patrouillés par des Ombres et cinq boss mythiques (Midas, Skye, Meowscles, Brutus, TNTina). Quand personne n'est détecté, Ombres et boss rejouent leur routine de patrouille fixe (toujours les mêmes endroits). Les boss lâchent une arme mythique et une carte d'accès qui ouvre le coffre-fort de leur POI (ligne bleue guide sur la carte). Les cabines téléphoniques rouges donnent un déguisement d'Ombre — tirer ou être touché le casse.
+
+L'Agence a été repensée : marbre clair (plus aucun noir), colonnes gris perle, intérieur lumineux, et deux coffres par étage (1er, 2e, 3e) en plus du hall. Les bots contourne­nt désormais les murs au lieu de s'y bloquer.
 
 ## Contenu
 
