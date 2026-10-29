@@ -98,7 +98,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 #useBar .track { height: 8px; background: rgba(0,0,0,.5); border-radius: 4px; overflow: hidden; }
 #useFill { height: 100%; width: 0; background: linear-gradient(90deg, #3db7ff, #8de8ff); }
 
-#bottomleft { position: absolute; left: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 10px; }
+#bottomleft { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: max(18px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; }
 #mats { display: flex; gap: 6px; }
 .mat { display: flex; align-items: center; gap: 6px; background: var(--c-panel); padding: 4px 10px; border-radius: 4px; font-size: 19px; font-weight: 800; border: 2px solid transparent; font-variant-numeric: tabular-nums; }
 .mat.sel { border-color: var(--c-accent); }
