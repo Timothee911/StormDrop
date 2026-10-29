@@ -290,21 +290,37 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
   const fg = new THREE.RingGeometry(0.98, 1.02, 128); fg.rotateX(-Math.PI / 2);
 }
 
-// Clouds
+// Clouds — cumulus volumétriques très hauts, très gros, dérive lente au vent
+const clouds = [];
 {
-  const cm = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x6f84a8, flatShading: true, transparent: true, opacity: 0.94 });
-  const ig = new THREE.IcosahedronGeometry(1, 0);
-  for (let i = 0; i < 26; i++) {
+  // texture de "puff" douce générée à la volée (pas d'image externe)
+  const tex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d');
+    const puff = (x, y, r, a) => { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,' + a + ')'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); };
+    puff(128, 132, 118, .95); puff(82, 148, 78, .8); puff(178, 146, 84, .8);
+    puff(128, 106, 68, .9); puff(58, 158, 52, .7); puff(202, 158, 52, .7);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const n = 15;
+  for (let i = 0; i < n; i++) {
     const grp = new THREE.Group();
-    const n = randi(3, 6);
-    for (let k = 0; k < n; k++) {
-      const m = new THREE.Mesh(ig, cm); const s = rand(7, 14);
-      m.scale.set(s * 1.4, s * 0.7, s); m.position.set(k * 9 - n * 4, rand(-2, 3), rand(-5, 5)); grp.add(m);
+    const puffs = randi(10, 15);
+    const W = rand(140, 260); // demi-largeur de l'amas
+    for (let k = 0; k < puffs; k++) {
+      const t = k / (puffs - 1) - 0.5;
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, transparent: true, opacity: rand(0.5, 0.85), depthWrite: false, fog: false,
+        color: new THREE.Color(1, 1, 1).lerp(new THREE.Color(0.82, 0.87, 0.96), rand(0, 0.6)),
+      }));
+      s.position.set(t * W * 2 + rand(-18, 18), rand(-12, 12) + Math.cos(t * Math.PI) * 8, rand(-28, 28));
+      const w = rand(130, 230); s.scale.set(w, w * rand(0.45, 0.62), 1);
+      grp.add(s);
     }
-    const a = rand(Math.PI * 2), r = rand(40, 380);
-    grp.position.set(Math.cos(a) * r, rand(135, 175), Math.sin(a) * r);
-    grp.rotation.y = rand(Math.PI);
-    scene.add(grp);
+    const a = rand(Math.PI * 2), r = rand(60, 980);
+    grp.position.set(Math.cos(a) * r, rand(290, 410), Math.sin(a) * r);
+    grp.userData.wind = rand(1.1, 2.4);
+    scene.add(grp); clouds.push(grp);
   }
 }
 
@@ -6085,6 +6101,8 @@ function step(dt) {
   updateDayNight(dt);
   updateBuilds(dt);
   updateWorld(dt);
+  // dérive des nuages au vent (retour en boucle de l'autre côté du ciel)
+  for (const c of clouds) { c.position.x += c.userData.wind * dt; if (c.position.x > 1180) c.position.x = -1180; }
   updateParticles(dt);
   updateDrops(dt);
   updateLightPool();
