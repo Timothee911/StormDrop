@@ -136,6 +136,17 @@ jobs:
           pkill -f "http.server 8090" 2>/dev/null || true
           exit $STATUS
 
+      - name: Test hauteur max + brouillard + nuages + HUD vie
+        id: hauteur
+        run: |
+          set -e
+          STATUS=0
+          nohup python3 -m http.server 8090 > /tmp/server6.log 2>&1 &
+          sleep 2
+          node .github/scripts/qa-height.cjs || STATUS=1
+          pkill -f "http.server 8090" 2>/dev/null || true
+          exit $STATUS
+
       - name: Test passe de combat (DOM, badges, sélection)
         id: passe
         run: |
@@ -162,6 +173,7 @@ jobs:
           echo "| Test navigateur reel | ${{ steps.navigateur.outcome == 'success' && 'OK' || (steps.navigateur.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Gameplay Saison Espions | ${{ steps.saison.outcome == 'success' && 'OK' || (steps.saison.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Animations (toit, chute, parachute) | ${{ steps.anim.outcome == 'success' && 'OK' || (steps.anim.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Hauteur max + brouillard + nuages + HUD vie | ${{ steps.hauteur.outcome == 'success' && 'OK' || (steps.hauteur.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Passe de combat (DOM, badges) | ${{ steps.passe.outcome == 'success' && 'OK' || (steps.passe.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_Non couvert : gameplay reel, multijoueur, audio en jeu, fonctionnalites avancees._" >> $GITHUB_STEP_SUMMARY
