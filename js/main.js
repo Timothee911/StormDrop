@@ -96,8 +96,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 
 const scene = new THREE.Scene();
-const FOG_COL = new THREE.Color(0xbfe6ff);
-scene.fog = new THREE.Fog(FOG_COL, 140 * SET.viewDist, 520 * SET.viewDist);
+const FOG_COL = new THREE.Color(0xbfe6ff); // couleur d'horizon (gardée pour le ciel), plus aucun brouillard sur la map
+scene.fog = null; // brouillard retiré : la map reste visible en entier
 const camera = new THREE.PerspectiveCamera(SET.fov, window.innerWidth / window.innerHeight, 0.1, 2600);
 // cartoon outlines (post-process, one extra full-screen pass)
 function syncLin() { const l = outline.linear ? 1 : 0; if (skyMat) skyMat.uniforms.lin.value = l; if (storm.mesh) storm.mesh.material.uniforms.lin.value = l; }
@@ -2467,7 +2467,7 @@ function openGameSettings() {
   const box = $('gameSettings'); box.classList.remove('hidden');
   settingsForm($('gsForm'), SET, (st, k) => {
     setVolumes(st.volume, st.music);
-    if (k === 'viewDist') { scene.fog.near = 140 * st.viewDist; scene.fog.far = 520 * st.viewDist; }
+    if (k === 'viewDist' && scene.fog) { scene.fog.near = 140 * st.viewDist; scene.fog.far = 520 * st.viewDist; }
     if (k === 'binds') refreshBindLabels();
     if (k === 'outline') outline.enabled = !!st.outline;
     if (k === 'outlineW') outline.width = st.outlineW;
@@ -5998,7 +5998,7 @@ function updateDayNight(dt) {
   let i = 0; while (i < TOD_KEYS.length - 2 && TOD_KEYS[i + 1][0] <= tod) i++;
   const A = TOD_KEYS[i], B = TOD_KEYS[i + 1], t = (tod - A[0]) / (B[0] - A[0]);
   if (skyMat) { lerpHex(A[1], B[1], t, skyMat.uniforms.top.value); lerpHex(A[2], B[2], t, skyMat.uniforms.mid.value); }
-  lerpHex(A[3], B[3], t, FOG_COL); scene.fog.color.copy(FOG_COL); if (skyMat) skyMat.uniforms.bot.value.copy(FOG_COL);
+  lerpHex(A[3], B[3], t, FOG_COL); if (scene.fog) scene.fog.color.copy(FOG_COL); if (skyMat) skyMat.uniforms.bot.value.copy(FOG_COL);
   lerpHex(A[4], B[4], t, sunLight.color); sunLight.intensity = lerp(A[5], B[5], t); hemi.intensity = lerp(A[6], B[6], t);
   const night = clamp(1 - sunLight.intensity / 1.2, 0, 1);
   if (stars) stars.material.opacity = night;
