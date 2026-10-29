@@ -1771,8 +1771,11 @@ function geoFor(type) { return type === 'wall' ? wallGeo : type === 'floor' ? fl
 function overlapsChar(type, cx, cz, y, d) {
   return false;
 }
+const MAX_BUILD_Y = 64; // hauteur maximale de construction (m) : impossible de bâtir plus haut
+function buildTooHigh(type, y) { return y + (type === 'cone' ? 1.6 : CELL) > MAX_BUILD_Y; }
 function placeBuild(owner, type, cx, cz, y, d, mat) {
   if (type === 'wall') [cx, cz, d] = normWall(cx, cz, d);
+  if (buildTooHigh(type, y)) return false;
   const key = buildKey(type, cx, cz, y, d);
   if (builds.has(key)) return false;
   if (owner.mats[mat] < BUILD_COST) return false;
@@ -5000,6 +5003,7 @@ let placeCd = 0;
 function tryPlace() {
   if (!ghostTarget || placeCd > 0) return;
   const t = ghostTarget;
+  if (buildTooHigh(t.type, t.y)) { placeCd = 0.3; showCenter('', 'Hauteur maximale atteinte', 0.8); return; }
   if (placeBuild(player, t.type, t.cx, t.cz, t.y, t.d, player.matSel)) { placeCd = 0.06; stats.builds++; updateHUDStatic(); }
   else if (player.mats[player.matSel] < BUILD_COST) { placeCd = 0.3; showCenter('', 'Pas assez de matériaux', 0.8); }
 }
@@ -5762,7 +5766,8 @@ function updateGhost() {
   const g = ghosts[t.type];
   pieceTransform(t.type, cx, cz, t.y, d, g);
   const exists = builds.has(buildKey(t.type, cx, cz, t.y, d));
-  g.material = player.mats[player.matSel] < BUILD_COST || exists ? GHOST_BAD : GHOST_MAT;
+  const tooHigh = buildTooHigh(t.type, t.y);
+  g.material = tooHigh || player.mats[player.matSel] < BUILD_COST || exists ? GHOST_BAD : GHOST_MAT;
   g.visible = !exists || true;
 }
 function updateWorld(dt) {
