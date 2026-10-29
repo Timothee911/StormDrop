@@ -1,5 +1,5 @@
 // STORMDROP service worker: the game works offline once it has been opened one time.
-const VERSION = 'stormdrop-v51';
+const VERSION = 'stormdrop-v52';
 const CORE = [
   './',
   './game.html',
@@ -37,10 +37,15 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   const isFont = url.host.includes('fonts.googleapis.com') || url.host.includes('fonts.gstatic.com');
   if (url.origin !== location.origin && !isFont) return;
-  // network first for pages and code (updates arrive immediately), cache as offline fallback
+  // network first with revalidation for pages and code (updates arrive immediately),
+  // cache as offline fallback only.
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then((r) => { const cp = r.clone(); caches.open(VERSION).then((c) => c.put(req, cp)); return r; }).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || caches.match('./index.html'))));
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then((r) => { const cp = r.clone(); caches.open(VERSION).then((c) => c.put(req, cp)); return r; }).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || caches.match('./index.html'))));
     return;
   }
-  e.respondWith(fetch(req).then((r) => { if (r && (r.ok || r.type === 'opaque')) { const cp = r.clone(); caches.open(VERSION).then((c) => c.put(req, cp)); } return r; }).catch(() => caches.match(req).then((hit) => hit || req)));
+  e.respondWith(fetch(req, { cache: 'no-cache' }).then((r) => { if (r && (r.ok || r.type === 'opaque')) { const cp = r.clone(); caches.open(VERSION).then((c) => c.put(req, cp)); } return r; }).catch(async (err) => {
+    const hit = await caches.match(req);
+    if (hit) return hit;
+    throw err;
+  }));
 });
