@@ -1771,11 +1771,12 @@ function geoFor(type) { return type === 'wall' ? wallGeo : type === 'floor' ? fl
 function overlapsChar(type, cx, cz, y, d) {
   return false;
 }
-const MAX_BUILD_Y = 64; // hauteur maximale de construction (m) : impossible de bâtir plus haut
+const MAX_BUILD_Y = 68; // hauteur maximale de construction (m) : mur le plus haut = base 64 (sommet 68), impossible de bâtir plus haut
 function buildTooHigh(type, y) { return y + (type === 'cone' ? 1.6 : CELL) > MAX_BUILD_Y; }
 function placeBuild(owner, type, cx, cz, y, d, mat) {
   if (type === 'wall') [cx, cz, d] = normWall(cx, cz, d);
   if (buildTooHigh(type, y)) return false;
+  if (!BUILD_MATS[mat]) return false; // matériau inconnu : ne jamais créer de mesh sans matériau
   const key = buildKey(type, cx, cz, y, d);
   if (builds.has(key)) return false;
   if (owner.mats[mat] < BUILD_COST) return false;

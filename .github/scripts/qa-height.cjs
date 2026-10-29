@@ -42,28 +42,32 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
   // --- hauteur maximale de construction ---
   const res = await page.evaluate(() => {
     const G = window.__game, p = G.player, out = {};
-    p.mats[0] = 500;
+    p.mats.wood = 500;
     const cx = 400, cz = 400; // zone libre, loin des POI
-    // signature : placeBuild(owner, type, cx, cz, y, d, mat)
-    const place = (type, x, y, d) => G.placeBuild(p, type, x, 400, y, d, 0);
+    // signature : placeBuild(owner, type, cx, cz, y, d, mat) — mat est une clé 'wood'|'stone'|'metal'
+    const place = (type, x, y, d) => G.placeBuild(p, type, x, 400, y, d, 'wood');
     out.wall60 = place('wall', cx, 60, 0);        // sommet 64 : accepté
-    out.wall64 = place('wall', cx + 1, 64, 0);    // sommet 68 : refusé
-    out.wall76 = place('wall', cx + 2, 76, 0);    // refusé
-    out.floor64 = place('floor', cx + 3, 64, 0);  // refusé
-    out.cone62 = place('cone', cx + 4, 62, 0);   // 62+1.6=63.6 : accepté
-    out.cone63 = place('cone', cx + 5, 63, 0);    // 63+1.6=64.6 : refusé
-    out.matsAfter = p.mats[0];                     // 500 - 2*BUILD_COST si 2 placements acceptés
+    out.wall64 = place('wall', cx + 1, 64, 0);    // sommet 68 : accepté (mur le plus haut possible)
+    out.wall65 = place('wall', cx + 2, 65, 0);    // sommet 69 : refusé
+    out.wall76 = place('wall', cx + 3, 76, 0);    // refusé
+    out.floor64 = place('floor', cx + 4, 64, 0);  // accepté
+    out.floor65 = place('floor', cx + 5, 65, 0);  // refusé
+    out.cone66 = place('cone', cx + 6, 66, 0);   // 66+1.6=67.6 : accepté
+    out.cone67 = place('cone', cx + 7, 67, 0);    // 67+1.6=68.6 : refusé
+    out.matsAfter = p.mats.wood;                    // 500 - 5*BUILD_COST si 4 placements acceptés
     out.buildsCount = G.builds.size;
     return out;
   });
   check('mur accepté à y=60 (sommet 64)', res.wall60 === true, JSON.stringify(res));
-  check('mur refusé à y=64', res.wall64 === false);
+  check('mur accepté à y=64 (sommet 68, le plus haut possible)', res.wall64 === true);
+  check('mur refusé à y=65', res.wall65 === false);
   check('mur refusé à y=76', res.wall76 === false);
-  check('plancher refusé à y=64', res.floor64 === false);
-  check('cône accepté à y=62', res.cone62 === true);
-  check('cône refusé à y=63', res.cone63 === false);
+  check('plancher accepté à y=64', res.floor64 === true);
+  check('plancher refusé à y=65', res.floor65 === false);
+  check('cône accepté à y=66', res.cone66 === true);
+  check('cône refusé à y=67', res.cone67 === false);
   const cost = 5; // BUILD_COST
-  check('matériaux déduits uniquement pour les placements acceptés', res.matsAfter === 500 - 2 * cost, `mats=${res.matsAfter}, attendu=${500 - 2 * cost}`);
+  check('matériaux déduits uniquement pour les placements acceptés', res.matsAfter === 500 - 4 * cost, `mats=${res.matsAfter}, attendu=${500 - 4 * cost}`);
 
   // --- brouillard retiré ---
   const fog = await page.evaluate(() => ({ fog: window.__game.scene.fog }));
@@ -117,11 +121,6 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
   check('marge gauche du HUD respectée (>= 12px)', hud.bottomleftLeft >= 12, 'left=' + hud.bottomleftLeft);
 
   await browser.close();
-  // NB : "Cannot read properties of undefined (reading 'visible')" dans projectObject est un
-  // bug PRÉEXISTANT du jeu (reproduit à l'identique sur le commit 7dcbc96, avant les changements
-  // de hauteur/brouillard/nuages) : intermittent, non fatal (le rendu repart à la frame suivante).
-  // On ne l'exclut pas silencieusement : tout AUTRE erreur JS fait échouer le test.
-  const newErrors = jsErrors.filter(e => !e.includes("reading 'visible'"));
-  console.log(JSON.stringify({ failures, preexistingVisibleErrors: jsErrors.length - newErrors.length, otherJsErrors: newErrors.slice(0, 5) }, null, 2));
-  if (failures.length > 0 || newErrors.length > 0) process.exit(1);
+  console.log(JSON.stringify({ failures, jsErrors: jsErrors.slice(0, 5) }, null, 2));
+  if (failures.length > 0 || jsErrors.length > 0) process.exit(1);
 })().catch(e => { console.error(e); process.exit(1); });

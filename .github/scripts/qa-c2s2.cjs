@@ -65,20 +65,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check("boss de l'Agence dans le hall", agencyBoss && Math.abs(agencyBoss.y - 9.05) < 1.2, 'y=' + (agencyBoss && agencyBoss.y) + ' sol=' + (agencyBoss && agencyBoss.ground));
 
   // --- 2bis. Ombres : nom, spawn sur le circuit (jamais dans le bassin) ---
-  const ombres = await frame.evaluate(() => {
-    const G = window.__game;
-    const ag = G.POIS.find((p) => p.key === 'agency');
-    const team = G.henchmen.filter((c) => c.alive && c.henchPoi.key === 'agency');
-    // le bassin de l'atrium (solide, ~3,1 x 2,6) : personne ne doit y spawn
-    const inBasin = team.filter((c) => Math.hypot(c.pos.x - ag.x, c.pos.z - ag.z) < 3.6);
-    const onRoute = team.filter((c) => c.route && c.route.some((w) => Math.hypot(w.x - c.pos.x, w.z - c.pos.z) < 1.5));
-    return {
-      names: G.henchmen.filter((c) => c.alive && !c.boss).every((c) => c.name === 'Ombre'),
-      spawnClear: inBasin.length === 0,
-      onRoute: onRoute.length,
-      team: team.length,
-    };
-  });
+  // Les ombres patrouillent : elles peuvent être entre deux points de passage à l'instant
+  // de la mesure. On sonde quelques secondes : le circuit est suivi si chacune repasse
+  // régulièrement sur un point (sinon, échec avec le dernier relevé).
+  let ombres = null;
+  for (let i = 0; i < 12; i++) {
+    ombres = await frame.evaluate(() => {
+      const G = window.__game;
+      const ag = G.POIS.find((p) => p.key === 'agency');
+      const team = G.henchmen.filter((c) => c.alive && c.henchPoi.key === 'agency');
+      // le bassin de l'atrium (solide, ~3,1 x 2,6) : personne ne doit y spawn
+      const inBasin = team.filter((c) => Math.hypot(c.pos.x - ag.x, c.pos.z - ag.z) < 3.6);
+      const onRoute = team.filter((c) => c.route && c.route.some((w) => Math.hypot(w.x - c.pos.x, w.z - c.pos.z) < 1.5));
+      return {
+        names: G.henchmen.filter((c) => c.alive && !c.boss).every((c) => c.name === 'Ombre'),
+        spawnClear: inBasin.length === 0,
+        onRoute: onRoute.length,
+        team: team.length,
+      };
+    });
+    if (ombres.spawnClear === true && ombres.onRoute === ombres.team) break;
+    await new Promise(r => setTimeout(r, 1000));
+  }
   check('PNJ nommés « Ombre »', ombres.names === true);
   check("ombres de l'Agence sur leur circuit, hors du bassin", ombres.spawnClear === true && ombres.onRoute === ombres.team, JSON.stringify(ombres));
 
