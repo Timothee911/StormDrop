@@ -4,6 +4,9 @@
 export const ISLAND_R = 400;
 export const WORLD_R = 480;
 export const CELL = 4;
+// Île ovale : étirée de 10 % d'ouest en est et aplatie de 10 % du nord au sud (rapport ~1,22).
+// Les POI restent aux mêmes coordonnées : les îlots (Requin, Yacht, Plateforme) restent des îlots.
+export const OVAL_X = 1.1, OVAL_Z = 0.9;
 
 export function mulberry32(a) {
   return function () {
@@ -40,8 +43,9 @@ export function coastR(x, z) {
 }
 
 function rawH(x, z) {
-  const r = Math.hypot(x, z);
-  const coast = coastR(x, z);
+  const ux = x / OVAL_X, uz = z / OVAL_Z; // coordonnées « ramenées au cercle » pour la forme de la côte
+  const r = Math.hypot(ux, uz);
+  const coast = coastR(ux, uz);
   const m = 1 - smooth(coast * 0.72, coast, r);
   const hills = fbm(x * 0.011 + 3, z * 0.011 + 7);
   const mount = Math.max(0, fbm(x * 0.006 + 11, z * 0.006 + 2) - 0.48) * 2.2;

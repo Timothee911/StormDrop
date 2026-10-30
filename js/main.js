@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, inGrotto, grottoCamCeil, grottoCamFloor, AGENCY_BASE, AGENCY_K, inAgencyBasement } from './world.js';
+import { terrainH, POIS, ISLAND_R, OVAL_X, OVAL_Z, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, inGrotto, grottoCamCeil, grottoCamFloor, AGENCY_BASE, AGENCY_K, inAgencyBasement } from './world.js';
 import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
@@ -98,7 +98,7 @@ renderer.toneMappingExposure = 1.1;
 const scene = new THREE.Scene();
 const FOG_COL = new THREE.Color(0xbfe6ff); // couleur d'horizon (gardée pour le ciel), plus aucun brouillard sur la map
 scene.fog = null; // brouillard retiré : la map reste visible en entier
-const camera = new THREE.PerspectiveCamera(SET.fov, window.innerWidth / window.innerHeight, 0.1, 2600);
+const camera = new THREE.PerspectiveCamera(SET.fov, window.innerWidth / window.innerHeight, 0.1, 30000); // portée très longue : la mer et les décors lointains vont jusqu'à l'horizon
 // cartoon outlines (post-process, one extra full-screen pass)
 function syncLin() { const l = outline.linear ? 1 : 0; if (skyMat) skyMat.uniforms.lin.value = l; if (storm.mesh) storm.mesh.material.uniforms.lin.value = l; }
 const outline = createOutline(renderer, { enabled: !!SET.outline, width: SET.outlineW || 1, fadeNear: 70 * SET.viewDist, fadeFar: 260 * SET.viewDist, samples: LOWQ ? 0 : HIGHQ ? 4 : 2, canvasAA: !SET.outline });
@@ -268,7 +268,7 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
   terrainMeshRef = terrain;
   scene.add(terrain);
 
-  const wg = new THREE.PlaneGeometry(3000, 3000, 1, 1); wg.rotateX(-Math.PI / 2);
+  const wg = new THREE.PlaneGeometry(80000, 80000, 1, 1); wg.rotateX(-Math.PI / 2); // la mer s'étend à perte de vue
   const wmat = new THREE.MeshStandardMaterial({ color: 0x23a3e0, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.84 });
   // animated ripples + sparkles: the normal is perturbed in the fragment shader from the world position
   wmat.onBeforeCompile = (sh) => {
@@ -286,8 +286,135 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
   };
   const water = new THREE.Mesh(wg, wmat);
   water.position.y = 0; scene.add(water);
+  // fond marin opaque sous toute la mer : sans lui, l'eau translucide laissait voir le ciel au-delà du
+  // carré de terrain et formait une bande bleu clair. Même teinte que le fond du terrain => mer uniforme.
+  const sg = new THREE.PlaneGeometry(80000, 80000, 1, 1); sg.rotateX(-Math.PI / 2);
+  const seabed = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0xd2bf86, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: 6, polygonOffsetUnits: 6 }));
+  seabed.position.y = -6.6; scene.add(seabed);
   // foam ring
   const fg = new THREE.RingGeometry(0.98, 1.02, 128); fg.rotateX(-Math.PI / 2);
+}
+
+// =====================================================================
+// DÉCORS LOINTAINS (hors map) : îles, pitons rocheux, icebergs, phare, voiliers et montagnes
+// à l'horizon. Purement visuels (aucun collider) : les joueurs sont bloqués à WORLD_R. Tout est
+// fusionné en UN SEUL maillage à couleurs de sommets => un seul appel de rendu.
+// =====================================================================
+{
+  const FR = mulberry32(20261030);
+  const fr = (a = 1, b) => (b === undefined ? FR() * a : a + FR() * (b - a));
+  const P = [], C = [];
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _sc = new THREE.Vector3(), _c = new THREE.Color();
+  const G = {
+    cyl: (seg) => new THREE.CylinderGeometry(1, 1, 1, seg, 1).translate(0, 0.5, 0),       // base à y=0, hauteur 1
+    cone: (seg) => new THREE.ConeGeometry(1, 1, seg, 1).translate(0, 0.5, 0),
+    box: () => new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
+    ico: () => new THREE.IcosahedronGeometry(1, 0),
+  };
+  const cache = {};
+  const geo = (k, seg) => cache[k + seg] || (cache[k + seg] = (G[k](seg).index ? G[k](seg).toNonIndexed() : G[k](seg)));
+  // ajoute une forme (position, échelle, rotation Y/X/Z, couleur hex)
+  function add(kind, seg, x, y, z, sx, sy, sz, hex, ry = 0, rx = 0, rz = 0) {
+    const g = geo(kind, seg), pa = g.attributes.position;
+    _e.set(rx, ry, rz); _q.setFromEuler(_e); _p.set(x, y, z); _sc.set(sx, sy, sz); _m.compose(_p, _q, _sc);
+    _c.setHex(hex);
+    for (let i = 0; i < pa.count; i++) {
+      _p.fromBufferAttribute(pa, i).applyMatrix4(_m);
+      P.push(_p.x, _p.y, _p.z);
+      const j = 0.94 + FR() * 0.12; // légère variation par face
+      C.push(_c.r * j, _c.g * j, _c.b * j);
+    }
+  }
+  const SAND = 0xf0dc9c, GRASS = 0x6cc04a, GRASS2 = 0x4fae3f, ROCK = 0x8e9196, ROCK2 = 0x6f747c, SNOW = 0xf4f8ff, ICE = 0xbfe6f5, PINE = 0x2f8f46, TRUNK = 0x6b4a2b, DSAND = 0xe3c27a;
+  const placed = [];
+  function spot(r, dMin, dMax, tries = 60) {
+    for (let t = 0; t < tries; t++) {
+      const a = fr(Math.PI * 2), d = 420 + fr(dMin, dMax) + r; // 420 = rayon max. de la côte ; dMin/dMax = écart au-delà du rivage
+      const x = Math.cos(a) * d * OVAL_X, z = Math.sin(a) * d * OVAL_Z;
+      if (placed.every((o) => Math.hypot(o.x - x, o.z - z) > o.r + r + 25)) { placed.push({ x, z, r }); return { x, z, a }; }
+    }
+    return null;
+  }
+  function pine(x, y, z, k) { add('cyl', 5, x, y, z, 0.35 * k, 1.6 * k, 0.35 * k, TRUNK); add('cone', 6, x, y + 1.1 * k, z, 1.5 * k, 3.4 * k, 1.5 * k, PINE, fr(6)); add('cone', 6, x, y + 2.7 * k, z, 1.05 * k, 2.6 * k, 1.05 * k, 0x3aa052, fr(6)); }
+  function palm(x, y, z, k) {
+    add('cyl', 5, x, y, z, 0.28 * k, 4.2 * k, 0.28 * k, 0x8a6a44, 0, fr(-0.15, 0.15), fr(-0.15, 0.15));
+    for (let i = 0; i < 5; i++) { const a = i * 1.2566 + fr(0.3); add('box', 0, x + Math.cos(a) * 1.2 * k, y + 4.1 * k, z + Math.sin(a) * 1.2 * k, 2.4 * k, 0.12 * k, 0.55 * k, 0x3f9f43, -a, 0, 0.25); }
+  }
+  // ----- îles lointaines -----
+  const types = ['green', 'green', 'green', 'sand', 'rock', 'snow', 'palm'];
+  const n = 26;
+  for (let i = 0; i < n; i++) {
+    const R = fr(38, 150), sp = spot(R, 70 + (i % 4) * 60, 1900 + (i % 5) * 140); if (!sp) continue;
+    const typ = (sp.z < -500 && FR() < 0.7) ? 'snow' : types[Math.floor(fr(types.length))];
+    const H = fr(8, 34) * (R / 90 + 0.5);
+    const baseCol = typ === 'snow' ? 0xdfeaf4 : typ === 'rock' ? ROCK2 : typ === 'sand' ? DSAND : SAND;
+    add('cyl', 11, sp.x, -6.6, sp.z, R * 1.18, 7.4, R * 1.18, baseCol, fr(6));            // socle immergé + plage
+    if (typ === 'green' || typ === 'palm') {
+      add('cyl', 10, sp.x, 0.6, sp.z, R * 0.82, 2.6, R * 0.82, GRASS, fr(6));                // plateau herbeux
+      add('cyl', 9, sp.x + fr(-R, R) * 0.1, 3.0, sp.z + fr(-R, R) * 0.1, R * 0.55, H * 0.55, R * 0.55, GRASS2, fr(6)); // colline
+      if (R > 80) add('cone', 8, sp.x + R * 0.12, 3.0 + H * 0.4, sp.z - R * 0.1, R * 0.3, H * 0.8, R * 0.3, ROCK, fr(6));
+      const nt = Math.floor(R * 0.45);
+      for (let t = 0; t < nt; t++) {
+        const a = fr(Math.PI * 2), d = Math.sqrt(FR()) * R * 0.78, tx = sp.x + Math.cos(a) * d, tz = sp.z + Math.sin(a) * d;
+        if (typ === 'palm') palm(tx, 1.2, tz, fr(1.4, 2.4)); else pine(tx, d < R * 0.35 ? 3.0 + H * 0.45 : 1.8, tz, fr(1.6, 3.0));
+      }
+    } else if (typ === 'sand') {
+      add('cyl', 10, sp.x, 0.4, sp.z, R * 0.9, 3 + H * 0.12, R * 0.9, DSAND, fr(6));
+      for (let t = 0; t < 4; t++) add('cone', 7, sp.x + fr(-R, R) * 0.45, 2, sp.z + fr(-R, R) * 0.45, R * fr(0.3, 0.5), H * fr(0.3, 0.6), R * fr(0.3, 0.5), 0xd9b768, fr(6));
+      for (let t = 0; t < Math.floor(R * 0.15); t++) { const a = fr(Math.PI * 2), d = fr(R * 0.6); palm(sp.x + Math.cos(a) * d, 1.6, sp.z + Math.sin(a) * d, fr(1.4, 2.2)); }
+    } else if (typ === 'rock') {
+      for (let t = 0; t < 5; t++) add('cone', 6, sp.x + fr(-R, R) * 0.5, 0, sp.z + fr(-R, R) * 0.5, R * fr(0.25, 0.5), H * fr(0.6, 1.6), R * fr(0.25, 0.5), t % 2 ? ROCK : ROCK2, fr(6));
+    } else { // snow : plateau enneigé + pics glacés
+      add('cyl', 10, sp.x, 0.5, sp.z, R * 0.85, 3, R * 0.85, SNOW, fr(6));
+      for (let t = 0; t < 4; t++) { const hh = H * fr(0.8, 1.8), cx = sp.x + fr(-R, R) * 0.4, cz = sp.z + fr(-R, R) * 0.4, rr = R * fr(0.22, 0.4); add('cone', 6, cx, 0, cz, rr, hh, rr, ROCK2, fr(6)); add('cone', 6, cx, hh * 0.55, cz, rr * 0.5, hh * 0.45, rr * 0.5, SNOW, fr(6)); }
+      for (let t = 0; t < Math.floor(R * 0.2); t++) { const a = fr(Math.PI * 2), d = fr(R * 0.7); pine(sp.x + Math.cos(a) * d, 2, sp.z + Math.sin(a) * d, fr(1.4, 2.2)); }
+    }
+    // phare sur une île verte/rocheuse isolée
+    if (i === 3 || i === 11) {
+      const top = typ === 'rock' ? 0 : 2.5 + H * 0.5;
+      for (let k = 0; k < 4; k++) add('cyl', 8, sp.x + R * 0.1, top + k * 4.6, sp.z + R * 0.1, 3.0 - k * 0.3, 4.6, 3.0 - k * 0.3, k % 2 ? 0xd94040 : 0xf6f4ee);
+      add('cyl', 8, sp.x + R * 0.1, top + 18.4, sp.z + R * 0.1, 2.0, 2.0, 2.0, 0xfff3b0);
+      add('cone', 8, sp.x + R * 0.1, top + 20.4, sp.z + R * 0.1, 2.9, 2.4, 2.9, 0xb53030);
+    }
+  }
+  // ----- pitons rocheux et arches (mer proche, juste au-delà de la carte) -----
+  for (let i = 0; i < 46; i++) {
+    const R = fr(5, 16), sp = spot(R, 40, 520 + (i % 3) * 260); if (!sp) continue;
+    const H = fr(10, 38);
+    add('cone', 6, sp.x, -6.6, sp.z, R, H + 6.6, R, i % 2 ? ROCK : ROCK2, fr(6));
+    if (FR() < 0.5) add('cone', 5, sp.x + R * 0.9, -6.6, sp.z + R * 0.4, R * 0.6, H * 0.6 + 6.6, R * 0.6, ROCK2, fr(6));
+    if (FR() < 0.25) add('cyl', 6, sp.x, H * 0.82, sp.z, R * 0.4, 1.2, R * 0.4, GRASS, 0);
+  }
+  // ----- icebergs au nord, bancs de sable au sud -----
+  for (let i = 0; i < 18; i++) {
+    const R = fr(8, 30), sp = spot(R, 60, 1200); if (!sp) continue;
+    if (sp.z < -150) { add('cone', 5, sp.x, -6.6, sp.z, R, fr(10, 28) + 6.6, R * 0.9, ICE, fr(6)); add('cyl', 6, sp.x, -1, sp.z, R * 1.15, 1.5, R * 1.15, 0xeaf6ff, fr(6)); }
+    else add('cyl', 9, sp.x, -6.6, sp.z, R * 1.5, 6.9, R * 1.5, SAND, fr(6));
+  }
+  // ----- voiliers et bouées -----
+  for (let i = 0; i < 12; i++) {
+    const sp = spot(8, 70, 900, 40); if (!sp) continue; const hd = fr(6.28);
+    add('box', 0, sp.x, -0.3, sp.z, 2.4, 1.3, 7.5, 0xf3efe6, hd);
+    add('box', 0, sp.x, 0.4, sp.z, 2.5, 0.4, 7.6, i % 2 ? 0xd94040 : 0x2a6aff, hd);
+    add('cyl', 4, sp.x, 1.0, sp.z, 0.12, 8.5, 0.12, 0x6b4a2b, hd);
+    add('cone', 3, sp.x + Math.sin(hd) * 0.1, 1.8, sp.z + Math.cos(hd) * 0.1, 0.12, 6.4, 2.6, 0xffffff, hd);
+  }
+  for (let i = 0; i < 20; i++) { const sp = spot(2, 30, 700, 30); if (!sp) continue; add('cyl', 6, sp.x, -0.5, sp.z, 0.9, 1.8, 0.9, 0xe33a3a); add('cyl', 6, sp.x, 1.2, sp.z, 0.4, 1.2, 0.4, 0xfff3b0); }
+  // ----- montagnes à l'horizon (teinte brumeuse, très loin) -----
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + fr(-0.2, 0.2), d = fr(4200, 6500), rr = fr(500, 1100), hh = fr(350, 800);
+    const x = Math.cos(a) * d, z = Math.sin(a) * d;
+    add('cone', 7, x, -6.6, z, rr, hh, rr * fr(0.8, 1.1), 0x93b3cf, fr(6));
+    add('cone', 7, x, hh * 0.62, z, rr * 0.4, hh * 0.38, rr * 0.4, 0xe9f2fa, fr(6));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 }));
+  mesh.frustumCulled = false; mesh.matrixAutoUpdate = false;
+  scene.add(mesh);
 }
 
 // Clouds — cumulus volumétriques très hauts, très gros, dérive lente au vent
@@ -571,7 +698,7 @@ const CYL_GEO = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
   const FL = [0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff, 0xa98bff, 0xff8a3d, 0x5ac8ff];
   let ng = 0, nf = 0, guard = 0;
   while ((ng < N || nf < NF) && guard++ < N * 14) {
-    const a = gr() * 6.283, r = Math.sqrt(gr()) * ISLAND_R * 0.95, x = Math.cos(a) * r, z = Math.sin(a) * r, h = terrainH(x, z);
+    const a = gr() * 6.283, r = Math.sqrt(gr()) * ISLAND_R * 0.95, x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z, h = terrainH(x, z);
     if (h < 2.3 || h > 26) continue;
     const bw = biomeW(x, z); if (bw.snow > 0.35 || bw.desert > 0.35) continue;
     if (Math.abs(terrainH(x + 1.2, z) - h) + Math.abs(terrainH(x, z + 1.2) - h) > 1.7) continue;
@@ -605,9 +732,9 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
   let tries = 0;
   while (pts.length + cpts.length < 620 && tries++ < 12000) {
     const a = rand(Math.PI * 2), r = Math.sqrt(R()) * ISLAND_R;
-    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z;
     const h = terrainH(x, z);
-    if (h < 2.2 || h > 34 || r > coastR(x, z) * 0.8) continue;
+    if (h < 2.2 || h > 34 || r > coastR(x / OVAL_X, z / OVAL_Z) * 0.8) continue;
     if (inPOI(x, z, 6)) continue;
     const bw = biomeW(x, z);
     if (bw.desert > 0.5) { if (R() < 0.82) continue; cpts.push({ x, z, h }); continue; }
@@ -663,7 +790,7 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
   tries = 0;
   while (rpts.length < 110 && tries++ < 4000) {
     const a = rand(Math.PI * 2), r = Math.sqrt(R()) * ISLAND_R * 0.95;
-    const x = Math.cos(a) * r, z = Math.sin(a) * r, h = terrainH(x, z);
+    const x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z, h = terrainH(x, z);
     if (h < 1.2 || inPOI(x, z, 4)) continue;
     rpts.push({ x, z, h });
   }
@@ -1332,7 +1459,7 @@ for (const p of POIS) {
 }
 // Stray chests / ammo in the wild
 for (let i = 0; i < 18; i++) {
-  const a = rand(6.28), r = Math.sqrt(R()) * ISLAND_R * 0.8, x = Math.cos(a) * r, z = Math.sin(a) * r, h = terrainH(x, z);
+  const a = rand(6.28), r = Math.sqrt(R()) * ISLAND_R * 0.8, x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z, h = terrainH(x, z);
   if (h < 2) continue;
   if (i % 2) spawnChest(x, h - 0.05, z); else ammoBoxes.push(spawnAmmoBox(x, h - 0.05, z));
 }
@@ -1463,7 +1590,7 @@ for (const s of lootSpots) {
   if (it.kind === 'weapon') spawnLoot(ammoFor(it.id), s.x + 0.8, s.y, s.z + 0.3, false);
 }
 for (let i = 0; i < 40; i++) {
-  const a = rand(6.28), r = Math.sqrt(R()) * ISLAND_R * 0.85, x = Math.cos(a) * r, z = Math.sin(a) * r, h = terrainH(x, z);
+  const a = rand(6.28), r = Math.sqrt(R()) * ISLAND_R * 0.85, x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z, h = terrainH(x, z);
   if (h < 1.5) continue;
   const it = R() < 0.6 ? randWeaponItem() : randConsum();
   spawnLoot(it, x, h, z, false);
@@ -2855,7 +2982,7 @@ function randomLandPoint(cx, cz, r) {
   for (let k = 0; k < 30; k++) {
     const a = MR() * 6.283, d = Math.sqrt(MR()) * r;
     const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
-    if (Math.hypot(x, z) < ISLAND_R && terrainH(x, z) > 1.8) return new THREE.Vector3(x, 0, z);
+    if (Math.hypot(x / OVAL_X, z / OVAL_Z) < ISLAND_R && terrainH(x, z) > 1.8) return new THREE.Vector3(x, 0, z);
   }
   return new THREE.Vector3(cx * 0.5, 0, cz * 0.5);
 }
@@ -3243,7 +3370,7 @@ function placeVehicleMesh(v, dt) {
   let b = 0;
   for (let k = 0; k < 400 && b < 5; k++) {
     const a = (b / 5) * 6.28 + rand(-0.4, 0.4), cr = coastR(Math.cos(a), Math.sin(a)) ;
-    const r = rand(ISLAND_R * 0.86, ISLAND_R * 1.05), x = Math.cos(a) * r, z = Math.sin(a) * r, h = terrainH(x, z);
+    const r = rand(ISLAND_R * 0.86, ISLAND_R * 1.05), x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z, h = terrainH(x, z);
     if (h > -1.6 || h < -5) continue;
     spawnVehicle('boat', x, z, a + Math.PI / 2); b++;
   }
@@ -3328,7 +3455,7 @@ function placePad(x, z) {
   const spots = [];
   for (const p of POIS) spots.push([p.x + rand(-p.r * 0.5, p.r * 0.5), p.z + rand(-p.r * 0.5, p.r * 0.5)]);
   for (const p of POIS) spots.push([p.x + rand(-p.r, p.r), p.z + rand(-p.r, p.r)]);
-  for (let i = 0; i < 14; i++) { const a = rand(6.28), r = rand(30, ISLAND_R * 0.7); spots.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  for (let i = 0; i < 14; i++) { const a = rand(6.28), r = rand(30, ISLAND_R * 0.7); spots.push([Math.cos(a) * r * OVAL_X, Math.sin(a) * r * OVAL_Z]); }
   spots.forEach(([x, z], i) => { if (i % 2 === 0) placePad(x, z); });
 }
 function updateMovers(ch, dt) {
