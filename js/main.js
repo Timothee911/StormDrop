@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, inGrotto, grottoCamCeil, grottoCamFloor, AGENCY_BASE, inAgencyBasement } from './world.js';
+import { terrainH, POIS, ISLAND_R, WORLD_R, CELL, mulberry32, fbm, vnoise, coastR, inPOI, biomeW, biomeAt, BIOME_NAMES, GROTTO, inGrotto, grottoCamCeil, grottoCamFloor, AGENCY_BASE, AGENCY_K, inAgencyBasement } from './world.js';
 import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
@@ -361,7 +361,11 @@ function removeTarget(m) { const i = rayTargets.indexOf(m); if (i >= 0) rayTarge
 
 // Structures (houses + builds)
 const structs = [];
+// Transformation d'échelle du plan (x, z) active pendant la construction de l'Agence :
+// tout le bâtiment est agrandi autour de son centre (hauteurs inchangées).
+let AGX = null;
 function makeStructBox(x, y, z, w, h, d, mat, o = {}) {
+  if (AGX) { x = AGX.X(x); z = AGX.Z(z); w *= AGX.k; d *= AGX.k; }
   const m = new THREE.Mesh(BOX, mat);
   m.scale.set(w, h, d); m.position.set(x, y + h / 2, z);
   m.castShadow = o.shadow !== false; m.receiveShadow = true;
@@ -403,7 +407,8 @@ HOUSE_MAT.onBeforeCompile = (sh) => {
       float isGlass = step(0.1, diffuseColor.b - diffuseColor.r) * step(0.4, diffuseColor.b + diffuseColor.g);
       float isDarkGlass = step(0.05, diffuseColor.b - diffuseColor.r) * step(length(diffuseColor.rgb), 0.35);
       float isGold = step(0.65, diffuseColor.r) * step(0.48, diffuseColor.g) * step(diffuseColor.b, 0.28);
-      float isWhiteMarble = step(0.82, diffuseColor.r) * step(0.82, diffuseColor.g) * step(0.78, diffuseColor.b);
+      float isLightGray = step(0.45, diffuseColor.r) * step(0.03, diffuseColor.b - diffuseColor.r) * step(diffuseColor.b - diffuseColor.r, 0.09) * (1.0 - isGlass);
+      float isWhiteMarble = max(step(0.82, diffuseColor.r) * step(0.82, diffuseColor.g) * step(0.78, diffuseColor.b), isLightGray);
       float isBrickOrStone = step(0.3, diffuseColor.r) * step(abs(diffuseColor.r - diffuseColor.g), 0.25) * (1.0 - isGold);
 
       // 1. MURS VERTICAUX : BARDAGE BOIS & BRIQUES FORTNITE
@@ -486,6 +491,7 @@ function finishHouse(H) { rebuildHouse(H); }
 // decoration helpers (no collider). parent = wall collider it is attached to (disappears with it)
 const _dm = new THREE.Matrix4(), _dq = new THREE.Quaternion(), _de = new THREE.Euler(), _dp = new THREE.Vector3(), _ds = new THREE.Vector3();
 function hdeco(geo, hex, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, parent = null, order = 'XYZ') {
+  if (AGX) { x = AGX.X(x); z = AGX.Z(z); if (!rx && !rz) { sx *= AGX.k; sz *= AGX.k; } }
   _de.set(rx, ry, rz, order); _dq.setFromEuler(_de); _dm.compose(_dp.set(x, y, z), _dq, _ds.set(sx, sy, sz));
   curHouse.deco.push({ geo, color: hcol(hex), m: _dm.clone(), parent, chunk: parent ? parent.chunk : chunkOfY(y) });
 }
@@ -923,6 +929,7 @@ function furniture(cx, cz, y, w, d, skipCorner, accent, avoid) {
 // collider de décor indestructible (mobilier, coffres, caisses, pads…)
 const propCols = [];
 function propBox(x, y, z, hx, hz, h) {
+  if (AGX) { x = AGX.X(x); z = AGX.Z(z); hx *= AGX.k; hz *= AGX.k; }
   const c = addCollider({ type: 'box', minX: x - hx, maxX: x + hx, minZ: z - hz, maxZ: z + hz, minY: y, maxY: y + h, indestructible: true, kind: 'prop' });
   propCols.push(c); return c;
 }
@@ -3026,7 +3033,7 @@ function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 
 // tour du manoir du Requin). Les PNJ y spawnent aussi : jamais dans un mur.
 function spyPatrol(p) {
   const rel = {
-    agency: [[0, 7.5], [8, 7.5], [10, 0], [8, -7], [0, -7.5], [-6, -7], [-10, 5], [-6, 7.5]],
+    agency: [[0, 7.5], [8, 7.5], [10, 0], [8, -7], [0, -7.5], [-6, -7], [-10, 5], [-6, 7.5]].map(([dx, dz]) => [dx * AGENCY_K, dz * AGENCY_K]), // plan agrandi
     yacht: [[-8, 2], [0, 2.6], [8, 2], [8, -2], [0, -2.6], [-8, -2]],
     rig: [[-6, 4], [0, 4.6], [6, 4], [6, -4], [0, -4.6], [-6, -4]],
     grotto: [[-7, 6], [0, 8], [7, 6], [7, -4], [0, -8], [-7, -4]],
@@ -3306,6 +3313,7 @@ const pads = [], vents = []; // vents reste vide (colonnes d'air retirées)
 const padTop = matC(0x3fa9ff, { emissive: 0x1a5fd6, emissiveIntensity: 0.5 }), padBase = matC(0xffd23f);
 function placePad(x, z) {
   const h = terrainH(x, z); if (h < 2) return null;
+  if (Math.abs(x) < 34 && Math.abs(z) < 24) return null; // empreinte de l'Agence (agrandie)
   queryCols(x, z, 2, tmpCols); if (tmpCols.some((c) => c.maxY > h + 0.3 && x > c.minX - 1.6 && x < c.maxX + 1.6 && z > c.minZ - 1.6 && z < c.maxZ + 1.6)) return null;
   const g = new THREE.Group();
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, 0.3, 16), padBase); base.position.y = 0.15; base.castShadow = true;
@@ -3369,7 +3377,7 @@ function buildVault(p, at, style) {
   if (at) { vx = at.x; vz = at.z; vy = at.y; }
   else { const s = vaultSpot(p); vx = s.x; vz = s.z; vy = Math.max(terrainH(vx, vz), 2.4); }
   curHouse = { boxes: [], deco: [], mesh: null };
-  const wallM = matC(0x5a616c, { metalness: 0.4, roughness: 0.6 });
+  const wallM = matC(0xd0d4da, { metalness: 0.0, roughness: 0.65 }); // gris clair mat (plus de noir/acier sombre)
   makeStructBox(vx, vy - 0.35, vz, 7, 0.4, 7, wallM, { indestructible: true });
   makeStructBox(vx, vy, vz - 3.3, 7, 4, 0.6, wallM, { indestructible: true });
   makeStructBox(vx - 3.3, vy, vz, 0.6, 4, 7, wallM, { indestructible: true });
@@ -3385,9 +3393,9 @@ function buildVault(p, at, style) {
     const dGrp = new THREE.Group();
     const goldM = matC(0xffc400, { metalness: 0.4, roughness: 0.4, emissive: 0xd9a400, emissiveIntensity: 0.85 });
     const doorL = new THREE.PointLight(0xffd76e, 12, 14); doorL.position.set(vx, vy + 2.4, vz + 5.2); scene.add(doorL); // éclaire la porte depuis l'avant
-    const rim = new THREE.Mesh(CYL_GEO, matC(0x7d8490, { metalness: 0.5 })); rim.scale.set(4.4, 0.7, 4.4); rim.rotation.x = Math.PI / 2; rim.position.set(0, 1.85, 0); dGrp.add(rim);
+    const rim = new THREE.Mesh(CYL_GEO, matC(0xb4bac2, { metalness: 0.1, roughness: 0.5 })); rim.scale.set(4.4, 0.7, 4.4); rim.rotation.x = Math.PI / 2; rim.position.set(0, 1.85, 0); dGrp.add(rim);
     const face = new THREE.Mesh(CYL_GEO, goldM); face.scale.set(3.8, 0.5, 3.8); face.rotation.x = Math.PI / 2; face.position.set(0, 1.85, 0.45); dGrp.add(face);
-    const hub = new THREE.Mesh(CYL_GEO, matC(0x7d8490, { metalness: 0.6 })); hub.scale.set(1.1, 0.8, 1.1); hub.rotation.x = Math.PI / 2; hub.position.set(0, 1.85, 0.6); dGrp.add(hub);
+    const hub = new THREE.Mesh(CYL_GEO, matC(0xb4bac2, { metalness: 0.1, roughness: 0.5 })); hub.scale.set(1.1, 0.8, 1.1); hub.rotation.x = Math.PI / 2; hub.position.set(0, 1.85, 0.6); dGrp.add(hub);
     for (let k = 0; k < 4; k++) { const sp = new THREE.Mesh(BOX, goldM); sp.scale.set(0.45, 3.3, 0.55); sp.position.set(0, 1.85, 0.6); sp.rotation.z = k * Math.PI / 4; dGrp.add(sp); } // rayons en relief devant la face
     dGrp.position.set(vx, vy, vz + 3.35); dGrp.traverse((m) => { m.castShadow = true; }); scene.add(dGrp);
     door = addCollider({ type: 'box', minX: vx - 1.4, maxX: vx + 1.4, minY: vy, maxY: vy + 3.7, minZ: vz + 3.05, maxZ: vz + 4.4 }); // couvre toute la porte décalée (face + moyeu)
@@ -3398,7 +3406,7 @@ function buildVault(p, at, style) {
   // bandeau lumineux + terminal de scan au-dessus de la porte
   hdeco(BOX, 0xffc400, vx, vy + 3.75, vz + 3.6, 2.4, 0.18, 0.12, 0, 0, 0, null);
   const term = new THREE.Group();
-  addBox(term, 0.5, 0.9, 0.4, 0, 0.45, 0, matC(0x6d7480, { metalness: 0.5 }));
+  addBox(term, 0.5, 0.9, 0.4, 0, 0.45, 0, matC(0xb4bac2, { metalness: 0.1, roughness: 0.5 }));
   addBox(term, 0.3, 0.2, 0.06, 0, 0.75, 0.21, matC(0x39ff88, { emissive: 0x39ff88, emissiveIntensity: 1.2 })); // écran côté sud : visible en arrivant de la salle
   term.position.set(vx + 2.1, vy + 1.2, vz + 3.9); scene.add(term);
   const c1 = spawnChest(vx - 1.4, vy + 0.05, vz - 1.2); c1.vault = true;
@@ -3505,10 +3513,17 @@ function buildSpyPOI(p) {
     const A = AGENCY_BASE;
     const BX = p.x, BZ = p.z;                 // centre du bâtiment
     const LV = [9.05, 13.45, 17.85, 22.25, 26.65]; // base de chaque niveau + toit (LV[4], pour le palier de la dernière volée)
-    const FH = 4.4, WALL = 0xdcd6c8, GOLD = 0xffc400, GLASS = 0x27313f;
+    // AGRANDISSEMENT : tout le plan (x, z) du bâtiment, des ailes, de l'hélipad et du parvis
+    // est multiplié par K autour du centre (makeStructBox/hdeco/propBox appliquent AGX);
+    // les positions posées à la main (lumières, bannières, coffres…) passent par X()/Z().
+    const K = AGENCY_K;
+    AGX = { k: K, X: (x) => BX + (x - BX) * K, Z: (z) => BZ + (z - BZ) * K };
+    const X = AGX.X, Z = AGX.Z;
+    // GRIS CLAIR : façade, sols, colonnes et soubassement en gris clair uniforme
+    const FH = 4.4, WALL = 0xd6d9de, GOLD = 0xffc400, GLASS = 0x27313f;
     const stoneM = () => matC(WALL, { roughness: 0.8 });
-    // marbre clair brillant (sols du hall et des étages — plus aucun noir à l'Agence)
-    const floorM = () => matC(0xd9d4c7, { roughness: 0.2, metalness: 0.05 });
+    // sol en gris clair brillant (hall et étages — plus aucun noir à l'Agence)
+    const floorM = () => matC(0xdcdfe3, { roughness: 0.2, metalness: 0.0 });
     const oStone = { hp: 420, mat: 'stone' };
     curHouse = { boxes: [], deco: [], mesh: null };
 
@@ -3516,16 +3531,16 @@ function buildSpyPOI(p) {
     // 3,45 (world.js). Murs de cave épais (leur face interne affleure le bord
     // de la fouille, aucune bande de terrain ne dépasse), dalle au sol,
     // escalier de 12 marches qui descend du hall, coffre-fort au centre.
-    const baseM = matC(0x6d7480, { metalness: 0.3, roughness: 0.6 });
+    const baseM = matC(0xc4c8ce, { metalness: 0.0, roughness: 0.7 });
     makeStructBox(BX, A.floor, BZ - 10, 26, 8.6 - A.floor, 1.0, baseM, { indestructible: true }); // mur nord
     makeStructBox(BX, A.floor, BZ + 10, 26, 8.6 - A.floor, 1.0, baseM, { indestructible: true }); // mur sud
     makeStructBox(BX - 13, A.floor, BZ, 1.0, 8.6 - A.floor, 20, baseM, { indestructible: true }); // mur ouest
     makeStructBox(BX + 13, A.floor, BZ, 1.0, 8.6 - A.floor, 20, baseM, { indestructible: true }); // mur est
     // dalle du sol de la cave (dessus à 3,65 : les marches y arrivent pile)
-    makeStructBox(BX, A.floor, BZ, 25, 0.2, 19, matC(0x707780, { metalness: 0.2 }), { indestructible: true });
+    makeStructBox(BX, A.floor, BZ, 25, 0.2, 19, matC(0xd2d5da, { metalness: 0.0, roughness: 0.5 }), { indestructible: true });
     // escalier : 12 marches de 0,45 qui descendent vers le nord, à l'ouest du
     // hall (trou dans la dalle du RDC : x -12,5..-8,5, z -9,5..+1)
-    const stairM = matC(0x7d8490, { metalness: 0.35, roughness: 0.55 });
+    const stairM = matC(0xbfc3c9, { metalness: 0.0, roughness: 0.6 });
     for (let i = 0; i < 12; i++) {
       const top = LV[0] - 0.45 * (i + 1);
       makeStructBox(BX - 10.5, top - 0.9, BZ + 1.0 - (i + 0.5) * 0.85, 4, 0.9, 0.85, stairM, { indestructible: true });
@@ -3596,7 +3611,7 @@ function buildSpyPOI(p) {
     // ---- ESCALIERS OUVERTS (façon Agence) : 4 volées alternées est/ouest,
     // 11 marches de 0,4 + palier d'arrivée qui s'aligne sur la dalle
     // supérieure. sgn -1 : monte vers le nord ; +1 : vers le sud.
-    const stairM2 = matC(0x7d8490, { metalness: 0.35, roughness: 0.55 });
+    const stairM2 = matC(0xbfc3c9, { metalness: 0.0, roughness: 0.6 });
     const flight = (cx, sgn, f) => {
       for (let i = 0; i < 11; i++) {
         const top = LV[f] + 0.4 * (i + 1);
@@ -3677,7 +3692,7 @@ function buildSpyPOI(p) {
     // le corridor central et la statue — 4 par niveau (RDC et étages 1-3)
     for (let f = 0; f < 4; f++) {
       for (const [cx, cz] of [[-5.5, -3], [5.5, -3], [-5.5, 3], [5.5, 3]]) {
-        hdeco(CYL_GEO, 0xb6b0a2, BX + cx, LV[f] + FH / 2, BZ + cz, 0.8, FH, 0.8);
+        hdeco(CYL_GEO, 0xb4b8be, BX + cx, LV[f] + FH / 2, BZ + cz, 0.8, FH, 0.8);
         propBox(BX + cx, LV[f], BZ + cz, 0.42, 0.42, FH); // colonne : solide
         hdeco(BOX, WALL, BX + cx, LV[f] + 0.08, BZ + cz, 1.15, 0.16, 1.15); // base
         hdeco(BOX, WALL, BX + cx, LV[f] + FH - 0.08, BZ + cz, 1.15, 0.16, 1.15); // chapiteau
@@ -3689,13 +3704,13 @@ function buildSpyPOI(p) {
     // + murs clairs) ; au RDC, la façade sud laisse la porte libre
     for (let f = 0; f < 4; f++) {
       const ly = LV[f];
-      hdeco(BOX, 0xcac4b4, BX, ly + 0.65, BZ - 9.78, 25.4, 1.3, 0.07); // mur nord
-      hdeco(BOX, 0xcac4b4, BX + 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur est
-      hdeco(BOX, 0xcac4b4, BX - 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur ouest
+      hdeco(BOX, 0xbfc3c9, BX, ly + 0.65, BZ - 9.78, 25.4, 1.3, 0.07); // mur nord
+      hdeco(BOX, 0xbfc3c9, BX + 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur est
+      hdeco(BOX, 0xbfc3c9, BX - 12.78, ly + 0.65, BZ, 0.07, 1.3, 19.4); // mur ouest
       if (f === 0) { // segments de part et d'autre de la porte (x -3..3)
-        hdeco(BOX, 0xcac4b4, BX - 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
-        hdeco(BOX, 0xcac4b4, BX + 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
-      } else hdeco(BOX, 0xcac4b4, BX, ly + 0.65, BZ + 9.78, 25.4, 1.3, 0.07); // mur sud
+        hdeco(BOX, 0xbfc3c9, BX - 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
+        hdeco(BOX, 0xbfc3c9, BX + 7.875, ly + 0.65, BZ + 9.78, 9.75, 1.3, 0.07);
+      } else hdeco(BOX, 0xbfc3c9, BX, ly + 0.65, BZ + 9.78, 25.4, 1.3, 0.07); // mur sud
     }
 
     // ---- BANNIÈRES GHOST BLEUES suspendues dans l'atrium (niveaux 1-3,
@@ -3719,7 +3734,7 @@ function buildSpyPOI(p) {
       const bMat = new THREE.MeshBasicMaterial({ map: bTex, side: THREE.DoubleSide });
       const banner = (x, y, z, ry) => {
         const b = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 3.3), bMat);
-        b.position.set(x, y, z); b.rotation.y = ry; scene.add(b);
+        b.position.set(X(x), y, Z(z)); b.rotation.y = ry; scene.add(b);
       };
       for (let f = 1; f <= 3; f++) {
         const y = LV[f] + 2.4;
@@ -3744,7 +3759,7 @@ function buildSpyPOI(p) {
 
     // ---- DRAPEAUX GHOST bleus aux quatre coins du toit
     for (const [fx, fz] of [[-11.5, -8.5], [11.5, -8.5], [-11.5, 8.5], [11.5, 8.5]]) {
-      hdeco(BOX, 0x8d929a, BX + fx, 28.65, BZ + fz, 0.22, 4, 0.22);
+      hdeco(BOX, 0xb2b7bd, BX + fx, 28.65, BZ + fz, 0.22, 4, 0.22);
       propBox(BX + fx, 26.65, BZ + fz, 0.16, 0.16, 4.4);
       hdeco(BOX, 0x1f3a8a, BX + fx + 1.1, 29.9, BZ + fz, 2.2, 1.4, 0.08);
       hdeco(BOX, 0xffffff, BX + fx + 1.1, 29.9, BZ + fz + 0.05, 0.7, 0.7, 0.02);
@@ -3763,8 +3778,8 @@ function buildSpyPOI(p) {
       // anneau doré au sol autour du bassin (emblème du hall)
       hdeco(BOX, GOLD, BX, LV[0] + 0.03, BZ, 9.2, 0.06, 8.2);
       // socle blanc à degrés (posé sur le bassin : visible de 9,75 à 10,15)
-      hdeco(BOX, 0xe8e6df, BX, LV[0] + 0.88, BZ, 2.5, 0.25, 2.0);
-      hdeco(BOX, 0xe8e6df, BX, LV[0] + 1.13, BZ, 1.9, 0.25, 1.5);
+      hdeco(BOX, 0xe6e8eb, BX, LV[0] + 0.88, BZ, 2.5, 0.25, 2.0);
+      hdeco(BOX, 0xe6e8eb, BX, LV[0] + 1.13, BZ, 1.9, 0.25, 1.5);
       propBox(BX, LV[0] + 0.7, BZ, 0.95, 0.75, 0.45); // socle : solide (9,75-10,2)
       // statue (groupe scène, or métallique) : Midas agenouillé portant le
       // globe au-dessus de lui — origine du groupe = dessus du socle (10,15)
@@ -3781,20 +3796,20 @@ function buildSpyPOI(p) {
       addBox(st, 1.1, 0.12, 1.1, 0, 3.38, 0.05, gM);      // bord du chapeau
       const globe = new THREE.Mesh(new THREE.SphereGeometry(0.85, 20, 14), matC(0x3fa9ff, { metalness: 0.3, roughness: 0.25, emissive: 0x0c3555, emissiveIntensity: 0.4 }));
       globe.position.set(0, 4.6, 0); globe.castShadow = true; st.add(globe);
-      st.position.set(BX, LV[0] + 1.1, BZ); scene.add(st);
+      st.scale.setScalar(K); st.position.set(BX, LV[0] + 1.1, BZ); scene.add(st);
       // un rayon doré au sol au pied de la statue (les mains de Midas)
       hdeco(BOX, GOLD, BX, LV[0] + 0.035, BZ, 2.6, 0.06, 0.5);
       // éclairage de la statue depuis le bassin + projecteurs sous-marins cyan
-      const stL = new THREE.PointLight(0xffd76e, 7, 16); stL.position.set(BX, LV[0] + 4.5, BZ); scene.add(stL);
-      const uw1 = new THREE.PointLight(0x3fd0ff, 2.5, 7); uw1.position.set(BX - 2, LV[0] + 0.5, BZ - 1.4); scene.add(uw1);
-      const uw2 = new THREE.PointLight(0x3fd0ff, 2.5, 7); uw2.position.set(BX + 2, LV[0] + 0.5, BZ + 1.4); scene.add(uw2);
+      const stL = new THREE.PointLight(0xffd76e, 7, 16 * K); stL.position.set(BX, LV[0] + 4.5 * K, BZ); scene.add(stL);
+      const uw1 = new THREE.PointLight(0x3fd0ff, 2.5, 7); uw1.position.set(X(BX - 2), LV[0] + 0.5, Z(BZ - 1.4)); scene.add(uw1);
+      const uw2 = new THREE.PointLight(0x3fd0ff, 2.5, 7); uw2.position.set(X(BX + 2), LV[0] + 0.5, Z(BZ + 1.4)); scene.add(uw2);
     }
 
     // ---- INTÉRIEUR : accueil du RDC + aménagement des étages autour de l'atrium
     // tourniquets de sécurité blancs de part et d'autre de la porte (comme
     // l'entrée de la vraie Agence) avec bandeau LED vert
     for (const tx of [-2.6, 2.6]) {
-      hdeco(BOX, 0xe8e6df, BX + tx, LV[0] + 0.55, BZ + 8.3, 0.9, 1.1, 0.55);
+      hdeco(BOX, 0xe6e8eb, BX + tx, LV[0] + 0.55, BZ + 8.3, 0.9, 1.1, 0.55);
       hdeco(BOX, 0x2bd94a, BX + tx, LV[0] + 1.05, BZ + 8.3, 0.7, 0.08, 0.05);
       propBox(BX + tx, LV[0], BZ + 8.3, 0.45, 0.28, 1.1);
     }
@@ -3819,7 +3834,7 @@ function buildSpyPOI(p) {
     propBox(BX + 1.4, LV[1], BZ + 6.4, 1.7, 0.75, 0.6);
     for (const s of [-1, 1]) hdeco(BOX, 0x9aa1ab, BX + 1.4 + s * 1.1, LV[1] + 0.3, BZ + 5.3, 0.55, 0.6, 0.55); // chaises
     hdeco(BOX, GOLD, BX + 1.4, LV[1] + 1.0, BZ + 6.4, 0.7, 0.5, 0.45);      // coffre doré sur la table
-    { const chL = new THREE.PointLight(0xffd76e, 2.5, 6); chL.position.set(BX + 1.4, LV[1] + 1.4, BZ + 6.4); scene.add(chL); }
+    { const chL = new THREE.PointLight(0xffd76e, 2.5, 6); chL.position.set(X(BX + 1.4), LV[1] + 1.4, Z(BZ + 6.4)); scene.add(chL); }
     // chaise dorée de Midas à la tête sud de la table (l'icône de l'Agence)
     hdeco(CYL_GEO, GOLD, BX + 1.4, LV[1] + 0.3, BZ + 8.2, 0.55, 0.6, 0.55);
     hdeco(BOX, GOLD, BX + 1.4, LV[1] + 1.1, BZ + 8.55, 0.9, 1.0, 0.16);
@@ -3827,15 +3842,15 @@ function buildSpyPOI(p) {
     propBox(BX + 1.4, LV[1], BZ + 8.2, 0.45, 0.4, 1.2);
     // lampes suspendues : globes blancs au bout de tiges gris perle
     for (const gx of [-0.6, 3.4]) {
-      hdeco(BOX, 0x8d929a, BX + gx, LV[1] + 3.0, BZ + 6.4, 0.05, 1.4, 0.05);
+      hdeco(BOX, 0xb2b7bd, BX + gx, LV[1] + 3.0, BZ + 6.4, 0.05, 1.4, 0.05);
       const gl = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), matC(0xf4f2ea, { emissive: 0xfff4d6, emissiveIntensity: 0.7 }));
-      gl.position.set(BX + gx, LV[1] + 2.2, BZ + 6.4); scene.add(gl);
-      const gll = new THREE.PointLight(0xfff0c8, 3, 8); gll.position.set(BX + gx, LV[1] + 2.2, BZ + 6.4); scene.add(gll);
+      gl.position.set(X(BX + gx), LV[1] + 2.2, Z(BZ + 6.4)); scene.add(gl);
+      const gll = new THREE.PointLight(0xfff0c8, 3, 8); gll.position.set(X(BX + gx), LV[1] + 2.2, Z(BZ + 6.4)); scene.add(gll);
     }
     // bancs blancs et jardinières le long des balcons des niveaux 1-3
     for (let f = 1; f <= 3; f++) {
       for (const s of [-1, 1]) {
-        hdeco(BOX, 0xe8e6df, BX + s * 7.5, LV[f] + 0.28, BZ + 8.6, 2.4, 0.55, 0.6); // banc blanc
+        hdeco(BOX, 0xe6e8eb, BX + s * 7.5, LV[f] + 0.28, BZ + 8.6, 2.4, 0.55, 0.6); // banc blanc
         propBox(BX + s * 7.5, LV[f], BZ + 8.6, 1.2, 0.3, 0.5);
         hdeco(BOX, 0x8a8f98, BX + s * 7.5, LV[f] + 0.45, BZ + 7.4, 1.4, 0.9, 1.4); // jardinière
         hdeco(BOX, 0x2d5a35, BX + s * 7.5, LV[f] + 1.0, BZ + 7.4, 1.2, 0.5, 1.2); // plante
@@ -3862,13 +3877,13 @@ function buildSpyPOI(p) {
 
     // ---- PARVIS : chemin pavé du portique vers l'entrée + braseros + haies
     // (la statue de Midas est désormais DANS le hall, au centre de l'atrium)
-    hdeco(BOX, 0xd8d4c8, BX, p.h + 0.03, BZ + 17.5, 6, 0.06, 9);
+    hdeco(BOX, 0xd3d6db, BX, p.h + 0.03, BZ + 17.5, 6, 0.06, 9);
     // braseros de part et d'autre du chemin (façon Agence de Fortnite)
     for (const bxp of [-8, 8]) {
       hdeco(CYL_GEO, 0xa8adb4, BX + bxp, p.h + 0.5, BZ + 16, 1.2, 1.0, 1.2);
       hdeco(CYL_GEO, 0xff8c1a, BX + bxp, p.h + 1.1, BZ + 16, 0.7, 0.25, 0.7);
       propBox(BX + bxp, p.h, BZ + 16, 1.0, 1.0, 1.1);
-      const fl = new THREE.PointLight(0xff9a2e, 5, 14); fl.position.set(BX + bxp, p.h + 1.6, BZ + 16); scene.add(fl);
+      const fl = new THREE.PointLight(0xff9a2e, 5, 14); fl.position.set(X(BX + bxp), p.h + 1.6, Z(BZ + 16)); scene.add(fl);
     }
     // haies basses encadrant le parvis
     for (const [hx, hz, hw, hd] of [[-16, 12, 6, 1.6], [16, 12, 6, 1.6], [-16, 20, 6, 1.6], [16, 20, 6, 1.6]]) {
@@ -3891,7 +3906,7 @@ function buildSpyPOI(p) {
       makeStructBox(wx, 9.0, BZ + 10, 8, 8.85, 1.0, stoneM(), oStone);   // mur sud
       // toit plat sombre (gravier) + corniche dorée
       makeStructBox(wx, 17.4, BZ, 8.5, 0.45, 21, stoneM(), oStone);
-      hdeco(BOX, 0x8d929a, wx, 17.86, BZ, 8.4, 0.06, 20.9);
+      hdeco(BOX, 0xb2b7bd, wx, 17.86, BZ, 8.4, 0.06, 20.9);
       hdeco(BOX, GOLD, wx, 17.78, BZ + 10.15, 8.6, 0.28, 0.14);
       hdeco(BOX, GOLD, wx, 17.78, BZ - 10.15, 8.6, 0.28, 0.14);
       // fenêtres étroites sur les deux niveaux, face extérieure (x ±21,5)
@@ -3916,7 +3931,7 @@ function buildSpyPOI(p) {
         }
       }
       // éclairage intérieur de l'aile
-      const wingL = new THREE.PointLight(0xffe0b8, 4, 14); wingL.position.set(wx, 15.8, BZ); scene.add(wingL);
+      const wingL = new THREE.PointLight(0xffe0b8, 5, 14 * K); wingL.position.set(X(wx), 15.8, BZ); scene.add(wingL);
     }
 
     // ---- TOIT DU BLOC CENTRAL : surface gravier sombre + groupes de
@@ -3924,7 +3939,7 @@ function buildSpyPOI(p) {
     // selon les rectangles de la dalle annulaire pour laisser OUVERTS le
     // trou de l'atrium (x ±4,5, z ±4) et la sortie de l'escalier ouest
     for (const [cx, cz, w, d] of [[8.625, 0, 8.25, 19.5], [-6.25, 0, 3.5, 19.5], [-10.375, -7.625, 4.75, 4.25], [-10.375, 7.625, 4.75, 4.25], [0, -6.875, 9, 5.75], [0, 6.875, 9, 5.75]]) {
-      hdeco(BOX, 0x8d929a, BX + cx, 26.71, BZ + cz, w - 0.3, 0.06, d - 0.3);
+      hdeco(BOX, 0xb2b7bd, BX + cx, 26.71, BZ + cz, w - 0.3, 0.06, d - 0.3);
     }
     for (const [ax, az] of [[8.5, -7], [-8.5, 6], [2, -7.5], [-2, 7.5]]) {
       hdeco(BOX, 0x9aa0a8, BX + ax, 27.15, BZ + az, 1.3, 0.85, 1.05);
@@ -3946,12 +3961,12 @@ function buildSpyPOI(p) {
       addBox(st2, 0.6, 0.65, 0.6, 0, 3.05, 0.05, dS);    // tête
       const globe2 = new THREE.Mesh(new THREE.SphereGeometry(0.95, 20, 14), matC(0x3fa9ff, { metalness: 0.4, roughness: 0.2, emissive: 0x0c3555, emissiveIntensity: 0.5 }));
       globe2.position.set(0, 4.95, 0); globe2.castShadow = true; st2.add(globe2);
-      st2.scale.set(0.65, 0.65, 0.65);
-      st2.position.set(BX, p.h + 0.9, BZ + 23); scene.add(st2);
+      st2.scale.setScalar(0.65 * K);
+      st2.position.set(BX, p.h + 0.9, Z(BZ + 23)); scene.add(st2);
       // socle métallique
       hdeco(BOX, 0xa8adb4, BX, p.h + 0.4, BZ + 23, 2.6, 0.8, 2.6);
       propBox(BX, p.h, BZ + 23, 1.3, 1.3, 0.85);
-      const st2L = new THREE.PointLight(0xbfd8ff, 4, 12); st2L.position.set(BX, p.h + 4.2, BZ + 23); scene.add(st2L);
+      const st2L = new THREE.PointLight(0xbfd8ff, 4, 12); st2L.position.set(BX, p.h + 4.2 * K, Z(BZ + 23)); scene.add(st2L);
       // deux arbres taillés sur touffes d'herbe + deux bancs bleus incurvés
       for (const tx of [-3.8, 3.8]) {
         hdeco(CYL_GEO, 0x6b4a2c, BX + tx, p.h + 1.2, BZ + 23, 0.22, 2.4, 0.22);
@@ -3982,7 +3997,7 @@ function buildSpyPOI(p) {
       }
       // plateforme (dessus à 11,45) + surface gravier
       makeStructBox(HX, PT, HZ, 9.5, 0.4, 9.5, matC(0x8a8f98, { metalness: 0.35, roughness: 0.6 }), { indestructible: true });
-      hdeco(BOX, 0x8d929a, HX, PT + 0.41, HZ, 9.3, 0.04, 9.3);
+      hdeco(BOX, 0xb2b7bd, HX, PT + 0.41, HZ, 9.3, 0.04, 9.3);
       // cercle jaune + H (texture canvas)
       const hTex = canvasTex((g, s) => {
         g.fillStyle = '#8d929a'; g.fillRect(0, 0, s, s);
@@ -3993,8 +4008,8 @@ function buildSpyPOI(p) {
         g.textAlign = 'center'; g.textBaseline = 'middle';
         g.fillText('H', s / 2, s / 2);
       }, 256);
-      const hDec = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 6.4), new THREE.MeshBasicMaterial({ map: hTex }));
-      hDec.rotation.x = -Math.PI / 2; hDec.position.set(HX, PT + 0.46, HZ); scene.add(hDec);
+      const hDec = new THREE.Mesh(new THREE.PlaneGeometry(6.4 * K, 6.4 * K), new THREE.MeshBasicMaterial({ map: hTex }));
+      hDec.rotation.x = -Math.PI / 2; hDec.position.set(X(HX), PT + 0.46, Z(HZ)); scene.add(hDec);
       // garde-corps périmétriques (ouverture au milieu de la face sud pour l'escalier)
       for (const [hx, hz, w, d] of [[0, -4.5, 9.4, 0.1], [-3.15, 4.5, 2.7, 0.1], [3.15, 4.5, 2.7, 0.1], [-4.5, 0, 0.1, 8.2], [4.5, 0, 0.1, 8.2]]) {
         hdeco(BOX, 0x9aa0a8, HX + hx, PT + 0.75, HZ + hz, w, 0.9, d);
@@ -4003,11 +4018,11 @@ function buildSpyPOI(p) {
       // feux de bord jaunes aux quatre coins
       for (const [ex, ez] of [[-3.9, -3.9], [3.9, -3.9], [-3.9, 3.9], [3.9, 3.9]]) {
         hdeco(BOX, 0xffc400, HX + ex, PT + 0.5, HZ + ez, 0.22, 0.22, 0.22);
-        const el = new THREE.PointLight(0xffc400, 1.2, 5); el.position.set(HX + ex, PT + 0.8, HZ + ez); scene.add(el);
+        const el = new THREE.PointLight(0xffc400, 1.2, 5); el.position.set(X(HX + ex), PT + 0.8, Z(HZ + ez)); scene.add(el);
       }
       // bidons de carburant rouge et blanc + cage
       hdeco(BOX, 0xb03a2e, HX + 3.1, PT + 0.65, HZ + 3.2, 0.7, 0.8, 0.7);
-      hdeco(BOX, 0xe8e6df, HX + 2.3, PT + 0.65, HZ + 3.2, 0.7, 0.8, 0.7);
+      hdeco(BOX, 0xe6e8eb, HX + 2.3, PT + 0.65, HZ + 3.2, 0.7, 0.8, 0.7);
       hdeco(BOX, 0x9aa0a8, HX + 2.7, PT + 1.15, HZ + 3.2, 1.8, 0.08, 1.0);
       // ESCALIER D'ACIER : 5 marches qui descendent vers le chemin (au sud)
       for (let i = 0; i < 5; i++) {
@@ -4019,11 +4034,11 @@ function buildSpyPOI(p) {
         hdeco(BOX, 0x9aa0a8, HX + rx, PT + 0.35, HZ + 7.4, 0.08, 0.75, 5.2);
       }
       // chemin pavé balisé du parvis nord de l'Agence vers l'escalier
-      hdeco(BOX, 0xd8d4c8, HX, p.h + 0.03, HZ + 10.5, 3.6, 0.06, 5);
+      hdeco(BOX, 0xd3d6db, HX, p.h + 0.03, HZ + 10.5, 3.6, 0.06, 5);
       for (const s of [-1, 1]) {
-        hdeco(BOX, 0xe8e6df, HX + s * 2.1, p.h + 0.45, HZ + 10.5, 0.3, 0.9, 4.6);
-        hdeco(BOX, 0xe8e6df, HX + s * 2.1, p.h + 0.75, HZ + 8.0, 0.3, 0.5, 0.3);
-        hdeco(BOX, 0xe8e6df, HX + s * 2.1, p.h + 0.75, HZ + 12.9, 0.3, 0.5, 0.3);
+        hdeco(BOX, 0xe6e8eb, HX + s * 2.1, p.h + 0.45, HZ + 10.5, 0.3, 0.9, 4.6);
+        hdeco(BOX, 0xe6e8eb, HX + s * 2.1, p.h + 0.75, HZ + 8.0, 0.3, 0.5, 0.3);
+        hdeco(BOX, 0xe6e8eb, HX + s * 2.1, p.h + 0.75, HZ + 12.9, 0.3, 0.5, 0.3);
       }
       { const H = curHouse; curHouse = null; finishHouse(H); }
     }
@@ -4040,42 +4055,46 @@ function buildSpyPOI(p) {
     sg.fillStyle = '#c9d6f2'; sg.font = 'bold 26px Georgia, serif';
     sg.fillText('CONFIDENTIAL · EYES ONLY', 384, 190);
     const signTex = new THREE.CanvasTexture(signCanvas);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 2.6), new THREE.MeshBasicMaterial({ map: signTex }));
-    sign.position.set(BX, 12.9, BZ + 10.56); scene.add(sign);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5 * K, 2.6 * K), new THREE.MeshBasicMaterial({ map: signTex }));
+    sign.position.set(BX, 12.9, Z(BZ + 10.56)); scene.add(sign);
 
-    // ---- éclairage : hall, étages de l'atrium, sous-sol et façade
-    const hallL = new THREE.PointLight(0xffe0b8, 10, 26); hallL.position.set(BX, 12, BZ); scene.add(hallL);
+    // ---- éclairage : hall, étages de l'atrium, sous-sol et façade (portée x K)
+    const hallL = new THREE.PointLight(0xffe0b8, 10, 26 * K); hallL.position.set(BX, 12, BZ); scene.add(hallL);
     for (let f = 1; f <= 3; f++) {
-      const lE = new THREE.PointLight(0xffe0b8, 5, 15); lE.position.set(BX + 7, LV[f] + 3, BZ); scene.add(lE);
-      const lW = new THREE.PointLight(0xffe0b8, 5, 15); lW.position.set(BX - 7, LV[f] + 3, BZ); scene.add(lW);
+      const lE = new THREE.PointLight(0xffe0b8, 6, 18 * K); lE.position.set(X(BX + 7), LV[f] + 3, BZ); scene.add(lE);
+      const lW = new THREE.PointLight(0xffe0b8, 6, 18 * K); lW.position.set(X(BX - 7), LV[f] + 3, BZ); scene.add(lW);
     }
-    const baseL = new THREE.PointLight(0x7fd0ff, 9, 24); baseL.position.set(BX, 7.2, BZ); scene.add(baseL);
-    const stairL = new THREE.PointLight(0xffc98a, 5, 14); stairL.position.set(BX - 10.5, 6.5, BZ - 4); scene.add(stairL);
-    const faceL = new THREE.PointLight(0xffe0b8, 8, 20); faceL.position.set(BX, 14, BZ + 16); scene.add(faceL);
+    // sous-sol : lumière claire sur toute la cave (plus aucun coin sombre)
+    for (const [bx2, bz2, rg] of [[0, 0, 24], [-10.5, -4, 18], [10, 2, 18]]) {
+      const baseL = new THREE.PointLight(0xf2f6ff, 8, rg * K); baseL.position.set(X(BX + bx2), 6.2, Z(BZ + bz2)); scene.add(baseL);
+    }
+    const faceL = new THREE.PointLight(0xffe0b8, 8, 20 * K); faceL.position.set(BX, 14, Z(BZ + 16)); scene.add(faceL);
 
-    // ---- COFFRE-FORT AU SOUS-SOL (la cave est à 3,65 au-dessus de la dalle)
-    // derrière la PORTE CIRCULAIRE DORÉE (style Agence de Fortnite)
-    buildVault(p, { x: BX, y: 3.65, z: BZ }, 'agency');
+    // ---- COFFRE-FORT AU SOUS-SOL, comme dans la vraie Agence : en entrant par le
+    // sud, premier grand couloir sur la DROITE (côté EST), descente d'escalier d'un
+    // niveau et porte circulaire dorée au bout. Salle posée dans l'angle nord-est
+    // de la cave (la cave est à 3,65 au-dessus de la dalle), porte tournée vers le sud.
+    AGX = null; // la salle du coffre-fort garde ses dimensions (coordonnées absolues)
+    buildVault(p, { x: BX + 12, y: 3.65, z: BZ - 9.5 }, 'agency');
     // cabine téléphonique de l'agent près du parvis (côté est de la terrasse)
-    buildPhoneBooth(p, { x: BX + 11.5, y: p.h, z: BZ + 13 });
-
+    buildPhoneBooth(p, { x: X(BX + 11.5), y: p.h, z: Z(BZ + 13) });
     // ---- coffres et butin du hall (le reste est dans le coffre-fort)
-    spawnChest(BX - 6, LV[0] + 0.05, BZ - 4);
-    spawnChest(BX + 7, LV[0] + 0.05, BZ + 3);
+    spawnChest(X(BX - 6), LV[0] + 0.05, Z(BZ - 4));
+    spawnChest(X(BX + 7), LV[0] + 0.05, Z(BZ + 3));
     // ---- coffres des étages : deux par niveau (1er, 2e, 3e), posés à l'écart
     // du mobilier, des colonnes et des trous d'escalier/atrium
-    spawnChest(BX - 8, LV[1] + 0.05, BZ - 7);
-    spawnChest(BX + 7.5, LV[1] + 0.05, BZ + 5.5);
-    spawnChest(BX - 6.25, LV[2] + 0.05, BZ);
-    spawnChest(BX + 9, LV[2] + 0.05, BZ + 6.5);
-    spawnChest(BX - 8, LV[3] + 0.05, BZ);
-    spawnChest(BX, LV[3] + 0.05, BZ - 8.5);
-    ammoBoxes.push(spawnAmmoBox(BX + 2, LV[0] + 0.05, BZ - 6));
-    lootSpots.push({ x: BX, y: LV[0] + 0.6, z: BZ - 5 });
-    lootSpots.push({ x: BX - 8, y: LV[0] + 0.6, z: BZ + 4 });
-    lootSpots.push({ x: BX - 8, y: LV[1] + 0.6, z: BZ - 7 });
-    lootSpots.push({ x: BX + 9, y: LV[2] + 0.6, z: BZ + 6.5 });
-    lootSpots.push({ x: BX - 8, y: LV[3] + 0.6, z: BZ });
+    spawnChest(X(BX - 8), LV[1] + 0.05, Z(BZ - 7));
+    spawnChest(X(BX + 7.5), LV[1] + 0.05, Z(BZ + 5.5));
+    spawnChest(X(BX - 6.25), LV[2] + 0.05, BZ);
+    spawnChest(X(BX + 9), LV[2] + 0.05, Z(BZ + 6.5));
+    spawnChest(X(BX - 8), LV[3] + 0.05, BZ);
+    spawnChest(BX, LV[3] + 0.05, Z(BZ - 8.5));
+    ammoBoxes.push(spawnAmmoBox(X(BX + 2), LV[0] + 0.05, Z(BZ - 6)));
+    lootSpots.push({ x: BX, y: LV[0] + 0.6, z: Z(BZ - 5) });
+    lootSpots.push({ x: X(BX - 8), y: LV[0] + 0.6, z: Z(BZ + 4) });
+    lootSpots.push({ x: X(BX - 8), y: LV[1] + 0.6, z: Z(BZ - 7) });
+    lootSpots.push({ x: X(BX + 9), y: LV[2] + 0.6, z: Z(BZ + 6.5) });
+    lootSpots.push({ x: X(BX - 8), y: LV[3] + 0.6, z: BZ });
   } else if (p.key === 'shark') {
     // manoir moderne blanc à toits plats (la Sky Villa) : rez creux + terrasse
     curHouse = { boxes: [], deco: [], mesh: null };
@@ -4554,7 +4573,7 @@ function buildSpyPOI(p) {
     placePad(p.x - 16, p.z);
   }
   if (p.key !== 'yacht' && p.key !== 'rig' && p.key !== 'grotto' && p.key !== 'agency') { buildVault(p); buildPhoneBooth(p); }
-  if (p.key === 'agency') placePad(p.x - 22, p.z + 8);
+  if (p.key === 'agency') placePad(p.x - 44, p.z + 12);
 }
 const spySpot0 = lootSpots.length;
 for (const p of POIS) if (p.spy) buildSpyPOI(p);
@@ -4660,7 +4679,7 @@ function startGame() {
     // La Grotte : Brutus et ses ombres gardent la caverne souterraine
     else if (p.key === 'grotto') { sy = GROTTO.floor1 + 3.6 + 0.1; wpBox = { x: GROTTO.cavernX, z: GROTTO.cavernZ, hx: 10, hz: 10 }; }
     // L'Agence : le boss garde le hall du rez-de-chaussée (le coffre-fort est en sous-sol)
-    else if (p.key === 'agency') { sy = p.h + 0.15; wpBox = { x: p.x, z: p.z, hx: 10, hz: 7 }; }
+    else if (p.key === 'agency') { sy = p.h + 0.15; wpBox = { x: p.x, z: p.z, hx: 10 * AGENCY_K, hz: 7 * AGENCY_K }; }
     else sy = null; // terrain : hauteur calculée au point de spawn
     const spawnAt = (w) => {
       if (sy !== null && sy !== undefined) return sy;

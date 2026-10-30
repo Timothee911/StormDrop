@@ -52,7 +52,7 @@ function rawH(x, z) {
 // Carte inspirée du Chapitre 2 Saison 2 : cinq POI espions (L'Agence au
 // centre, Le Requin, Le Yacht, La Grotte, La Plateforme) + lieux classiques.
 export const POIS = [
-  { name: "L'Agence", key: 'agency', spy: true, x: 0, z: 0, r: 42, style: 'agency' },
+  { name: "L'Agence", key: 'agency', spy: true, x: 0, z: 0, r: 62, style: 'agency' },
   { name: 'Le Requin', key: 'shark', spy: true, x: -292, z: -246, r: 31, style: 'shark' },
   { name: 'Le Yacht', key: 'yacht', spy: true, x: 412, z: -82, r: 24, style: 'yacht' },
   // La Grotte est sur la grande île : une caverne SÈCHE cachée sous une
@@ -157,7 +157,11 @@ export const GROTTO = {
 // Sous-sol de l'Agence (bâtiment centré en 0,0) : empreinte de la cave et
 // hauteur du plancher de la cave. Le terrain y est abaissé (AGENCY_BASE.floor)
 // sous les dalles du bâtiment — la physique y est celle des colliders.
-export const AGENCY_BASE = { x0: -13.6, x1: 13.6, z0: -10.6, z1: 10.6, floor: 3.45, camCeil: 8.5 };
+// L'Agence est agrandie d'un facteur AGENCY_K (x, z) : mêmes hauteurs, plan 1,5x plus grand.
+export const AGENCY_K = 1.5;
+// Les bornes sont calées sur la grille du maillage terrain (cellule 3,375 m) : le dernier sommet creusé
+// tombe sous le mur de la cave (x ±20,25) ou sous le soubassement (z ±16,875), jamais dans la salle.
+export const AGENCY_BASE = { x0: -20.4, x1: 20.4, z0: -17.0, z1: 17.0, floor: 3.45, camCeil: 8.5 };
 export function inAgencyBasement(x, z) {
   return x > AGENCY_BASE.x0 && x < AGENCY_BASE.x1 && z > AGENCY_BASE.z0 && z < AGENCY_BASE.z1;
 }

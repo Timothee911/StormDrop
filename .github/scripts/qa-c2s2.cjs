@@ -74,8 +74,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const G = window.__game;
       const ag = G.POIS.find((p) => p.key === 'agency');
       const team = G.henchmen.filter((c) => c.alive && c.henchPoi.key === 'agency');
-      // le bassin de l'atrium (solide, ~3,1 x 2,6) : personne ne doit y spawn
-      const inBasin = team.filter((c) => Math.hypot(c.pos.x - ag.x, c.pos.z - ag.z) < 3.6);
+      // le bassin de l'atrium (solide, agrandi x1,5 : ~4,65 x 3,9) : personne ne doit y spawn
+      const inBasin = team.filter((c) => Math.hypot(c.pos.x - ag.x, c.pos.z - ag.z) < 5.4);
       const onRoute = team.filter((c) => c.route && c.route.some((w) => Math.hypot(w.x - c.pos.x, w.z - c.pos.z) < 1.5));
       return {
         names: G.henchmen.filter((c) => c.alive && !c.boss).every((c) => c.name === 'Ombre'),
@@ -94,7 +94,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const floorChests = await frame.evaluate(() => {
     const G = window.__game;
     const ag = G.POIS.find((p) => p.key === 'agency');
-    const cs = G.chests.filter((c) => !c.vault && !c.opened && Math.abs(c.x - ag.x) < 14 && Math.abs(c.z - ag.z) < 11);
+    const cs = G.chests.filter((c) => !c.vault && !c.opened && Math.abs(c.x - ag.x) < 21 && Math.abs(c.z - ag.z) < 16.5);
     return {
       hall: cs.filter((c) => c.y < 10).length,
       f1: cs.filter((c) => c.y > 13 && c.y < 14).length,
@@ -137,8 +137,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const ag = G.POIS.find((p) => p.key === 'agency');
     const mk = (ch) => {
       ch.target = null; ch.lostT = 0; ch.think = 1e9; ch.mats.wood = 50;
-      ch.pos.set(ag.x - 40, Math.max(G.terrainH(ag.x - 40, ag.z), 2.4) + 0.1, ag.z); ch.vel.set(0, 0, 0);
-      ch.mode = 'ground'; ch.grounded = true; ch.wp = { x: ag.x - 30, z: ag.z };
+      ch.pos.set(ag.x - 58, Math.max(G.terrainH(ag.x - 58, ag.z), 2.4) + 0.1, ag.z); ch.vel.set(0, 0, 0);
+      ch.mode = 'ground'; ch.grounded = true; ch.wp = { x: ag.x - 48, z: ag.z };
       // mur en bois à ~2 m devant, en travers du chemin (cellule de construction)
       ch.yaw = -Math.PI / 2; // face à l'est (+x)
       const r = G.computeTarget(ch, 'wall', 0);
@@ -157,8 +157,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const b = G.bots.find((c) => c.alive);
     if (!h || !b) return { skip: true };
     mk(h); mk(b);
-    const ombreRes = run(h, { x: ag.x - 30, z: ag.z });
-    const botRes = run(b, { x: ag.x - 30, z: ag.z });
+    const ombreRes = run(h, { x: ag.x - 48, z: ag.z });
+    const botRes = run(b, { x: ag.x - 48, z: ag.z });
     return { ombreRes, botRes };
   });
   check("l'Ombre contourne un mur au lieu de s'y bloquer", wallAvoid.skip !== true && wallAvoid.ombreRes.reached === true, JSON.stringify(wallAvoid));
@@ -559,8 +559,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       G.keys.KeyW = false;
       return p.alive && Math.hypot(p.pos.x - tx, p.pos.z - tz) < 2.5;
     };
-    // DESCENTE RÉELLE de l'escalier (12 marches vers le nord, à l'ouest du hall)
-    const stairs = walkTo(-10.5, 8, 40); // va au sommet de l'escalier
+    // DESCENTE RÉELLE de l'escalier (12 marches vers le nord, à l'ouest du hall, plan agrandi x1,5)
+    const stairs = walkTo(-15.75, 12, 60); // va au sommet de l'escalier
     let down = false;
     if (stairs) {
       G.setCam(0, -0.2); // regarde plein nord (descente)
@@ -572,12 +572,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       for (let i = 0; i < 90; i++) {
         window.advanceTime(150);
         if (!p.alive) break;
-        if (p.pos.z < -8.5 && p.pos.y < 4.5 && p.grounded) { down = true; break; }
+        if (p.pos.z < -12.5 && p.pos.y < 4.5 && p.grounded) { down = true; break; }
         // GARDE-FOU : si le joueur a raté l'escalier et quitté le bâtiment
         // (nord du hall, z < -13 en surface), on arrête la marche au lieu de
         // le laisser traverser la moitié de la carte — l'échec reste
         // diagnostiqué proprement (down=false, position rapportée)
-        if (p.pos.z < -13 && p.pos.y > 6) break;
+        if (p.pos.z < -19 && p.pos.y > 6) break;
       }
       G.keys.KeyW = false;
     }
@@ -585,9 +585,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // la cave est bien SOUS le niveau du parvis : coffre-fort au fond
     const vA = G.vaults.find((v) => v.poi.key === 'agency');
     R.push(['coffre-fort dans le sous-sol', !!vA && vA.y < 8 && vA.y < 9, vA ? 'y=' + vA.y.toFixed(1) : 'absent']);
-    // marche jusqu'à la porte du coffre-fort (par l'ouest de la cave)
+    // marche jusqu'à la porte du coffre-fort (dans l'angle nord-est de la cave, comme dans la vraie Agence)
     let door = false;
-    if (down && vA) door = walkTo(-6, 4, 50) && walkTo(-1, 4.5, 40);
+    if (down && vA) door = walkTo(-4, -4, 60) && walkTo(vA.x, vA.z + 4.5, 60);
     R.push(["porte du coffre-fort atteignable à pied", door && p.alive && p.grounded && !!vA && Math.hypot(p.pos.x - vA.x, p.pos.z - (vA.z + 5)) < 3, 'x=' + p.pos.x.toFixed(1) + ' z=' + p.pos.z.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
     // ATRIUM CENTRAL : chute depuis le ciel au centre du bâtiment — on doit
     // traverser les trous des dalles (toit, 3e, 2e, 1er) et atterrir sur le
@@ -602,7 +602,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // PORTE CIRCULAIRE dorée du coffre-fort (style Agence de Fortnite)
     R.push(['porte circulaire du coffre-fort', !!vA && !!vA.door && (vA.door.maxX - vA.door.minX) > 2.5, vA && vA.door ? 'largeur=' + (vA.door.maxX - vA.door.minX).toFixed(1) : 'absente']);
     // ESCALIER OUVERT RDC -> 1er : volée est qui monte vers le sud
-    p.pos.set(10.5, 9.2, -6.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    p.pos.set(15.75, 9.2, -9.75); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(300);
     let up1 = false;
     G.setCam(Math.PI, -0.15); // regarde plein sud
@@ -611,16 +611,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       window.advanceTime(150);
       if (!p.alive) break;
       // arrivée complète : pieds au niveau du 1er (13,45) ET sortie sur la dalle
-      if (p.pos.y > 13.3 && p.pos.z > 5.5) { up1 = true; break; }
+      if (p.pos.y > 13.3 && p.pos.z > 8.25) { up1 = true; break; }
     }
     G.keys.KeyW = false;
     R.push(['escalier RDC -> 1er praticable (arrivée complète sur la dalle)', up1 && p.alive && p.grounded && Math.abs(p.pos.y - 13.45) < 0.2, 'y=' + p.pos.y.toFixed(1) + ' z=' + p.pos.z.toFixed(1)]);
     // ESCALIERS OUVERTS 1er -> 2e -> 3e -> toit (volées alternées ouest/est)
     const LV = [9.05, 13.45, 17.85, 22.25, 26.65];
     const flights = [
-      ['1er->2e', -10.5, 0, 6.5],      // volée ouest, monte vers le nord
-      ['2e->3e', 10.5, Math.PI, -6.5], // volée est, monte vers le sud
-      ['3e->toit', -10.5, 0, 6.5],     // volée ouest, monte vers le nord
+      ['1er->2e', -15.75, 0, 9.75],      // volée ouest, monte vers le nord
+      ['2e->3e', 15.75, Math.PI, -9.75], // volée est, monte vers le sud
+      ['3e->toit', -15.75, 0, 9.75],     // volée ouest, monte vers le nord
     ];
     let fIdx = 1;
     for (const [fName, cx, yaw, z0] of flights) {
@@ -634,7 +634,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       for (let i = 0; i < 120; i++) {
         window.advanceTime(150);
         if (!p.alive) break;
-        const exitZ = yaw === Math.PI ? p.pos.z > 5.5 : p.pos.z < -5.5;
+        const exitZ = yaw === Math.PI ? p.pos.z > 8.25 : p.pos.z < -8.25;
         if (p.pos.y > y1 - 0.15 && p.grounded && exitZ) { ok = true; break; }
       }
       G.keys.KeyW = false;
@@ -642,7 +642,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       fIdx++;
     }
     // DESCENTE 2e -> 1er (volée ouest, on descend vers le sud)
-    p.pos.set(-10.5, 17.85 + 0.15, -6.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    p.pos.set(-15.75, 17.85 + 0.15, -9.75); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(300);
     G.setCam(Math.PI, -0.15); G.keys.KeyW = true;
     let downL = false;
@@ -656,19 +656,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     R.push(['descente 2e -> 1er praticable (arrivée à 13,45)', downL && p.alive && Math.abs(p.pos.y - 13.45) < 0.25, 'y=' + p.pos.y.toFixed(1)]);
     // NOUVEAUTÉS v44 : statue d'Atlas extérieure, hélipad sur pilotis, ailes E/O
     const agP = G.POIS.find((q) => q.key === 'agency');
-    const atlas = G.scene.children.find((o) => o.isGroup && Math.abs(o.position.x - agP.x) < 0.6 && Math.abs(o.position.z - (agP.z + 23)) < 0.6 && Math.abs(o.position.y - (agP.h + 0.9)) < 0.6 && o.children.length >= 6);
+    const atlas = G.scene.children.find((o) => o.isGroup && Math.abs(o.position.x - agP.x) < 0.6 && Math.abs(o.position.z - (agP.z + 34.5)) < 0.6 && Math.abs(o.position.y - (agP.h + 0.9)) < 0.6 && o.children.length >= 6);
     R.push(["statue d'Atlas chromée devant l'entrée", !!atlas, atlas ? 'enfants=' + atlas.children.length : 'absente']);
-    const pad = G.structs.find((c) => c.type === 'box' && c.minY > 11 && c.minY < 11.1 && Math.abs((c.minX + c.maxX) / 2 - (agP.x + 24)) < 0.5 && Math.abs((c.minZ + c.maxZ) / 2 - (agP.z - 19)) < 0.5);
+    const pad = G.structs.find((c) => c.type === 'box' && c.minY > 11 && c.minY < 11.1 && Math.abs((c.minX + c.maxX) / 2 - (agP.x + 36)) < 0.5 && Math.abs((c.minZ + c.maxZ) / 2 - (agP.z - 28.5)) < 0.5);
     R.push(['hélipad sur pilotis au nord-est', !!pad, pad ? 'dessus=' + (+pad.maxY.toFixed(2)) : 'absent']);
     // hélipad : montée à pied par l'escalier (depuis l'extérieur) puis redescente
-    p.pos.set(agP.x + 24, agP.h + 0.15, agP.z - 3); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    p.pos.set(agP.x + 36, agP.h + 0.15, agP.z - 8); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(300);
     G.setCam(0, -0.15); G.keys.KeyW = true;
     let padUp = false;
     for (let i = 0; i < 200; i++) {
       window.advanceTime(150);
       if (!p.alive) break;
-      if (p.pos.y > 11.3 && p.grounded && p.pos.z < agP.z - 14 && p.pos.z > agP.z - 19.5) { padUp = true; break; }
+      if (p.pos.y > 11.3 && p.grounded && p.pos.z < agP.z - 22 && p.pos.z > agP.z - 34) { padUp = true; break; }
     }
     G.keys.KeyW = false;
     R.push(["hélipad : montée à pied par l'escalier (plateau à 11,45)", padUp && p.alive && p.pos.y > 11.3, 'y=' + p.pos.y.toFixed(1) + ' z=' + p.pos.z.toFixed(1)]);
@@ -681,7 +681,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     G.keys.KeyW = false;
     R.push(['hélipad : redescente par l\'escalier', padDown && p.alive && padUp, 'y=' + p.pos.y.toFixed(1)]);
-    const wing = (s) => G.structs.find((c) => c.type === 'box' && Math.abs(c.minY - agP.h) < 0.1 && Math.abs((c.minX + c.maxX) / 2 - (agP.x + s * 21)) < 0.15 && Math.abs(c.maxX - c.minX - 1) < 0.05);
+    const wing = (s) => G.structs.find((c) => c.type === 'box' && Math.abs(c.minY - agP.h) < 0.1 && Math.abs((c.minX + c.maxX) / 2 - (agP.x + s * 31.5)) < 0.15 && Math.abs(c.maxX - c.minX - 1.5) < 0.05);
     R.push(['ailes est/ouest en gradins', !!wing(1) && !!wing(-1), 'E=' + (!!wing(1)) + ' O=' + (!!wing(-1))]);
     return R.map((r) => (r[1] ? 'PASS' : 'FAIL') + '|' + r[0] + '|' + (r[2] ?? '')).join('\n');
   });
@@ -705,19 +705,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       G.openVault(vB);
       vaultR.openOk = vB.open === true && vB.door && vB.door.alive === false;
       vaultR.meshGone = !G.scene.children.includes(vB.door.mesh);
-      p.pos.set(0, 3.8, 5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+      p.pos.set(vB.x, 3.8, vB.z + 5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
       window.advanceTime(300);
       G.setCam(0, -0.1); G.keys.KeyW = true;
       for (let i = 0; i < 60; i++) {
         window.advanceTime(150);
         if (!p.alive) break;
-        if (p.pos.z < -1 && p.pos.y < 4.5) { vaultR.inOk = true; break; }
+        if (p.pos.z < vB.z - 1 && p.pos.y < 4.5) { vaultR.inOk = true; break; }
       }
       G.keys.KeyW = false;
       // coffres du coffre-fort présents (objets coffre : c.x/c.z, pas c.pos).
       // NB : une fois la porte ouverte, les IA (bots/coéquipiers) peuvent piller les coffres —
       // on vérifie la PRÉSENCE (vaultRef), pas l'état « non ouvert ».
-      vaultR.chest = !!G.chests.find((c) => c.vaultRef === vB && Math.hypot(c.x, c.z + 1.2) < 3 && c.y < 5);
+      vaultR.chest = !!G.chests.find((c) => c.vaultRef === vB && Math.hypot(c.x - vB.x, c.z - (vB.z - 1.2)) < 3 && c.y < 5);
     }
     R.push(['coffre-fort verrouillé sans carte', vaultR.lockedOk, '']);
     R.push(['coffre-fort ouvert avec carte (porte retirée)', vaultR.openOk && vaultR.meshGone, '']);
