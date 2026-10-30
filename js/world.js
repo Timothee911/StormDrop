@@ -58,7 +58,7 @@ function rawH(x, z) {
 export const POIS = [
   { name: "L'Agence", key: 'agency', spy: true, x: 0, z: 0, r: 62, style: 'agency' },
   { name: 'Le Requin', key: 'shark', spy: true, x: -292, z: -246, r: 31, style: 'shark' },
-  { name: 'Le Yacht', key: 'yacht', spy: true, x: 412, z: -82, r: 24, style: 'yacht' },
+  { name: 'Le Yacht', key: 'yacht', spy: true, x: 412, z: -82, r: 42, style: 'yacht' },
   // La Grotte est sur la grande île : une caverne SÈCHE cachée sous une
   // montagne rocheuse, entrée par la bouche du crâne géant face à l'océan.
   { name: 'La Grotte', key: 'grotto', spy: true, x: 200, z: 165, r: 46, style: 'grotto' },
@@ -89,6 +89,7 @@ export function terrainH(x, z) {
   let h = rawH(x, z);
   for (let i = 0; i < POIS.length; i++) {
     const p = POIS[i];
+    if (p.key === 'yacht') continue; // le Yacht flotte en pleine mer : plus d'îlot aplani autour
     const dx = x - p.x, dz = z - p.z;
     const d2 = dx * dx + dz * dz, lim = p.r * 1.7;
     if (d2 < lim * lim) {

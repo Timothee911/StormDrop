@@ -3310,7 +3310,7 @@ function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 
 function spyPatrol(p) {
   const rel = {
     agency: [[0, 7.5], [8, 7.5], [10, 0], [8, -7], [0, -7.5], [-6, -7], [-10, 5], [-6, 7.5]].map(([dx, dz]) => [dx * AGENCY_K, dz * AGENCY_K]), // plan agrandi
-    yacht: [[-8, 2], [0, 2.6], [8, 2], [8, -2], [0, -2.6], [-8, -2]],
+    yacht: [[-18, 0], [-12, 0], [-3, 0], [4, 0], [11, 0], [23, 2], [23, -6.2], [11, -6.2], [-6, -6.1], [-18, -5.5]],
     rig: [[-6, 4], [0, 4.6], [6, 4], [6, -4], [0, -4.6], [-6, -4]],
     grotto: [[-7, 6], [0, 8], [7, 6], [7, -4], [0, -8], [-7, -4]],
     // Le Requin : tour du manoir en passant devant la terrasse et derrière
@@ -4596,44 +4596,134 @@ function buildSpyPOI(p) {
     fin.position.set(p.x + Math.cos(fa) * (p.r + 20), 1.2, p.z + Math.sin(fa) * (p.r + 20));
     scene.add(fin);
   } else if (p.key === 'yacht') {
-    const y = Math.max(terrainH(p.x, p.z), 2.4);
+    // ---- LE YACHT : grand yacht de luxe à 4 niveaux, à flot en pleine mer (plus d'île autour).
+    // Repère local (u le long du navire, bout à -u ; v en travers). Ligne de flottaison y = 0.
+    const D0 = 2.4, D1 = 6.4, D2 = 10.2, D3 = 13.6; // dessus du pont principal / pont 2 / pont 3 / toit de la timonerie
     curHouse = { boxes: [], deco: [], mesh: null };
-    makeStructBox(p.x, y - 1.4, p.z, 28, 2.4, 9, matC(0xf2f4f8, { metalness: 0.3, roughness: 0.4 }), { indestructible: true });
-    const bow = makeStructBox(p.x - 16, y - 1.4, p.z, 7, 2.4, 7, matC(0xf2f4f8, { metalness: 0.3, roughness: 0.4 }), { indestructible: true });
-    bow.mesh.rotation.y = Math.PI / 4; bow.mesh.updateMatrixWorld(true);
-    makeStructBox(p.x, y + 1, p.z, 30, 0.4, 10.5, matC(0xf6e7c8), { hp: 400, mat: 'wood' });
-    makeStructBox(p.x + 6, y + 1.4, p.z, 8, 3.2, 6, matC(0xffffff, { metalness: 0.2 }), { hp: 350, mat: 'metal' });
-    hdeco(BOX, 0xffc400, p.x, y + 1.44, p.z - 5.1, 29, 0.18, 0.18);
-    hdeco(BOX, 0xffc400, p.x, y + 1.44, p.z + 5.1, 29, 0.18, 0.18);
-    // bande dorée sur la coque + hublots
-    hdeco(BOX, 0xffc400, p.x, y + 0.1, p.z - 4.6, 28, 0.3, 0.12);
-    hdeco(BOX, 0xffc400, p.x, y + 0.1, p.z + 4.6, 28, 0.3, 0.12);
-    for (let i = 0; i < 8; i++) hdeco(BOX, 0x9fd8ff, p.x - 12 + i * 3.4, y + 0.1, p.z - 4.75, 0.6, 0.6, 0.06);
-    // mât radar blanc et or avec barres transversales et antenne
-    hdeco(BOX, 0xf4f1ea, p.x + 11, y + 5.2, p.z - 1.5, 0.4, 5.5, 0.4);
-    hdeco(BOX, 0xffc400, p.x + 11, y + 7.2, p.z - 1.5, 3, 0.22, 0.22);
-    hdeco(BOX, 0xffc400, p.x + 11, y + 8.2, p.z - 1.5, 2.2, 0.22, 0.22);
-    hdeco(CYL_GEO, 0xf4f1ea, p.x + 11, y + 8.6, p.z - 1.5, 0.8, 0.3, 0.8);
-    // superstructure : bande vitrée charbon + listel or
-    hdeco(BOX, 0x2c3a4a, p.x + 6, y + 3.2, p.z + 3.05, 7.6, 1.4, 0.08);
-    hdeco(BOX, 0xffc400, p.x + 6, y + 4.65, p.z, 8.2, 0.16, 6.2);
-    // hélipad poupe : cercle jaune + marquage H
-    hdeco(CYL_GEO, 0x2c313c, p.x + 13, y + 1.44, p.z, 6, 0.1, 6);
-    hdeco(CYL_GEO, 0xf1c40f, p.x + 13, y + 1.5, p.z, 4.6, 0.08, 4.6);
-    hdeco(BOX, 0x22262f, p.x + 13 - 0.75, y + 1.55, p.z, 0.4, 0.06, 1.9);
-    hdeco(BOX, 0x22262f, p.x + 13 + 0.75, y + 1.55, p.z, 0.4, 0.06, 1.9);
-    hdeco(BOX, 0x22262f, p.x + 13, y + 1.55, p.z, 1.5, 0.06, 0.4);
-    // garde-corps dorés le long du pont
-    for (let i = 0; i < 12; i++) {
-      hdeco(BOX, 0xffc400, p.x - 13.5 + i * 2.45, y + 1.8, p.z - 4.95, 0.1, 0.8, 0.1);
-      hdeco(BOX, 0xffc400, p.x - 13.5 + i * 2.45, y + 1.8, p.z + 4.95, 0.1, 0.8, 0.1);
+    const hullM = matC(0xf2f4f8, { metalness: 0.3, roughness: 0.4 });
+    const deckM = matC(0xe9d7b0, { roughness: 0.7 });
+    const cabM = matC(0xf4f5f8, { metalness: 0.15, roughness: 0.5 });
+    const GL = 0x7fc4ee, GD = 0xffc400;
+    const bx = (u0, u1, v0, v1, y0, y1, mat, o) => makeStructBox(p.x + (u0 + u1) / 2, y0, p.z + (v0 + v1) / 2, u1 - u0, y1 - y0, v1 - v0, mat, o || { indestructible: true });
+    const dc = (hex, u, y, v, su, sy, sv, ry = 0) => hdeco(BOX, hex, p.x + u, y, p.z + v, su, sy, sv, 0, ry, 0);
+    const pb = (u, y, v, hu, hv, h) => propBox(p.x + u, y, p.z + v, hu, hv, h);
+    const rail = (u0, v0, u1, v1, y, col = true) => { // balustrade dorée (+ collider invisible)
+      const L = Math.hypot(u1 - u0, v1 - v0), n = Math.max(1, Math.round(L / 2.4));
+      const ry = Math.atan2(u1 - u0, v1 - v0);
+      for (let i = 0; i <= n; i++) dc(GD, u0 + (u1 - u0) * i / n, y + 0.45, v0 + (v1 - v0) * i / n, 0.1, 0.9, 0.1);
+      dc(GD, (u0 + u1) / 2, y + 0.9, (v0 + v1) / 2, 0.1, 0.1, L + 0.12, ry);
+      dc(GD, (u0 + u1) / 2, y + 0.45, (v0 + v1) / 2, 0.06, 0.06, L + 0.08, ry);
+      if (col) pb((u0 + u1) / 2, y, (v0 + v1) / 2, Math.abs(u1 - u0) / 2 + 0.06, Math.abs(v1 - v0) / 2 + 0.06, 1.1);
+    };
+    // mur avec ouvertures : dir 'v' = mur perpendiculaire à l'axe du navire (u fixe), 'u' = mur le long du navire
+    const wall = (dir, c, a0, a1, y0, y1, doors, mat) => {
+      const t = 0.5; let a = a0;
+      const seg = (s0, s1) => { if (s1 - s0 < 0.05) return; if (dir === 'v') bx(c - t / 2, c + t / 2, s0, s1, y0, y1, mat); else bx(s0, s1, c - t / 2, c + t / 2, y0, y1, mat); };
+      for (const d of doors) { seg(a, d - 1.5); if (dir === 'v') bx(c - t / 2, c + t / 2, d - 1.5, d + 1.5, y1 - 0.8, y1, mat); else bx(d - 1.5, d + 1.5, c - t / 2, c + t / 2, y1 - 0.8, y1, mat); a = d + 1.5; }
+      seg(a, a1);
+    };
+
+    // ---- COQUE (u -28..29) + étrave en gradins + pont principal en teck clair
+    bx(-28, 29, -7, 7, -3, 2, hullM);
+    bx(-28, 29, -7, 7, 2, D0, deckM);
+    for (const [u0, u1, hw] of [[-31, -28, 6.2], [-33.5, -31, 4.6], [-35.5, -33.5, 3.0], [-37, -35.5, 1.4]]) { bx(u0, u1, -hw, hw, -3, 2, hullM); bx(u0, u1, -hw, hw, 2, D0, deckM); }
+    dc(0x1f3a8a, 0.5, -0.1, -7.04, 57, 0.5, 0.06); dc(0x1f3a8a, 0.5, -0.1, 7.04, 57, 0.5, 0.06);   // ligne de flottaison bleue
+    dc(GD, 0.5, 1.3, -7.06, 57, 0.3, 0.06); dc(GD, 0.5, 1.3, 7.06, 57, 0.3, 0.06);                  // liseré doré
+    for (let i = 0; i < 17; i++) { const u = -25 + i * 3.3; dc(0x9fd8ff, u, 0.6, -7.07, 0.7, 0.7, 0.05); dc(0x9fd8ff, u, 0.6, 7.07, 0.7, 0.7, 0.05); }
+    // plage arrière : plateforme de bain + 6 marches qui montent jusqu'au pont (on embarque depuis l'eau)
+    bx(35, 38, -3.2, 3.2, -1.2, -0.4, deckM);
+    for (let k = 1; k <= 6; k++) bx(35 - k, 36 - k, -2.5, 2.5, -1.2, -0.4 + (D0 + 0.4) / 6 * k, deckM);
+    dc(GD, 36.5, -0.2, -3.25, 3, 0.1, 0.08); dc(GD, 36.5, -0.2, 3.25, 3, 0.1, 0.08);
+    // garde-corps du pont principal (bords latéraux + étrave)
+    rail(-28, -6.85, 29, -6.85, D0); rail(-28, 6.85, 29, 6.85, D0);
+    rail(-31, -6.05, -28, -6.85, D0, false); rail(-31, 6.05, -28, 6.85, D0, false);
+    for (const [u0, u1, hw0, hw1] of [[-31, -33.5, 6.05, 4.45], [-33.5, -35.5, 4.45, 2.85], [-35.5, -37, 2.85, 1.25]]) { rail(u0, -hw0, u1, -hw1, D0, false); rail(u0, hw0, u1, hw1, D0, false); }
+    rail(-37, -1.25, -37, 1.25, D0, false);
+
+    // ---- PONT PRINCIPAL : proue (jacuzzi, bains de soleil), SALON, plage arrière avec hélipad
+    // jacuzzi
+    dc(0xf4f5f8, -33, D0 + 0.35, 0, 3.4, 0.7, 3.4); dc(0x4fd0e0, -33, D0 + 0.72, 0, 2.7, 0.06, 2.7); dc(GD, -33, D0 + 0.74, 0, 3.5, 0.05, 3.5);
+    pb(-33, D0, 0, 1.7, 1.7, 0.7);
+    for (const v of [-3.2, 3.2]) { dc(0xffffff, -29, D0 + 0.3, v, 2.2, 0.6, 0.9); dc(0x2c6fbb, -29, D0 + 0.64, v, 2.1, 0.08, 0.8); dc(0xffffff, -29.9, D0 + 0.85, v, 0.3, 0.6, 0.85, 0); pb(-29, D0, v, 1.1, 0.45, 0.65); }
+    // mât de proue + fanion GHOST
+    dc(0xf4f1ea, -36.5, D0 + 2.2, 0, 0.14, 4.4, 0.14); dc(0x1f3a8a, -36.5, D0 + 3.9, 0.9, 0.05, 0.9, 1.7);
+    // SALON : murs à portes (proue et poupe), baies vitrées, plafond = sol du pont 2
+    wall('u', -5, -16, 8, D0, D1 - 0.4, [], cabM); wall('u', 5, -16, 8, D0, D1 - 0.4, [], cabM);
+    wall('v', -16, -5, 5, D0, D1 - 0.4, [0], cabM); wall('v', 8, -5, 5, D0, D1 - 0.4, [0], cabM);
+    for (const sv of [-1, 1]) for (let i = 0; i < 4; i++) { dc(GL, -13 + i * 6, D0 + 1.9, sv * 5.27, 4.2, 1.5, 0.06); dc(GD, -13 + i * 6, D0 + 2.7, sv * 5.28, 4.4, 0.1, 0.08); dc(GD, -13 + i * 6, D0 + 1.1, sv * 5.28, 4.4, 0.1, 0.08); }
+    for (const u of [-16.3, 8.3]) { dc(GL, u, D0 + 1.8, -3.3, 0.06, 1.8, 1.0); dc(GL, u, D0 + 1.8, 3.3, 0.06, 1.8, 1.0); }
+    // plafond du salon + dalle du pont 2 (u -17..9.5)
+    bx(-17, 9.5, -6.4, 6.4, D1 - 0.4, D1, deckM);
+    dc(0xc6b9a0, 0, D1 - 0.46, 0, 24, 0.06, 10);
+    // mobilier du salon (couloir central libre)
+    dc(0x8a1f2b, -4, D0 + 0.03, 0, 22, 0.05, 6);                                   // tapis
+    for (const sv of [-1, 1]) for (const u of [-11, -3]) {
+      dc(0xf1e8d6, u, D0 + 0.45, sv * 4.2, 4.2, 0.9, 0.9); dc(0xf1e8d6, u, D0 + 0.95, sv * 4.6, 4.2, 0.7, 0.2); pb(u, D0, sv * 4.2, 2.1, 0.5, 0.9);
+      dc(0xb0873a, u, D0 + 0.3, sv * 2.7, 1.6, 0.6, 1.2); pb(u, D0, sv * 2.7, 0.8, 0.6, 0.6);
+    }
+    dc(0x5a3a22, 5.4, D0 + 0.55, 3.8, 3.4, 1.1, 1.0); dc(GD, 5.4, D0 + 1.12, 3.8, 3.5, 0.06, 1.1); pb(5.4, D0, 3.8, 1.7, 0.5, 1.1);   // bar
+    for (const u of [4.2, 5.4, 6.6]) { dc(0xffc400, u, D0 + 0.4, 2.7, 0.5, 0.8, 0.5); pb(u, D0, 2.7, 0.25, 0.25, 0.8); }
+    dc(GD, -4, D1 - 0.9, 0, 1.6, 0.9, 1.6); dc(GD, -4, D1 - 0.5, 0, 0.3, 0.6, 0.3);   // lustre
+    // PLAGE ARRIÈRE : hélipad + transats
+    hdeco(CYL_GEO, 0x2c313c, p.x + 23.5, D0 + 0.06, p.z, 9.2, 0.06, 9.2);
+    hdeco(CYL_GEO, 0xf1c40f, p.x + 23.5, D0 + 0.1, p.z, 7.6, 0.06, 7.6);
+    dc(0x22262f, 23.5 - 1.3, D0 + 0.15, 0, 0.5, 0.06, 3.4); dc(0x22262f, 23.5 + 1.3, D0 + 0.15, 0, 0.5, 0.06, 3.4); dc(0x22262f, 23.5, D0 + 0.15, 0, 2.6, 0.06, 0.5);
+    for (const sv of [-1, 1]) { dc(0xffffff, 12.2, D0 + 0.3, sv * 5.0, 2.2, 0.6, 0.9); dc(0xffc400, 12.2, D0 + 0.64, sv * 5.0, 2.1, 0.08, 0.8); pb(12.2, D0, sv * 5.0, 1.1, 0.45, 0.65); }
+    // escalier extérieur vers le pont 2 (9 marches, de u 17.6 à 9.5 côté tribord)
+    const sN = 9, dh = (D1 - D0) / sN;
+    for (let k = 1; k <= sN; k++) bx(18.5 - k, 19.5 - k, 2.6, 5.4, D0 - 0.05, D0 + dh * k, hullM);
+
+    // ---- PONT 2 : salon-bar en plein air + SKY LOUNGE (cabine fermée)
+    wall('u', -5, -15, -4, D1, D2 - 0.4, [], cabM); wall('u', 5, -15, -4, D1, D2 - 0.4, [], cabM);
+    wall('v', -15, -5, 5, D1, D2 - 0.4, [], cabM); wall('v', -4, -5, 5, D1, D2 - 0.4, [0], cabM);
+    for (const sv of [-1, 1]) for (let i = 0; i < 2; i++) { dc(GL, -12 + i * 5.2, D1 + 1.8, sv * 5.27, 4.0, 1.4, 0.06); dc(GD, -12 + i * 5.2, D1 + 2.6, sv * 5.28, 4.2, 0.1, 0.08); }
+    dc(GL, -15.3, D1 + 1.8, 0, 0.06, 1.5, 7.0); dc(GD, -15.3, D1 + 2.6, 0, 0.08, 0.1, 7.2);
+    bx(-15.5, -3.5, -5.5, 5.5, D2 - 0.4, D2, deckM);                              // toit du sky lounge = pont 3
+    dc(0x2b6f8a, -9.5, D1 + 0.03, 0, 11, 0.05, 9);                                   // moquette
+    dc(0xf1e8d6, -9.5, D1 + 0.5, -4.1, 7, 0.9, 1.0); dc(0xf1e8d6, -9.5, D1 + 1.0, -4.55, 7, 0.7, 0.2); pb(-9.5, D1, -4.1, 3.5, 0.5, 0.9);
+    dc(0xf1e8d6, -9.5, D1 + 0.5, 4.1, 7, 0.9, 1.0); dc(0xf1e8d6, -9.5, D1 + 1.0, 4.55, 7, 0.7, 0.2); pb(-9.5, D1, 4.1, 3.5, 0.5, 0.9);
+    dc(GD, -9.5, D1 + 0.55, 0, 3.6, 0.1, 2.2); dc(0x5a3a22, -9.5, D1 + 0.3, 0, 3.2, 0.5, 1.8); pb(-9.5, D1, 0, 1.7, 1.0, 0.6);
+    // partie ouverte du pont 2 (aft) : banquette en U, table, bar de plein air
+    dc(0xffffff, 3, D1 + 0.45, -4.6, 5.6, 0.9, 1.0); dc(0xffffff, 3, D1 + 1.0, -5.1, 5.6, 0.7, 0.2); pb(3, D1, -4.6, 2.8, 0.5, 0.9);
+    dc(0xb0873a, 3, D1 + 0.4, -2.4, 2.4, 0.8, 1.4); pb(3, D1, -2.4, 1.2, 0.7, 0.8);
+    dc(0x5a3a22, 7.6, D1 + 0.55, -3.6, 1.0, 1.1, 4.0); dc(GD, 7.6, D1 + 1.12, -3.6, 1.1, 0.06, 4.1); pb(7.6, D1, -3.6, 0.5, 2.0, 1.1);
+    for (const sv of [4.2]) { dc(0xffffff, 6.5, D1 + 0.3, sv + 1.2, 2.2, 0.6, 0.9); dc(0x2c6fbb, 6.5, D1 + 0.64, sv + 1.2, 2.1, 0.08, 0.8); }
+    // garde-corps du pont 2 (le palier d'escalier aft reste ouvert)
+    rail(-17, -6.2, 9.5, -6.2, D1); rail(-17, 6.2, 9.5, 6.2, D1); rail(-17, -6.2, -17, 6.2, D1); rail(9.5, -6.2, 9.5, 2.2, D1); rail(9.5, 5.8, 9.5, 6.2, D1);
+    // escalier vers le pont 3 (9 marches, côté tribord, jusqu'au toit du sky lounge)
+    const s2 = 9, dh2 = (D2 - D1) / s2;
+    for (let k = 1; k <= s2; k++) bx(5.5 - k, 6.5 - k, 2.8, 5.4, D1 - 0.05, D1 + dh2 * k, hullM);
+    // ---- PONT 3 : solarium + TIMONERIE
+    wall('u', -3.7, -14, -7, D2, D3 - 0.4, [], cabM); wall('u', 3.7, -14, -7, D2, D3 - 0.4, [], cabM);
+    wall('v', -14, -3.7, 3.7, D2, D3 - 0.4, [], cabM); wall('v', -7, -3.7, 3.7, D2, D3 - 0.4, [0], cabM);
+    for (const sv of [-1, 1]) { dc(GL, -10.5, D2 + 1.8, sv * 3.97, 6.4, 1.3, 0.06); dc(GD, -10.5, D2 + 2.55, sv * 3.98, 6.6, 0.1, 0.08); }
+    dc(GL, -14.27, D2 + 1.8, 0, 0.06, 1.3, 6.6);
+    bx(-14.5, -6.5, -4.2, 4.2, D3 - 0.4, D3, deckM);                                 // toit de la timonerie
+    dc(0x39424e, -12.6, D2 + 0.6, 0, 1.2, 1.2, 5.6); dc(0x39ff88, -12.6, D2 + 1.25, 0, 0.9, 0.06, 4.8); pb(-12.6, D2, 0, 0.6, 2.8, 1.2);   // pupitre de pilotage
+    dc(0x1f3a8a, -10, D2 + 0.45, 0, 0.8, 0.9, 0.8); pb(-10, D2, 0, 0.4, 0.4, 0.9);
+    for (const sv of [-1, 1]) { dc(0xffffff, -5, D2 + 0.3, sv * 3.9, 2.2, 0.6, 0.9); dc(0xffc400, -5, D2 + 0.64, sv * 3.9, 2.1, 0.08, 0.8); pb(-5, D2, sv * 3.9, 1.1, 0.45, 0.65); }
+    rail(-15.5, -5.4, -3.5, -5.4, D2); rail(-15.5, 5.4, -3.5, 5.4, D2); rail(-15.5, -5.4, -15.5, 5.4, D2); rail(-3.5, -5.4, -3.5, 2.5, D2);
+    // mât radar, antennes, dôme satellite
+    dc(0xf4f1ea, -9, D3 + 2.2, -1.5, 0.4, 4.4, 0.4); dc(GD, -9, D3 + 3.0, -1.5, 3.2, 0.2, 0.2); dc(GD, -9, D3 + 4.0, -1.5, 2.2, 0.2, 0.2);
+    hdeco(CYL_GEO, 0xf4f1ea, p.x - 9, D3 + 4.6, p.z - 1.5, 1.0, 0.4, 1.0);
+    hdeco(SPH_GEO, 0xf4f1ea, p.x - 11, D3 + 0.9, p.z + 2, 2.2, 2.2, 2.2);
+    dc(0xb2b7bd, -7.6, D3 + 3.2, 2.5, 0.12, 6.4, 0.12); dc(0x1f3a8a, -7.6 - 0.9, D3 + 5.4, 2.5, 1.8, 1.0, 0.05);
+    rail(-14.5, -4.2, -6.5, -4.2, D3, false); rail(-14.5, 4.2, -6.5, 4.2, D3, false);
+    // éclairage doux des salons
+    for (const [u, y, v, I, d] of [[-4, D0 + 3.3, 0, 7, 16], [-9.5, D1 + 3.2, 0, 6, 13], [-10, D2 + 2.6, 0, 4, 9], [3, D1 + 2.8, -3, 4, 10], [23.5, D0 + 3, 0, 3, 14]]) {
+      const L = new THREE.PointLight(0xffe3b0, I, d); L.position.set(p.x + u, y, p.z + v); scene.add(L);
     }
     const H = curHouse; curHouse = null; finishHouse(H);
-    spawnChest(p.x - 4, y + 1.5, p.z - 2);
-    spawnChest(p.x + 1, y + 1.5, p.z + 2);
-    lootSpots.push({ x: p.x - 10, y: y + 1.6, z: p.z });
-    buildVault(p, { x: p.x - 9, y: y + 1.4, z: p.z });
-    buildPhoneBooth(p, { x: p.x + 2, y: y + 1.4, z: p.z + 3 });
+    // butin : salon, pont 2, timonerie + coffre-fort en proue et cabine téléphonique
+    spawnChest(p.x - 7, D0, p.z - 4.2);
+    spawnChest(p.x - 7, D0, p.z + 4.2);
+    spawnChest(p.x + 3, D1, p.z + 0.2);
+    spawnChest(p.x - 5, D2, p.z - 3.8);
+    lootSpots.push({ x: p.x - 4, y: D0 + 0.1, z: p.z });
+    lootSpots.push({ x: p.x + 3, y: D1 + 0.1, z: p.z - 1 });
+    lootSpots.push({ x: p.x - 10, y: D2 + 0.1, z: p.z });
+    buildVault(p, { x: p.x - 23, y: D0, z: p.z });
+    buildPhoneBooth(p, { x: p.x - 18, y: D0, z: p.z - 6.0 });
   } else if (p.key === 'grotto') {
     // ---- LA GROTTE : caverne SÈCHE (sol 3,4, au-dessus de la mer) entièrement
     // cachée sous la montagne rocheuse — PLUS D'OUVERTURE CÔTÉ ÎLE : la rampe à
@@ -5086,7 +5176,7 @@ function startGame() {
     const route = spyPatrol(p);
     // point d'appui : le pont du Yacht ou la plateforme de La Plateforme, sinon le terrain
     let sy, wpBox = null;
-    if (p.key === 'yacht') { const yd = Math.max(terrainH(p.x, p.z), 2.4); sy = yd + 1.5; wpBox = { x: p.x, z: p.z, hx: 11, hz: 3.5 }; }
+    if (p.key === 'yacht') { sy = 2.4 + 1.5; wpBox = { x: p.x - 4, z: p.z, hx: 3, hz: 1 }; }
     else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
     // La Grotte : Brutus et ses ombres gardent la caverne souterraine
     else if (p.key === 'grotto') { sy = GROTTO.floor1 + 3.6 + 0.1; wpBox = { x: GROTTO.cavernX, z: GROTTO.cavernZ, hx: 10, hz: 10 }; }
