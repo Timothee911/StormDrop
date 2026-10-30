@@ -297,7 +297,7 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
 
 // =====================================================================
 // DÉCORS LOINTAINS (hors map) : îles à relief et plages, pitons rocheux, arches, icebergs, phares,
-// voiliers et chaînes de montagnes à l'horizon. Purement visuels (aucun collider) : les joueurs
+// chaînes de montagnes à l'horizon. Purement visuels (aucun collider) : les joueurs
 // restent bloqués à WORLD_R. Tout est fusionné en 3 maillages (relief lisse, détails facettés,
 // écume/lagon translucides) => 3 appels de rendu. Les couleurs sont fondues vers la brume de
 // l'horizon avec la distance (perspective atmosphérique).
@@ -524,21 +524,6 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
     }
     return null;
   }
-  // (plus de pitons, d'arches ni d'icebergs : seuls voiliers, bouées et montagnes lointaines)
-  // voiliers + sillage
-  for (let i = 0; i < 12; i++) {
-    const sp = spot(10, 70, 900, 40); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.5);
-    const hd = fr(6.28), fwd = [Math.sin(hd), Math.cos(hd)], hull = i % 3 ? 0xf3efe6 : 0x2a4a8a;
-    add('box', 0, sp.x, -0.5, sp.z, 2.3, 1.4, 6.4, hull, hd);
-    add('cone', 4, sp.x + fwd[0] * 3.9, -0.5, sp.z + fwd[1] * 3.9, 1.1, 1.8, 1.4, hull, hd + Math.PI / 4, -Math.PI / 2 * 0 + 0, 0);
-    add('box', 0, sp.x, 0.7, sp.z, 2.35, 0.25, 6.45, i % 2 ? 0xd94040 : 0xd9a441, hd);
-    add('cyl', 5, sp.x, 0.8, sp.z, 0.1, 9.5, 0.1, 0x8a8f98, hd);
-    const P0 = [sp.x, 1.6, sp.z], P1 = [sp.x, 10, sp.z], bx = -fwd[0] * 3, bz = -fwd[1] * 3;
-    tri(P0, P1, [sp.x + bx, 1.6, sp.z + bz], 0xfdfdfd, 0.03);
-    tri([sp.x + fwd[0] * 0.4, 1.6, sp.z + fwd[1] * 0.4], [sp.x + fwd[0] * 0.4, 9.2, sp.z + fwd[1] * 0.4], [sp.x + fwd[0] * 3.6, 1.8, sp.z + fwd[1] * 3.6], 0xf2f2ee, 0.03);
-    foamDisc(sp.x - fwd[0] * 2, sp.z - fwd[1] * 2, 1.2, 4.5, 0.5, 14);
-  }
-  for (let i = 0; i < 22; i++) { const sp = spot(2, 30, 700, 30); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.5); add('cyl', 7, sp.x, -0.6, sp.z, 0.9, 1.9, 0.9, 0xe33a3a); add('cyl', 7, sp.x, 0.9, sp.z, 0.95, 0.4, 0.95, 0xf6f4ee); add('cyl', 5, sp.x, 1.3, sp.z, 0.12, 1.4, 0.12, 0x44484f); foamDisc(sp.x, sp.z, 0.9, 2.2, 0.6, 10); }
   // ---- chaînes de montagnes à l'horizon (relief en crêtes, brume forte) ----
   for (let i = 0; i < 13; i++) {
     const a = (i / 13) * Math.PI * 2 + fr(-0.2, 0.2), d = fr(4300, 6800), R = fr(900, 1700), Hm = fr(420, 950), seed = fr(500);
