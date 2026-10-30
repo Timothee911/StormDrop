@@ -524,41 +524,7 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
     }
     return null;
   }
-  // (plus d'îles ni de phares autour de l'île principale : seuls pitons, icebergs, voiliers et montagnes lointaines)
-  // pitons rocheux (+ écume à la base)
-  for (let i = 0; i < 40; i++) {
-    const R = fr(6, 17), sp = spot(R * 1.4, 35, 520 + (i % 3) * 260); if (!sp) continue;
-    HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.6);
-    const H = fr(12, 42);
-    spire(sp.x, sp.z, R, H, FR() < 0.45);
-    if (FR() < 0.5) spire(sp.x + R * 1.1, sp.z + R * 0.5, R * 0.55, H * fr(0.4, 0.7), false);
-    foamDisc(sp.x, sp.z, R * 0.7, R * 2.1, 0.8);
-  }
-  // arches naturelles : deux piliers rocheux reliés par une voûte de blocs
-  for (let i = 0; i < 4; i++) {
-    const sp = spot(30, 150, 800); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.6);
-    const R = fr(9, 14), ry = fr(Math.PI), ux = Math.cos(ry), uz = Math.sin(ry);
-    for (const sgn of [-1, 1]) add('ico', 1, sp.x + ux * R * sgn, 4, sp.z + uz * R * sgn, 4.8, 10.5, 4.8, sgn < 0 ? 0x7c8189 : 0x8e9196, fr(6), 0, 0, 0.1);
-    for (let s = 0; s <= 8; s++) { const a = (s / 8) * Math.PI; add('ico', 0, sp.x - ux * Math.cos(a) * R, 12.5 + Math.sin(a) * 6.5, sp.z - uz * Math.cos(a) * R, 4.4, 3.4, 4.4, s % 2 ? 0x8e9196 : 0x7c8189, fr(6)); }
-    add('cyl', 7, sp.x - ux * R * 0.0, 19.4, sp.z - uz * R * 0.0, 3, 0.8, 3, 0x6cc04a);
-    foamDisc(sp.x, sp.z, 4, R * 1.5, 0.6);
-  }
-  // icebergs (nord) et bancs de sable (sud)
-  for (let i = 0; i < 16; i++) {
-    const R = fr(8, 28), sp = spot(R * 1.4, 60, 1200); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.6);
-    if (sp.z < -150) {
-      const ig = new THREE.IcosahedronGeometry(1, 1); const pa = ig.attributes.position;
-      const hs = (x, y, z) => { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); };
-      const ng = ig.toNonIndexed(), np = ng.attributes.position; const sx = R, sy = R * fr(0.7, 1.3), sz = R * fr(0.7, 1.1);
-      const cache = new Map(); const jv = (x, y, z) => { const k = x.toFixed(3) + y.toFixed(3) + z.toFixed(3); if (!cache.has(k)) cache.set(k, 1 + (hs(x, y, z) - 0.5) * 0.45); return cache.get(k); };
-      for (let f = 0; f < np.count; f += 3) {
-        const vs = [0, 1, 2].map((k) => { const x = np.getX(f + k), y = np.getY(f + k), z = np.getZ(f + k); const j = jv(x, y, z); return [sp.x + x * sx * j, -R * 0.3 + y * sy * j * 1.3, sp.z + z * sz * j]; });
-        const cy = (vs[0][1] + vs[1][1] + vs[2][1]) / 3;
-        tri(vs[0], vs[1], vs[2], cy < 0 ? 0x86d8ea : (cy > R * 0.5 ? 0xffffff : 0xdff4fb), 0.04);
-      }
-      foamDisc(sp.x, sp.z, R * 0.8, R * 1.9, 0.6);
-    }
-  }
+  // (plus de pitons, d'arches ni d'icebergs : seuls voiliers, bouées et montagnes lointaines)
   // voiliers + sillage
   for (let i = 0; i < 12; i++) {
     const sp = spot(10, 70, 900, 40); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.5);
