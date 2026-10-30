@@ -524,13 +524,7 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
     }
     return null;
   }
-  let lh = 0;
-  for (let i = 0; i < 24; i++) {
-    const R = fr(55, 175), sp = spot(R * 1.2, 40 + (i % 4) * 70, 1700 + (i % 5) * 150); if (!sp) continue;
-    const typ = (sp.z < -420 && FR() < 0.75) ? 'snow' : (sp.z > 520 && FR() < 0.4) ? 'sand' : typesPool[Math.floor(fr(typesPool.length))];
-    const isl = island(sp.x, sp.z, R, typ);
-    if (lh < 2 && (typ === 'green' || typ === 'rock') && R > 80) { lighthouse(isl, sp.x, sp.z, R); lh++; }
-  }
+  // (plus d'îles ni de phares autour de l'île principale : seuls pitons, icebergs, voiliers et montagnes lointaines)
   // pitons rocheux (+ écume à la base)
   for (let i = 0; i < 40; i++) {
     const R = fr(6, 17), sp = spot(R * 1.4, 35, 520 + (i % 3) * 260); if (!sp) continue;
@@ -563,12 +557,6 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
         tri(vs[0], vs[1], vs[2], cy < 0 ? 0x86d8ea : (cy > R * 0.5 ? 0xffffff : 0xdff4fb), 0.04);
       }
       foamDisc(sp.x, sp.z, R * 0.8, R * 1.9, 0.6);
-    } else {
-      const ns2 = 40, isl2 = { }; // banc de sable : disque plat sous l'eau, calé sur le relief
-      const rcf = (a) => R * 1.5 * (0.85 + 0.3 * vnoise(Math.cos(a) * 2 + i, Math.sin(a) * 2 + i));
-      const hf = (x, z) => { const dn = Math.hypot(x - sp.x, z - sp.z) / rcf(Math.atan2(z - sp.z, x - sp.x)); return -6.5 + 7 * Math.pow(sst(1.0, 0.45, dn), 0.9); };
-      polarMesh(sp.x, sp.z, rcf, 10, ns2, 1.2, hf, (x, z, h, sl, dn, out) => out.setHex(h < -0.5 ? 0xd8c58a : 0xf0dc9c));
-      shoreMesh(sp.x, sp.z, rcf, 60, 0.5, 1.2, 12, hf);
     }
   }
   // voiliers + sillage
@@ -3857,7 +3845,7 @@ function buildSpyPOI(p) {
     AGX = { k: K, X: (x) => BX + (x - BX) * K, Z: (z) => BZ + (z - BZ) * K };
     const X = AGX.X, Z = AGX.Z;
     // GRIS CLAIR : façade, sols, colonnes et soubassement en gris clair uniforme
-    const FH = 4.4, WALL = 0xd9cdd0, CORN = 0xc6b9bd, TRIML = 0xe8dfe1, GOLD = 0xffc400, GLASS = 0x27313f;
+    const FH = 4.4, WALL = 0xd6d9de, CORN = 0xb8bdc4, TRIML = 0xe6e9ed, GOLD = 0xffc400, GLASS = 0x27313f;
     const stoneM = () => matC(WALL, { roughness: 0.8 });
     // sol en gris clair brillant (hall et étages — plus aucun noir à l'Agence)
     const floorM = () => matC(0xdcdfe3, { roughness: 0.2, metalness: 0.0 });
@@ -4427,7 +4415,7 @@ function buildSpyPOI(p) {
       }
       // -- QUAI de pierre claire + chemin d'entrée, jusqu'au bassin
       hdeco(BOX, TRIML, BX, g + 0.03, BZ + 25.6, 62, 0.07, 7.2);
-      hdeco(BOX, 0xe0d6d8, BX, g + 0.04, BZ + 17.6, 12.4, 0.07, 14.4);        // allée centrale
+      hdeco(BOX, 0xe0e3e7, BX, g + 0.04, BZ + 17.6, 12.4, 0.07, 14.4);        // allée centrale
       hdeco(BOX, CORN, BX, g + 0.05, BZ + 29.15, 62.4, 0.5, 0.5);             // bord du quai
       rail(-31, 29.1, -5.9, 29.1, g + 0.3); rail(5.9, 29.1, 31, 29.1, g + 0.3);
       // -- BASSIN (eau turquoise) en ellipse devant le quai
@@ -4435,7 +4423,7 @@ function buildSpyPOI(p) {
       // -- SOCLE ROND DE LA FONTAINE qui avance dans l'eau, avec balustrade circulaire
       {
         const cx = 0, cz = 31.2, r = 5.6;
-        hdeco(CYL_HI, 0xcfc4c7, BX + cx, g + 0.35, BZ + cz, 2 * r, 0.7, 2 * r);
+        hdeco(CYL_HI, 0xc9cdd3, BX + cx, g + 0.35, BZ + cz, 2 * r, 0.7, 2 * r);
         propDisc(BX + cx, g, BZ + cz, r * 0.96, 0.7, 12);
         hdeco(CYL_HI, CORN, BX + cx, g + 0.75, BZ + cz, 2 * (r + 0.25), 0.15, 2 * (r + 0.25));
         circRail(cx, cz, r - 0.4, g + 0.7, 26, [Math.PI, 0.9]);                // ouvert côté quai (nord)
