@@ -3902,8 +3902,22 @@ function buildSpyPOI(p) {
       // dessus du mur de cave et la face extérieure du mur du bâtiment)
       const th = f === 0 ? 1.0 : 0.5;
       cN[f] = makeStructBox(BX, ly, BZ - 10, 26, FH, th, stoneM(), oStone);
-      cE[f] = makeStructBox(BX + 13, ly, BZ, th, FH, 20, stoneM(), oStone);
-      cW[f] = makeStructBox(BX - 13, ly, BZ, th, FH, 20, stoneM(), oStone);
+      // murs est/ouest : aux niveaux 0-1 ils sont percés de portes (hauteur 3,2, centrées sur z = +-7,6)
+      // qui relient le bloc central aux ailes latérales. Ouest RDC : une seule porte (l'autre ouvrirait
+      // sur l'escalier de la cave).
+      const sideWall = (sx) => {
+        if (f > 1) return makeStructBox(BX + sx * 13, ly, BZ, th, FH, 20, stoneM(), oStone);
+        const doors = (sx < 0 && f === 0) ? [7.6] : [-7.6, 7.6];
+        let z0 = -10, first = null;
+        for (const dz of doors.concat([11.3])) {
+          const z1 = dz > 10 ? 10 : dz - 1.3;
+          if (z1 > z0 + 0.05) { const b = makeStructBox(BX + sx * 13, ly, BZ + (z0 + z1) / 2, th, FH, z1 - z0, stoneM(), oStone); first = first || b; }
+          if (dz < 10) { makeStructBox(BX + sx * 13, ly + 3.2, BZ + dz, th, 1.2, 2.6, stoneM(), oStone); z0 = dz + 1.3; }
+        }
+        return first;
+      };
+      cE[f] = sideWall(1);
+      cW[f] = sideWall(-1);
       if (f === 0) {
         // façade sud : grande porte centrale (x -3..3) + segments + linteau
         cS[f] = [makeStructBox(BX - 8, ly, BZ + 10, 10, FH, th, stoneM(), oStone), makeStructBox(BX + 8, ly, BZ + 10, 10, FH, th, stoneM(), oStone)];
@@ -3984,7 +3998,7 @@ function buildSpyPOI(p) {
     for (let f = 0; f < 4; f++) {
       const usNS = [-10.5, -7, -3.5, 0, 3.5, 7, 10.5], usEW = [-6, -2, 2, 6];
       for (const u of usNS) { if (f === 0 && Math.abs(u) < 3) continue; win('N', u, f); win('S', u, f); }
-      for (const u of usEW) win('E', u, f), win('W', u, f);
+      if (f > 1) for (const u of usEW) win('E', u, f), win('W', u, f); // niveaux 0-1 : face intérieure des ailes
     }
     // pilastres de pierre entre les fenêtres (rythme de façade de l'Agence)
     for (let f = 0; f < 4; f++) {
@@ -4260,6 +4274,51 @@ function buildSpyPOI(p) {
             hdeco(BOX, GOLD, wx + u, 9.5 + f * 4.4, BZ + zs, 1.45, 0.14, 0.18);
           }
         }
+      }
+      // sol du rez-de-chaussée de l'aile (même dalle claire que le hall)
+      makeStructBox(wx, 8.6, BZ, 7.5, 0.45, 19.5, floorM(), oStone);
+      const wX = (dx) => wx + s * dx; // dx > 0 : vers l'extérieur de l'aile
+      const desk = (x, z, ly, rot) => { // bureau + écran + chaise (rot : le bureau court selon z)
+        hdeco(BOX, 0xa8adb4, x, ly + 0.8, z, 1.0, 0.08, 2.2);
+        hdeco(BOX, 0x8a8f98, x, ly + 0.4, z, 0.9, 0.8, 2.0);
+        hdeco(BOX, 0x46536e, x + s * 0.3, ly + 1.25, z, 0.06, 0.7, 1.3);
+        hdeco(BOX, 0x3fa9ff, x + s * 0.26, ly + 1.25, z, 0.03, 0.6, 1.2);
+        hdeco(BOX, 0x9aa1ab, x - s * 1.0, ly + 0.3, z, 0.55, 0.6, 0.55);
+        propBox(x, ly, z, 0.55, 1.1, 0.85);
+      };
+      if (s < 0) {
+        // RDC ouest : ARMURERIE (râteliers d'armes le long du mur, caisses, coffre)
+        for (const z of [-6.5, -2.2, 2.2, 6.5]) {
+          hdeco(BOX, 0x929aa5, wX(3.4), 9.05 + 1.15, BZ + z, 0.35, 2.3, 3.2);
+          for (let k = 0; k < 3; k++) hdeco(BOX, k % 2 ? GOLD : 0x59606b, wX(3.1), 9.05 + 1.0 + k * 0.5, BZ + z, 0.18, 0.12, 2.6);
+          propBox(wX(3.4), 9.05, BZ + z, 0.35, 1.6, 2.3);
+        }
+        for (const [cx, cz] of [[0.5, -8], [0.5, -6.6], [-0.7, -8]]) { hdeco(BOX, 0x6b5a3a, wX(cx), 9.05 + 0.45, BZ + cz, 1.2, 0.9, 1.2); propBox(wX(cx), 9.05, BZ + cz, 0.6, 0.6, 0.9); }
+        hdeco(BOX, 0x8a8f98, wX(0), 9.05 + 0.5, BZ + 0.5, 1.6, 1.0, 3.4); propBox(wX(0), 9.05, BZ + 0.5, 0.8, 1.7, 1.0); // table d'équipement
+        spawnChest(X(wX(-0.5)), 9.05, Z(BZ + 5));
+      } else {
+        // RDC est : SALLE DES SERVEURS (deux rangées de baies avec voyants)
+        for (const dx of [-1.6, 1.8]) for (const z of [-7.2, -4.4, -1.6, 1.2, 4.0, 6.8]) {
+          if (dx < 0 && Math.abs(z) > 6) continue; // dégage les portes
+          hdeco(BOX, 0x9aa3ae, wX(dx), 9.05 + 1.3, BZ + z, 1.1, 2.6, 1.9);
+          hdeco(BOX, 0x6b7584, wX(dx), 9.05 + 1.3, BZ + z, 1.0, 2.4, 1.8);
+          for (let k = 0; k < 4; k++) hdeco(BOX, k % 2 ? 0x3fff8a : 0x3fa9ff, wX(dx) - s * 0.56, 9.05 + 0.6 + k * 0.55, BZ + z, 0.04, 0.12, 1.4);
+          propBox(wX(dx), 9.05, BZ + z, 0.55, 0.95, 2.6);
+        }
+        spawnChest(X(wX(3.2)), 9.05, Z(BZ + 0.2));
+      }
+      if (s < 0) {
+        // 1er ouest : BUREAUX DES AGENTS (quatre postes le long du mur extérieur)
+        for (const z of [-6.8, -2.3, 2.3, 6.8]) desk(wX(3.0), BZ + z, 13.45);
+        hdeco(BOX, 0x2d5a35, wX(-1.0), 13.45 + 0.45, BZ + 0.0, 1.0, 0.9, 1.0); propBox(wX(-1.0), 13.45, BZ, 0.5, 0.5, 0.9);
+      } else {
+        // 1er est : SALLE DE BRIEFING (table holographique centrale + banquettes)
+        hdeco(BOX, 0x8a8f98, wX(0), 13.45 + 0.4, BZ, 2.8, 0.8, 4.4);
+        hdeco(BOX, 0x3fa9ff, wX(0), 13.45 + 0.85, BZ, 2.4, 0.06, 4.0);
+        propBox(wX(0), 13.45, BZ, 1.4, 2.2, 0.85);
+        for (const z of [-3.6, 3.6]) { hdeco(BOX, 0xe6e8eb, wX(0), 13.45 + 0.3, BZ + z, 2.6, 0.6, 0.7); propBox(wX(0), 13.45, BZ + z, 1.3, 0.35, 0.6); }
+        hdeco(BOX, 0x46536e, wX(3.55), 13.45 + 1.8, BZ, 0.08, 1.8, 4.2); hdeco(BOX, 0x3fa9ff, wX(3.5), 13.45 + 1.8, BZ, 0.04, 1.6, 4.0); // écran mural
+        const hl = new THREE.PointLight(0x5fb4ff, 3, 8); hl.position.set(X(wX(0)), 14.9, Z(BZ)); scene.add(hl);
       }
       // éclairage intérieur de l'aile
       const wingL = new THREE.PointLight(0xffe0b8, 5, 14 * K); wingL.position.set(X(wx), 15.8, BZ); scene.add(wingL);
