@@ -296,125 +296,329 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
 }
 
 // =====================================================================
-// DÉCORS LOINTAINS (hors map) : îles, pitons rocheux, icebergs, phare, voiliers et montagnes
-// à l'horizon. Purement visuels (aucun collider) : les joueurs sont bloqués à WORLD_R. Tout est
-// fusionné en UN SEUL maillage à couleurs de sommets => un seul appel de rendu.
+// DÉCORS LOINTAINS (hors map) : îles à relief et plages, pitons rocheux, arches, icebergs, phares,
+// voiliers et chaînes de montagnes à l'horizon. Purement visuels (aucun collider) : les joueurs
+// restent bloqués à WORLD_R. Tout est fusionné en 3 maillages (relief lisse, détails facettés,
+// écume/lagon translucides) => 3 appels de rendu. Les couleurs sont fondues vers la brume de
+// l'horizon avec la distance (perspective atmosphérique).
 // =====================================================================
 {
   const FR = mulberry32(20261030);
   const fr = (a = 1, b) => (b === undefined ? FR() * a : a + FR() * (b - a));
-  const P = [], C = [];
-  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _sc = new THREE.Vector3(), _c = new THREE.Color();
-  const G = {
-    cyl: (seg) => new THREE.CylinderGeometry(1, 1, 1, seg, 1).translate(0, 0.5, 0),       // base à y=0, hauteur 1
+  const sst = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const mixN = (a, b, t) => a + (b - a) * t;
+  const HAZE = new THREE.Color(0xc4e4f7);
+  let HZ = 0; // part de brume appliquée aux couleurs en cours de création
+  const hazeFor = (d, mx = 0.7) => Math.pow(Math.min(1, Math.max(0, (d - 450) / 5200)), 0.85) * mx;
+  const _c = new THREE.Color(), _c2 = new THREE.Color();
+  const colOf = (hex) => _c.setHex(hex);
+  // ---- tampons ----
+  const T = { p: [], c: [], i: [] };                 // relief lisse (indexé)
+  const PR = { p: [], c: [] };                       // détails facettés (non indexé)
+  const FO = { p: [], c: [], i: [] };                // écume / lagon (RGBA)
+  function pushCol(arr, c, j = 1) { arr.push(c.r * j, c.g * j, c.b * j); }
+  function hazeCol(c) { return HZ > 0 ? c.lerp(HAZE, HZ) : c; }
+  // ---- primitives pour les détails (non indexées) ----
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _sc = new THREE.Vector3();
+  const mk = {
+    cyl: (seg) => new THREE.CylinderGeometry(1, 1, 1, seg, 1).translate(0, 0.5, 0),
     cone: (seg) => new THREE.ConeGeometry(1, 1, seg, 1).translate(0, 0.5, 0),
     box: () => new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
-    ico: () => new THREE.IcosahedronGeometry(1, 0),
+    ico: (d) => new THREE.IcosahedronGeometry(1, d),
   };
-  const cache = {};
-  const geo = (k, seg) => cache[k + seg] || (cache[k + seg] = (G[k](seg).index ? G[k](seg).toNonIndexed() : G[k](seg)));
-  // ajoute une forme (position, échelle, rotation Y/X/Z, couleur hex)
-  function add(kind, seg, x, y, z, sx, sy, sz, hex, ry = 0, rx = 0, rz = 0) {
+  const gcache = {};
+  const geo = (k, s) => gcache[k + s] || (gcache[k + s] = (() => { const g = mk[k](s); return g.index ? g.toNonIndexed() : g; })());
+  function add(kind, seg, x, y, z, sx, sy, sz, hex, ry = 0, rx = 0, rz = 0, jit = 0.06) {
     const g = geo(kind, seg), pa = g.attributes.position;
     _e.set(rx, ry, rz); _q.setFromEuler(_e); _p.set(x, y, z); _sc.set(sx, sy, sz); _m.compose(_p, _q, _sc);
-    _c.setHex(hex);
-    for (let i = 0; i < pa.count; i++) {
-      _p.fromBufferAttribute(pa, i).applyMatrix4(_m);
-      P.push(_p.x, _p.y, _p.z);
-      const j = 0.94 + FR() * 0.12; // légère variation par face
-      C.push(_c.r * j, _c.g * j, _c.b * j);
+    const base = new THREE.Color(hex);
+    for (let f = 0; f < pa.count; f += 3) {            // une teinte par face (rendu facetté)
+      const j = 1 - jit + FR() * jit * 2;
+      _c2.copy(base).multiplyScalar(j); hazeCol(_c2);
+      for (let k = 0; k < 3; k++) { _p.fromBufferAttribute(pa, f + k).applyMatrix4(_m); PR.p.push(_p.x, _p.y, _p.z); pushCol(PR.c, _c2); }
     }
   }
-  const SAND = 0xf0dc9c, GRASS = 0x6cc04a, GRASS2 = 0x4fae3f, ROCK = 0x8e9196, ROCK2 = 0x6f747c, SNOW = 0xf4f8ff, ICE = 0xbfe6f5, PINE = 0x2f8f46, TRUNK = 0x6b4a2b, DSAND = 0xe3c27a;
-  const placed = [];
-  function spot(r, dMin, dMax, tries = 60) {
+  function tri(a, b, c, hex, j = 0.05) { // triangle double face
+    _c2.setHex(hex).multiplyScalar(1 - j + FR() * j * 2); hazeCol(_c2);
+    for (const v of [a, b, c, c, b, a]) { PR.p.push(v[0], v[1], v[2]); pushCol(PR.c, _c2); }
+  }
+  // ---- relief polaire lisse ----
+  // hf(x, z) -> hauteur ; cf(x, z, h, slope, out) -> couleur
+  function polarMesh(cx, cz, rcf, nr, ns, dnMax, hf, cf) {
+    const base = T.p.length / 3;
+    const tmp = new THREE.Color();
+    for (let i = 0; i <= nr; i++) {
+      const dn = dnMax * Math.pow(i / nr, 0.85);
+      for (let j = 0; j < ns; j++) {
+        const a = (j / ns) * Math.PI * 2, rho = dn * rcf(a);
+        const x = cx + Math.cos(a) * rho, z = cz + Math.sin(a) * rho;
+        const h = hf(x, z);
+        const sl = (Math.abs(hf(x + 3, z) - h) + Math.abs(hf(x, z + 3) - h)) / 3;
+        cf(x, z, h, sl, dn, tmp); hazeCol(tmp);
+        T.p.push(x, h, z); pushCol(T.c, tmp);
+      }
+    }
+    for (let i = 0; i < nr; i++) for (let j = 0; j < ns; j++) {
+      const a = base + i * ns + j, b = base + i * ns + (j + 1) % ns, c = base + (i + 1) * ns + j, d = base + (i + 1) * ns + (j + 1) % ns;
+      if (i === 0) T.i.push(a, c, d); else T.i.push(a, c, b, b, c, d);
+    }
+  }
+  // anneau d'écume + lagon turquoise suivant le trait de côte (alpha déduit de la hauteur du relief)
+  function shoreMesh(cx, cz, rcf, ns, dn0, dn1, rows, hf) {
+    const base = FO.p.length / 3;
+    for (let i = 0; i <= rows; i++) {
+      const dn = mixN(dn0, dn1, i / rows);
+      for (let j = 0; j < ns; j++) {
+        const a = (j / ns) * Math.PI * 2, rho = dn * rcf(a), x = cx + Math.cos(a) * rho, z = cz + Math.sin(a) * rho;
+        const h = hf(x, z);
+        const foam = sst(-1.1, -0.08, h) * (1 - sst(0.05, 0.7, h));
+        const lag = sst(-4.2, -0.3, h) * (1 - sst(-0.1, 0.4, h));
+        const al = Math.max(foam * 0.9, lag * 0.42);
+        const k = Math.min(1, foam * 1.2);
+        _c2.setRGB(mixN(0.26, 1.0, k), mixN(0.82, 1.0, k), mixN(0.8, 1.0, k));
+        // la couleur est en espace linéaire (comme le reste) : on la garde claire pour que la brume ne la délave pas
+        FO.p.push(x, 0.07, z); FO.c.push(_c2.r, _c2.g, _c2.b, al * (1 - HZ * 0.6));
+      }
+    }
+    for (let i = 0; i < rows; i++) for (let j = 0; j < ns; j++) {
+      const a = base + i * ns + j, b = base + i * ns + (j + 1) % ns, c = base + (i + 1) * ns + j, d = base + (i + 1) * ns + (j + 1) % ns;
+      FO.i.push(a, c, b, b, c, d);
+    }
+  }
+  function foamDisc(x, z, r0, r1, a0 = 0.8, seg = 20) { // écume simple autour d'un piton / iceberg / bateau
+    const base = FO.p.length / 3;
+    for (let k = 0; k < 2; k++) for (let j = 0; j < seg; j++) {
+      const a = (j / seg) * Math.PI * 2, r = k ? r1 : r0;
+      FO.p.push(x + Math.cos(a) * r, 0.07, z + Math.sin(a) * r); FO.c.push(1, 1, 1, k ? 0 : a0 * (1 - HZ * 0.6));
+    }
+    for (let j = 0; j < seg; j++) { const a = base + j, b = base + (j + 1) % seg, c = base + seg + j, d = base + seg + (j + 1) % seg; FO.i.push(a, c, b, b, c, d); }
+  }
+  // ---- végétation ----
+  const CONIF = [0x2f8f46, 0x3aa052, 0x287a3c, 0x4aa64a];
+  const BROAD = [0x5cb348, 0x4aa13c, 0x7bc652, 0x68b845];
+  function conifer(x, y, z, k, snow = false) {
+    const g = CONIF[Math.floor(fr(CONIF.length))];
+    add('cyl', 5, x, y, z, 0.3 * k, 1.5 * k, 0.3 * k, 0x6b4a2b);
+    add('cone', 7, x, y + 0.9 * k, z, 1.7 * k, 2.6 * k, 1.7 * k, g, fr(6));
+    add('cone', 7, x, y + 2.4 * k, z, 1.3 * k, 2.4 * k, 1.3 * k, g, fr(6));
+    add('cone', 7, x, y + 3.8 * k, z, 0.85 * k, 2.2 * k, 0.85 * k, g, fr(6));
+    if (snow) add('cone', 7, x, y + 4.6 * k, z, 0.62 * k, 1.4 * k, 0.62 * k, 0xf4f8ff, fr(6));
+  }
+  function broadleaf(x, y, z, k) {
+    add('cyl', 5, x, y, z, 0.32 * k, 2.2 * k, 0.32 * k, 0x7a5a38);
+    const g = BROAD[Math.floor(fr(BROAD.length))];
+    add('ico', 0, x, y + 3.2 * k, z, 1.9 * k, 1.5 * k, 1.9 * k, g, fr(6));
+    add('ico', 0, x + fr(-0.8, 0.8) * k, y + 4.1 * k, z + fr(-0.8, 0.8) * k, 1.35 * k, 1.15 * k, 1.35 * k, BROAD[Math.floor(fr(BROAD.length))], fr(6));
+  }
+  function palm(x, y, z, k) {
+    const lean = fr(-0.35, 0.35), dir = fr(6.28), hh = 1.5 * k;
+    let px = x, py = y, pz = z;
+    for (let s = 0; s < 3; s++) { // tronc légèrement courbé
+      add('cyl', 5, px, py, pz, 0.26 * k * (1 - s * 0.15), hh, 0.26 * k * (1 - s * 0.15), 0x8a6a44, 0, Math.sin(dir) * lean * 0.5, Math.cos(dir) * lean * 0.5);
+      px += Math.cos(dir) * lean * hh * 0.5; pz += Math.sin(dir) * lean * hh * 0.5; py += hh * 0.97;
+    }
+    for (let i = 0; i < 7; i++) {
+      const a = i * (Math.PI * 2 / 7) + fr(0.3);
+      add('box', 0, px + Math.cos(a) * 0.5 * k, py - 0.15 * k, pz + Math.sin(a) * 0.5 * k, 2.7 * k, 0.1 * k, 0.6 * k, i % 2 ? 0x3f9f43 : 0x54b04a, -a, 0, -0.5);
+    }
+    add('ico', 0, px, py - 0.1 * k, pz, 0.28 * k, 0.28 * k, 0.28 * k, 0x6b4a2b);
+  }
+  function cactus(x, y, z, k) { add('cyl', 6, x, y, z, 0.35 * k, 3 * k, 0.35 * k, 0x3f8f4a); add('cyl', 5, x + 0.5 * k, y + 1.2 * k, z, 0.2 * k, 1.1 * k, 0.2 * k, 0x3f8f4a); }
+  function boulder(x, y, z, k, hex) { add('ico', 0, x, y, z, k * 1.3, k * 0.8, k, hex, fr(6)); }
+  // ---- piton rocheux facetté ----
+  function spire(x, z, R, H, cap) {
+    const rings = 7, seg = 8, ph = fr(6.28), pts = [];
+    for (let r = 0; r <= rings; r++) {
+      const t = r / rings, y = mixN(-6.5, H, t), rad = R * (1 - Math.pow(t, 1.15) * 0.88) * (r === rings ? 0.18 : 1);
+      const ring = [];
+      for (let s = 0; s < seg; s++) { const a = ph + (s / seg) * Math.PI * 2, jr = rad * (0.78 + FR() * 0.44); ring.push([x + Math.cos(a) * jr, y + (FR() - 0.5) * 1.2, z + Math.sin(a) * jr]); }
+      pts.push(ring);
+    }
+    for (let r = 0; r < rings; r++) for (let s = 0; s < seg; s++) {
+      const a = pts[r][s], b = pts[r][(s + 1) % seg], c = pts[r + 1][s], d = pts[r + 1][(s + 1) % seg];
+      const yy = (a[1] + c[1]) * 0.5, hex = yy < 1.2 ? 0x565b62 : (s % 2 ? 0x8e9196 : 0x7c8189);
+      tri(a, c, b, hex); tri(b, c, d, hex);
+    }
+    if (cap) {
+      const top = pts[rings - 1];
+      for (let s = 0; s < seg; s++) tri([x, H + 0.3, z], top[s], top[(s + 1) % seg], 0x6cc04a);
+      conifer(x, H - 0.2, z, fr(0.8, 1.3));
+    }
+  }
+  // ---- îles ----
+  function island(cx, cz, R, type) {
+    const seed = fr(300), dist = Math.hypot(cx, cz);
+    HZ = hazeFor(dist, 0.62);
+    const rcf = (a) => R * (0.82 + 0.34 * vnoise(Math.cos(a) * 1.7 + seed, Math.sin(a) * 1.7 + seed * 0.7));
+    const Hrel = (type === 'rock' ? fr(26, 46) : type === 'snow' ? fr(30, 60) : type === 'sand' ? fr(6, 12) : fr(14, 34)) * (0.55 + R / 140);
+    const hf = (x, z) => {
+      const dx = x - cx, dz = z - cz, rho = Math.hypot(dx, dz), a = Math.atan2(dz, dx), dn = rho / rcf(a);
+      const land = sst(0.98, 0.70, dn);
+      let h = -6.5 + 7.5 * Math.pow(land, 0.92);
+      const ridge = Math.pow(1 - Math.abs(2 * fbm(x * 0.013 + seed, z * 0.013 + seed) - 1), type === 'rock' || type === 'snow' ? 1.4 : 2.2);
+      const hills = fbm(x * 0.02 + seed * 1.3, z * 0.02 + seed);
+      let rel = type === 'sand' ? (0.4 + 0.6 * hills) * (0.6 + 0.4 * Math.sin(x * 0.07 + z * 0.04 + seed * 3)) : (0.45 * hills + 0.7 * ridge);
+      rel *= Hrel * sst(0.74, 0.12, dn);
+      h += rel * sst(0.05, 0.6, land) + 0.7 * (fbm(x * 0.13, z * 0.13) - 0.5) * land;
+      return h;
+    };
+    const cf = (x, z, h, sl, dn, out) => {
+      const n = fbm(x * 0.06, z * 0.06), n2 = fbm(x * 0.017 + 5, z * 0.017);
+      if (h < -0.6) { out.setHex(h < -3 ? 0xc9b57c : 0xddca90); return; }
+      if (type === 'rock') {
+        out.setHex(h < 1.4 + n ? 0xe2d3a0 : (Math.floor(h * 0.45 + n * 2) % 2 ? 0x8e9196 : 0x7a7f87)); if (h > Hrel * 0.62) out.lerp(_c2.setHex(0xa8a39a), 0.5); return;
+      }
+      if (type === 'sand') { out.setHex(h < 1.2 + n * 0.6 ? 0xf0dc9c : 0xe8c47a).lerp(_c2.setHex(0xd2a05a), sst(0.35, 0.8, n2) * 0.5); if (sl > 0.55) out.lerp(_c2.setHex(0xb08a56), 0.5); return; }
+      // plage -> prairie -> forêt -> roche -> neige
+      if (h < 1.5 + n * 0.9) out.setHex(h < 0.7 ? 0xe3d194 : 0xf0dc9c);
+      else if (type === 'snow') out.setHex(0x9db890).lerp(_c2.setHex(0xf4f8ff), sst(0.1, 0.35, (h - 3) / Hrel + n * 0.2));
+      else {
+        out.setHex(0x76cc4a).lerp(_c2.setHex(0x4fae3f), n); out.lerp(_c2.setHex(0x2f8a3c), sst(0.4, 0.8, n2) * 0.55);
+        out.lerp(_c2.setHex(0xb59a62), sst(0.62, 0.9, (h - 1.5) / Hrel) * 0.55); // sommet sec
+      }
+      if (sl > 0.7) out.lerp(_c2.setHex(0x8e9196), Math.min(1, (sl - 0.7) * 1.6));
+      if (type === 'snow' && h > Hrel * 0.75) out.lerp(_c2.setHex(0xffffff), 0.7);
+    };
+    const ns = R > 90 ? 84 : 64;
+    polarMesh(cx, cz, rcf, 26, ns, 1.35, hf, cf);
+    shoreMesh(cx, cz, rcf, ns * 2, 0.62, 1.22, 22, hf);
+    // végétation / rochers posés sur le relief
+    const count = type === 'rock' ? 12 : Math.floor(R * (type === 'sand' ? 0.25 : 0.9));
+    for (let t = 0, n = 0; n < count && t < count * 6; t++) {
+      const a = fr(Math.PI * 2), dn = Math.sqrt(FR()) * 0.74, x = cx + Math.cos(a) * dn * rcf(a), z = cz + Math.sin(a) * dn * rcf(a);
+      const h = hf(x, z), sl = (Math.abs(hf(x + 2, z) - h) + Math.abs(hf(x, z + 2) - h)) / 2;
+      if (h < 1.3 || sl > 0.65) continue;
+      const clump = fbm(x * 0.03 + seed, z * 0.03); if (type !== 'sand' && clump < 0.4) continue;
+      const k = fr(1.5, 2.8);
+      if (type === 'sand') { if (FR() < 0.5) palm(x, h - 0.2, z, k); else cactus(x, h - 0.1, z, k); }
+      else if (type === 'snow') { if (h < Hrel * 0.8) conifer(x, h - 0.2, z, k, true); }
+      else if (type === 'rock') boulder(x, h, z, fr(1.5, 4), 0x7c8189);
+      else if (h < 4.5 && FR() < 0.35) palm(x, h - 0.2, z, k); else if (FR() < 0.62) conifer(x, h - 0.2, z, k); else broadleaf(x, h - 0.2, z, k * 1.1);
+      n++;
+    }
+    for (let t = 0; t < 10; t++) { // rochers de plage
+      const a = fr(Math.PI * 2), rr = rcf(a) * fr(0.66, 0.8), x = cx + Math.cos(a) * rr, z = cz + Math.sin(a) * rr, h = hf(x, z);
+      if (h > -0.3 && h < 1.8) boulder(x, h - 0.1, z, fr(0.8, 2.2), 0x8e9196);
+    }
+    return { hf, rcf, Hrel };
+  }
+  function lighthouse(isl, cx, cz, R) {
+    let best = null;
+    for (let t = 0; t < 40; t++) { const a = fr(6.28), r = R * fr(0.1, 0.5), x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, h = isl.hf(x, z); if (!best || h > best.h) best = { x, z, h }; }
+    const { x, z, h } = best;
+    add('cyl', 10, x, h - 0.3, z, 5.5, 3, 5.5, 0xd8d3c8);                 // maison du gardien
+    add('cone', 10, x, h + 2.7, z, 6.2, 2.6, 6.2, 0xb53030);
+    for (let k = 0; k < 4; k++) add('cyl', 12, x + 5, h - 0.3 + k * 4.4, z, 3.1 - k * 0.32, 4.4, 3.1 - k * 0.32, k % 2 ? 0xd94040 : 0xf6f4ee);
+    add('cyl', 12, x + 5, h + 17.3, z, 3.2, 0.7, 3.2, 0x44484f);          // galerie
+    add('cyl', 10, x + 5, h + 18, z, 1.9, 2.6, 1.9, 0xfff0a8);            // lanterne
+    add('cone', 10, x + 5, h + 20.6, z, 2.6, 2.6, 2.6, 0xb53030);
+  }
+  // ---- création ----
+  const typesPool = ['green', 'green', 'green', 'green', 'sand', 'rock', 'snow', 'green'];
+  const spots = [];
+  function spot(r, dMin, dMax, tries = 80) {
     for (let t = 0; t < tries; t++) {
       const a = fr(Math.PI * 2), d = 420 + fr(dMin, dMax) + r; // 420 = rayon max. de la côte ; dMin/dMax = écart au-delà du rivage
       const x = Math.cos(a) * d * OVAL_X, z = Math.sin(a) * d * OVAL_Z;
-      if (placed.every((o) => Math.hypot(o.x - x, o.z - z) > o.r + r + 25)) { placed.push({ x, z, r }); return { x, z, a }; }
+      if (spots.every((o) => Math.hypot(o.x - x, o.z - z) > o.r + r + 30)) { spots.push({ x, z, r }); return { x, z, a }; }
     }
     return null;
   }
-  function pine(x, y, z, k) { add('cyl', 5, x, y, z, 0.35 * k, 1.6 * k, 0.35 * k, TRUNK); add('cone', 6, x, y + 1.1 * k, z, 1.5 * k, 3.4 * k, 1.5 * k, PINE, fr(6)); add('cone', 6, x, y + 2.7 * k, z, 1.05 * k, 2.6 * k, 1.05 * k, 0x3aa052, fr(6)); }
-  function palm(x, y, z, k) {
-    add('cyl', 5, x, y, z, 0.28 * k, 4.2 * k, 0.28 * k, 0x8a6a44, 0, fr(-0.15, 0.15), fr(-0.15, 0.15));
-    for (let i = 0; i < 5; i++) { const a = i * 1.2566 + fr(0.3); add('box', 0, x + Math.cos(a) * 1.2 * k, y + 4.1 * k, z + Math.sin(a) * 1.2 * k, 2.4 * k, 0.12 * k, 0.55 * k, 0x3f9f43, -a, 0, 0.25); }
+  let lh = 0;
+  for (let i = 0; i < 24; i++) {
+    const R = fr(55, 175), sp = spot(R * 1.2, 40 + (i % 4) * 70, 1700 + (i % 5) * 150); if (!sp) continue;
+    const typ = (sp.z < -420 && FR() < 0.75) ? 'snow' : (sp.z > 520 && FR() < 0.4) ? 'sand' : typesPool[Math.floor(fr(typesPool.length))];
+    const isl = island(sp.x, sp.z, R, typ);
+    if (lh < 2 && (typ === 'green' || typ === 'rock') && R > 80) { lighthouse(isl, sp.x, sp.z, R); lh++; }
   }
-  // ----- îles lointaines -----
-  const types = ['green', 'green', 'green', 'sand', 'rock', 'snow', 'palm'];
-  const n = 26;
-  for (let i = 0; i < n; i++) {
-    const R = fr(38, 150), sp = spot(R, 70 + (i % 4) * 60, 1900 + (i % 5) * 140); if (!sp) continue;
-    const typ = (sp.z < -500 && FR() < 0.7) ? 'snow' : types[Math.floor(fr(types.length))];
-    const H = fr(8, 34) * (R / 90 + 0.5);
-    const baseCol = typ === 'snow' ? 0xdfeaf4 : typ === 'rock' ? ROCK2 : typ === 'sand' ? DSAND : SAND;
-    add('cyl', 11, sp.x, -6.6, sp.z, R * 1.18, 7.4, R * 1.18, baseCol, fr(6));            // socle immergé + plage
-    if (typ === 'green' || typ === 'palm') {
-      add('cyl', 10, sp.x, 0.6, sp.z, R * 0.82, 2.6, R * 0.82, GRASS, fr(6));                // plateau herbeux
-      add('cyl', 9, sp.x + fr(-R, R) * 0.1, 3.0, sp.z + fr(-R, R) * 0.1, R * 0.55, H * 0.55, R * 0.55, GRASS2, fr(6)); // colline
-      if (R > 80) add('cone', 8, sp.x + R * 0.12, 3.0 + H * 0.4, sp.z - R * 0.1, R * 0.3, H * 0.8, R * 0.3, ROCK, fr(6));
-      const nt = Math.floor(R * 0.45);
-      for (let t = 0; t < nt; t++) {
-        const a = fr(Math.PI * 2), d = Math.sqrt(FR()) * R * 0.78, tx = sp.x + Math.cos(a) * d, tz = sp.z + Math.sin(a) * d;
-        if (typ === 'palm') palm(tx, 1.2, tz, fr(1.4, 2.4)); else pine(tx, d < R * 0.35 ? 3.0 + H * 0.45 : 1.8, tz, fr(1.6, 3.0));
-      }
-    } else if (typ === 'sand') {
-      add('cyl', 10, sp.x, 0.4, sp.z, R * 0.9, 3 + H * 0.12, R * 0.9, DSAND, fr(6));
-      for (let t = 0; t < 4; t++) add('cone', 7, sp.x + fr(-R, R) * 0.45, 2, sp.z + fr(-R, R) * 0.45, R * fr(0.3, 0.5), H * fr(0.3, 0.6), R * fr(0.3, 0.5), 0xd9b768, fr(6));
-      for (let t = 0; t < Math.floor(R * 0.15); t++) { const a = fr(Math.PI * 2), d = fr(R * 0.6); palm(sp.x + Math.cos(a) * d, 1.6, sp.z + Math.sin(a) * d, fr(1.4, 2.2)); }
-    } else if (typ === 'rock') {
-      for (let t = 0; t < 5; t++) add('cone', 6, sp.x + fr(-R, R) * 0.5, 0, sp.z + fr(-R, R) * 0.5, R * fr(0.25, 0.5), H * fr(0.6, 1.6), R * fr(0.25, 0.5), t % 2 ? ROCK : ROCK2, fr(6));
-    } else { // snow : plateau enneigé + pics glacés
-      add('cyl', 10, sp.x, 0.5, sp.z, R * 0.85, 3, R * 0.85, SNOW, fr(6));
-      for (let t = 0; t < 4; t++) { const hh = H * fr(0.8, 1.8), cx = sp.x + fr(-R, R) * 0.4, cz = sp.z + fr(-R, R) * 0.4, rr = R * fr(0.22, 0.4); add('cone', 6, cx, 0, cz, rr, hh, rr, ROCK2, fr(6)); add('cone', 6, cx, hh * 0.55, cz, rr * 0.5, hh * 0.45, rr * 0.5, SNOW, fr(6)); }
-      for (let t = 0; t < Math.floor(R * 0.2); t++) { const a = fr(Math.PI * 2), d = fr(R * 0.7); pine(sp.x + Math.cos(a) * d, 2, sp.z + Math.sin(a) * d, fr(1.4, 2.2)); }
-    }
-    // phare sur une île verte/rocheuse isolée
-    if (i === 3 || i === 11) {
-      const top = typ === 'rock' ? 0 : 2.5 + H * 0.5;
-      for (let k = 0; k < 4; k++) add('cyl', 8, sp.x + R * 0.1, top + k * 4.6, sp.z + R * 0.1, 3.0 - k * 0.3, 4.6, 3.0 - k * 0.3, k % 2 ? 0xd94040 : 0xf6f4ee);
-      add('cyl', 8, sp.x + R * 0.1, top + 18.4, sp.z + R * 0.1, 2.0, 2.0, 2.0, 0xfff3b0);
-      add('cone', 8, sp.x + R * 0.1, top + 20.4, sp.z + R * 0.1, 2.9, 2.4, 2.9, 0xb53030);
-    }
+  // pitons rocheux (+ écume à la base)
+  for (let i = 0; i < 40; i++) {
+    const R = fr(6, 17), sp = spot(R * 1.4, 35, 520 + (i % 3) * 260); if (!sp) continue;
+    HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.6);
+    const H = fr(12, 42);
+    spire(sp.x, sp.z, R, H, FR() < 0.45);
+    if (FR() < 0.5) spire(sp.x + R * 1.1, sp.z + R * 0.5, R * 0.55, H * fr(0.4, 0.7), false);
+    foamDisc(sp.x, sp.z, R * 0.7, R * 2.1, 0.8);
   }
-  // ----- pitons rocheux et arches (mer proche, juste au-delà de la carte) -----
-  for (let i = 0; i < 46; i++) {
-    const R = fr(5, 16), sp = spot(R, 40, 520 + (i % 3) * 260); if (!sp) continue;
-    const H = fr(10, 38);
-    add('cone', 6, sp.x, -6.6, sp.z, R, H + 6.6, R, i % 2 ? ROCK : ROCK2, fr(6));
-    if (FR() < 0.5) add('cone', 5, sp.x + R * 0.9, -6.6, sp.z + R * 0.4, R * 0.6, H * 0.6 + 6.6, R * 0.6, ROCK2, fr(6));
-    if (FR() < 0.25) add('cyl', 6, sp.x, H * 0.82, sp.z, R * 0.4, 1.2, R * 0.4, GRASS, 0);
+  // arches naturelles : deux piliers rocheux reliés par une voûte de blocs
+  for (let i = 0; i < 4; i++) {
+    const sp = spot(30, 150, 800); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.6);
+    const R = fr(9, 14), ry = fr(Math.PI), ux = Math.cos(ry), uz = Math.sin(ry);
+    for (const sgn of [-1, 1]) add('ico', 1, sp.x + ux * R * sgn, 4, sp.z + uz * R * sgn, 4.8, 10.5, 4.8, sgn < 0 ? 0x7c8189 : 0x8e9196, fr(6), 0, 0, 0.1);
+    for (let s = 0; s <= 8; s++) { const a = (s / 8) * Math.PI; add('ico', 0, sp.x - ux * Math.cos(a) * R, 12.5 + Math.sin(a) * 6.5, sp.z - uz * Math.cos(a) * R, 4.4, 3.4, 4.4, s % 2 ? 0x8e9196 : 0x7c8189, fr(6)); }
+    add('cyl', 7, sp.x - ux * R * 0.0, 19.4, sp.z - uz * R * 0.0, 3, 0.8, 3, 0x6cc04a);
+    foamDisc(sp.x, sp.z, 4, R * 1.5, 0.6);
   }
-  // ----- icebergs au nord, bancs de sable au sud -----
-  for (let i = 0; i < 18; i++) {
-    const R = fr(8, 30), sp = spot(R, 60, 1200); if (!sp) continue;
-    if (sp.z < -150) { add('cone', 5, sp.x, -6.6, sp.z, R, fr(10, 28) + 6.6, R * 0.9, ICE, fr(6)); add('cyl', 6, sp.x, -1, sp.z, R * 1.15, 1.5, R * 1.15, 0xeaf6ff, fr(6)); }
-    else add('cyl', 9, sp.x, -6.6, sp.z, R * 1.5, 6.9, R * 1.5, SAND, fr(6));
-  }
-  // ----- voiliers et bouées -----
-  for (let i = 0; i < 12; i++) {
-    const sp = spot(8, 70, 900, 40); if (!sp) continue; const hd = fr(6.28);
-    add('box', 0, sp.x, -0.3, sp.z, 2.4, 1.3, 7.5, 0xf3efe6, hd);
-    add('box', 0, sp.x, 0.4, sp.z, 2.5, 0.4, 7.6, i % 2 ? 0xd94040 : 0x2a6aff, hd);
-    add('cyl', 4, sp.x, 1.0, sp.z, 0.12, 8.5, 0.12, 0x6b4a2b, hd);
-    add('cone', 3, sp.x + Math.sin(hd) * 0.1, 1.8, sp.z + Math.cos(hd) * 0.1, 0.12, 6.4, 2.6, 0xffffff, hd);
-  }
-  for (let i = 0; i < 20; i++) { const sp = spot(2, 30, 700, 30); if (!sp) continue; add('cyl', 6, sp.x, -0.5, sp.z, 0.9, 1.8, 0.9, 0xe33a3a); add('cyl', 6, sp.x, 1.2, sp.z, 0.4, 1.2, 0.4, 0xfff3b0); }
-  // ----- montagnes à l'horizon (teinte brumeuse, très loin) -----
+  // icebergs (nord) et bancs de sable (sud)
   for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2 + fr(-0.2, 0.2), d = fr(4200, 6500), rr = fr(500, 1100), hh = fr(350, 800);
-    const x = Math.cos(a) * d, z = Math.sin(a) * d;
-    add('cone', 7, x, -6.6, z, rr, hh, rr * fr(0.8, 1.1), 0x93b3cf, fr(6));
-    add('cone', 7, x, hh * 0.62, z, rr * 0.4, hh * 0.38, rr * 0.4, 0xe9f2fa, fr(6));
+    const R = fr(8, 28), sp = spot(R * 1.4, 60, 1200); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.6);
+    if (sp.z < -150) {
+      const ig = new THREE.IcosahedronGeometry(1, 1); const pa = ig.attributes.position;
+      const hs = (x, y, z) => { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); };
+      const ng = ig.toNonIndexed(), np = ng.attributes.position; const sx = R, sy = R * fr(0.7, 1.3), sz = R * fr(0.7, 1.1);
+      const cache = new Map(); const jv = (x, y, z) => { const k = x.toFixed(3) + y.toFixed(3) + z.toFixed(3); if (!cache.has(k)) cache.set(k, 1 + (hs(x, y, z) - 0.5) * 0.45); return cache.get(k); };
+      for (let f = 0; f < np.count; f += 3) {
+        const vs = [0, 1, 2].map((k) => { const x = np.getX(f + k), y = np.getY(f + k), z = np.getZ(f + k); const j = jv(x, y, z); return [sp.x + x * sx * j, -R * 0.3 + y * sy * j * 1.3, sp.z + z * sz * j]; });
+        const cy = (vs[0][1] + vs[1][1] + vs[2][1]) / 3;
+        tri(vs[0], vs[1], vs[2], cy < 0 ? 0x86d8ea : (cy > R * 0.5 ? 0xffffff : 0xdff4fb), 0.04);
+      }
+      foamDisc(sp.x, sp.z, R * 0.8, R * 1.9, 0.6);
+    } else {
+      const ns2 = 40, isl2 = { }; // banc de sable : disque plat sous l'eau, calé sur le relief
+      const rcf = (a) => R * 1.5 * (0.85 + 0.3 * vnoise(Math.cos(a) * 2 + i, Math.sin(a) * 2 + i));
+      const hf = (x, z) => { const dn = Math.hypot(x - sp.x, z - sp.z) / rcf(Math.atan2(z - sp.z, x - sp.x)); return -6.5 + 7 * Math.pow(sst(1.0, 0.45, dn), 0.9); };
+      polarMesh(sp.x, sp.z, rcf, 10, ns2, 1.2, hf, (x, z, h, sl, dn, out) => out.setHex(h < -0.5 ? 0xd8c58a : 0xf0dc9c));
+      shoreMesh(sp.x, sp.z, rcf, 60, 0.5, 1.2, 12, hf);
+    }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
-  g.computeVertexNormals();
-  g.computeBoundingSphere();
-  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 }));
-  mesh.frustumCulled = false; mesh.matrixAutoUpdate = false;
-  scene.add(mesh);
+  // voiliers + sillage
+  for (let i = 0; i < 12; i++) {
+    const sp = spot(10, 70, 900, 40); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.5);
+    const hd = fr(6.28), fwd = [Math.sin(hd), Math.cos(hd)], hull = i % 3 ? 0xf3efe6 : 0x2a4a8a;
+    add('box', 0, sp.x, -0.5, sp.z, 2.3, 1.4, 6.4, hull, hd);
+    add('cone', 4, sp.x + fwd[0] * 3.9, -0.5, sp.z + fwd[1] * 3.9, 1.1, 1.8, 1.4, hull, hd + Math.PI / 4, -Math.PI / 2 * 0 + 0, 0);
+    add('box', 0, sp.x, 0.7, sp.z, 2.35, 0.25, 6.45, i % 2 ? 0xd94040 : 0xd9a441, hd);
+    add('cyl', 5, sp.x, 0.8, sp.z, 0.1, 9.5, 0.1, 0x8a8f98, hd);
+    const P0 = [sp.x, 1.6, sp.z], P1 = [sp.x, 10, sp.z], bx = -fwd[0] * 3, bz = -fwd[1] * 3;
+    tri(P0, P1, [sp.x + bx, 1.6, sp.z + bz], 0xfdfdfd, 0.03);
+    tri([sp.x + fwd[0] * 0.4, 1.6, sp.z + fwd[1] * 0.4], [sp.x + fwd[0] * 0.4, 9.2, sp.z + fwd[1] * 0.4], [sp.x + fwd[0] * 3.6, 1.8, sp.z + fwd[1] * 3.6], 0xf2f2ee, 0.03);
+    foamDisc(sp.x - fwd[0] * 2, sp.z - fwd[1] * 2, 1.2, 4.5, 0.5, 14);
+  }
+  for (let i = 0; i < 22; i++) { const sp = spot(2, 30, 700, 30); if (!sp) continue; HZ = hazeFor(Math.hypot(sp.x, sp.z), 0.5); add('cyl', 7, sp.x, -0.6, sp.z, 0.9, 1.9, 0.9, 0xe33a3a); add('cyl', 7, sp.x, 0.9, sp.z, 0.95, 0.4, 0.95, 0xf6f4ee); add('cyl', 5, sp.x, 1.3, sp.z, 0.12, 1.4, 0.12, 0x44484f); foamDisc(sp.x, sp.z, 0.9, 2.2, 0.6, 10); }
+  // ---- chaînes de montagnes à l'horizon (relief en crêtes, brume forte) ----
+  for (let i = 0; i < 13; i++) {
+    const a = (i / 13) * Math.PI * 2 + fr(-0.2, 0.2), d = fr(4300, 6800), R = fr(900, 1700), Hm = fr(420, 950), seed = fr(500);
+    const mx = Math.cos(a) * d, mz = Math.sin(a) * d; HZ = hazeFor(d, 0.72);
+    const rcf = (an) => R * (0.8 + 0.4 * vnoise(Math.cos(an) * 1.3 + seed, Math.sin(an) * 1.3 + seed));
+    const hf = (x, z) => {
+      const dn = Math.hypot(x - mx, z - mz) / rcf(Math.atan2(z - mz, x - mx));
+      const mask = sst(1.0, 0.05, dn);
+      const ridge = Math.pow(1 - Math.abs(2 * fbm(x * 0.0035 + seed, z * 0.0035 + seed) - 1), 1.5);
+      const det = fbm(x * 0.012 + seed, z * 0.012);
+      return -6.5 + (Hm * Math.pow(mask, 1.25)) * (0.35 + 0.7 * ridge) * (0.85 + 0.3 * det);
+    };
+    const cf = (x, z, h, sl, dn, out) => {
+      const t = (h + 6.5) / Hm;
+      out.setHex(t < 0.18 ? 0x3d7b4a : t < 0.4 ? 0x6e8a6a : 0x7d838d).lerp(_c2.setHex(0x9aa0a8), sst(0.4, 0.7, t) * 0.5);
+      if (t > 0.5 && sl < 1.6) out.lerp(_c2.setHex(0xffffff), sst(0.5, 0.7, t + (fbm(x * 0.01, z * 0.01) - 0.5) * 0.3) * 0.95);
+      if (sl > 1.4) out.lerp(_c2.setHex(0x6c727b), 0.4);
+    };
+    polarMesh(mx, mz, rcf, 30, 72, 1.15, hf, cf);
+  }
+  HZ = 0;
+  // ---- assemblage ----
+  const mats = (smooth) => new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: !smooth, roughness: 0.95 });
+  const addMesh = (p, c, idx, material, order = 0) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(c, c === FO.c ? 4 : 3));
+    if (idx) g.setIndex(idx);
+    g.computeVertexNormals(); g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, material); m.frustumCulled = false; m.matrixAutoUpdate = false; m.renderOrder = order; scene.add(m);
+  };
+  addMesh(T.p, T.c, T.i, mats(true));
+  addMesh(PR.p, PR.c, null, mats(false));
+  addMesh(FO.p, FO.c, FO.i, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), 2);
 }
 
 // Clouds — cumulus volumétriques très hauts, très gros, dérive lente au vent
