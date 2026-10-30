@@ -751,11 +751,15 @@ HOUSE_MAT.onBeforeCompile = (sh) => {
 
         // Briques et pierres appareillées pour les façades de ville / brique
         if (isBrickOrStone > 0.5 && isWhiteMarble < 0.5) {
-          float bRow = floor(vWP.y / 0.28);
           float coordX = abs(fn.x) > 0.5 ? vWP.z : vWP.x;
-          float bCol = mod(coordX + bRow * 0.44, 0.88);
-          float mortar = smoothstep(0.0, 0.035, mod(vWP.y, 0.28)) * smoothstep(0.0, 0.045, bCol);
-          diffuseColor.rgb *= 0.86 + 0.18 * mortar;
+          // pierre de taille rosée de l'Agence : grands blocs appareillés (0,55 x 1,4 m)
+          float isAshlar = step(0.05, diffuseColor.r - diffuseColor.g) * step(diffuseColor.r - diffuseColor.g, 0.12) * step(diffuseColor.g, diffuseColor.b);
+          float rowH = mix(0.28, 0.55, isAshlar), colW = mix(0.88, 1.4, isAshlar);
+          float bRow = floor(vWP.y / rowH);
+          float bCol = mod(coordX + bRow * colW * 0.5, colW);
+          float mortar = smoothstep(0.0, 0.035, mod(vWP.y, rowH)) * smoothstep(0.0, 0.045, bCol);
+          float blockTone = 0.96 + 0.08 * bHash(vec2(floor((coordX + bRow * colW * 0.5) / colW), bRow)) * isAshlar;
+          diffuseColor.rgb *= (0.86 + 0.18 * mortar) * blockTone;
         } else if (isWhiteMarble > 0.5) {
           // Marbre blanc lisse de l'Agence avec joints subtils de blocs impériaux (1.5 m)
           float pY = smoothstep(0.0, 0.03, mod(vWP.y, 1.5)) * (1.0 - smoothstep(1.47, 1.5, mod(vWP.y, 1.5)));
@@ -842,6 +846,8 @@ const PRISM_GEO = (() => {
   g.computeVertexNormals(); return g;
 })();
 const CYL_GEO = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
+const CYL_HI = new THREE.CylinderGeometry(0.5, 0.5, 1, 32); // tours rondes de l'Agence
+const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
 
 // =====================================================================
 // Grass : touffes de fines lames courbes (dégradé sombre -> clair), très nombreuses, qui ondulent au vent
@@ -3851,7 +3857,7 @@ function buildSpyPOI(p) {
     AGX = { k: K, X: (x) => BX + (x - BX) * K, Z: (z) => BZ + (z - BZ) * K };
     const X = AGX.X, Z = AGX.Z;
     // GRIS CLAIR : façade, sols, colonnes et soubassement en gris clair uniforme
-    const FH = 4.4, WALL = 0xd6d9de, GOLD = 0xffc400, GLASS = 0x27313f;
+    const FH = 4.4, WALL = 0xd9cdd0, CORN = 0xc6b9bd, TRIML = 0xe8dfe1, GOLD = 0xffc400, GLASS = 0x27313f;
     const stoneM = () => matC(WALL, { roughness: 0.8 });
     // sol en gris clair brillant (hall et étages — plus aucun noir à l'Agence)
     const floorM = () => matC(0xdcdfe3, { roughness: 0.2, metalness: 0.0 });
@@ -4016,10 +4022,10 @@ function buildSpyPOI(p) {
     }
     // bandes dorées entre les niveaux + corniche du toit
     for (const y of [13.45, 17.85, 22.25, 26.65]) {
-      hdeco(BOX, GOLD, BX, y - 0.18, BZ + 10.3, 26.4, 0.36, 0.18);
-      hdeco(BOX, GOLD, BX, y - 0.18, BZ - 10.3, 26.4, 0.36, 0.18);
-      hdeco(BOX, GOLD, BX + 13.3, y - 0.18, BZ, 0.18, 0.36, 20.4);
-      hdeco(BOX, GOLD, BX - 13.3, y - 0.18, BZ, 0.18, 0.36, 20.4);
+      hdeco(BOX, CORN, BX, y - 0.22, BZ + 10.4, 26.8, 0.44, 0.36);
+      hdeco(BOX, CORN, BX, y - 0.22, BZ - 10.4, 26.8, 0.44, 0.36);
+      hdeco(BOX, CORN, BX + 13.4, y - 0.22, BZ, 0.36, 0.44, 20.8);
+      hdeco(BOX, CORN, BX - 13.4, y - 0.22, BZ, 0.36, 0.44, 20.8);
     }
     // parapet du toit
     makeStructBox(BX, 26.65, BZ - 10, 26, 0.8, 0.5, stoneM(), oStone);
@@ -4087,20 +4093,6 @@ function buildSpyPOI(p) {
         banner(BX - 4.6, y, BZ, Math.PI / 2); banner(BX + 4.6, y, BZ, -Math.PI / 2);
       }
     }
-
-    // ---- PORTIQUE D'ENTRÉE (façade sud) : 4 colonnes cannelées + fronton
-    for (const cx of [-7.5, -2.5, 2.5, 7.5]) {
-      hdeco(CYL_GEO, WALL, BX + cx, p.h + 2.25, BZ + 13.5, 1.0, 4.5, 1.0);
-      hdeco(BOX, GOLD, BX + cx, p.h + 4.5, BZ + 13.5, 1.6, 0.5, 1.6);   // chapiteau
-      hdeco(BOX, 0x3a404c, BX + cx, p.h + 0.25, BZ + 13.5, 1.6, 0.5, 1.6); // base
-      propBox(BX + cx, p.h, BZ + 13.5, 0.8, 0.8, 4.6); // colonne : solide
-    }
-    makeStructBox(BX, 13.45, BZ + 12.5, 18, 0.45, 5, stoneM(), oStone); // dalle du portique
-    hdeco(PRISM_GEO, WALL, BX, 13.9, BZ + 12.5, 18, 1.8, 5);       // fronton
-    hdeco(BOX, GOLD, BX, 13.95, BZ + 15.05, 18.4, 0.22, 0.3);           // rive dorée du fronton
-    // emblème GHOST doré au centre du fronton
-    hdeco(CYL_GEO, GOLD, BX, 15.1, BZ + 12.5, 1.5, 0.25, 1.5, Math.PI / 2, 0, 0);
-    hdeco(BOX, 0x1f3a8a, BX, 15.15, BZ + 12.42, 0.9, 1.0, 0.08);
 
     // ---- DRAPEAUX GHOST bleus aux quatre coins du toit
     for (const [fx, fz] of [[-11.5, -8.5], [11.5, -8.5], [-11.5, 8.5], [11.5, 8.5]]) {
@@ -4220,21 +4212,6 @@ function buildSpyPOI(p) {
     hdeco(BOX, 0x8a8f98, BX, LV[3] + 0.3, BZ + 4.9, 1.6, 0.1, 0.9); // table basse
     propBox(BX, LV[3], BZ + 4.9, 0.8, 0.45, 0.35);
 
-    // ---- PARVIS : chemin pavé du portique vers l'entrée + braseros + haies
-    // (la statue de Midas est désormais DANS le hall, au centre de l'atrium)
-    hdeco(BOX, 0xd3d6db, BX, p.h + 0.03, BZ + 17.5, 6, 0.06, 9);
-    // braseros de part et d'autre du chemin (façon Agence de Fortnite)
-    for (const bxp of [-8, 8]) {
-      hdeco(CYL_GEO, 0xa8adb4, BX + bxp, p.h + 0.5, BZ + 16, 1.2, 1.0, 1.2);
-      hdeco(CYL_GEO, 0xff8c1a, BX + bxp, p.h + 1.1, BZ + 16, 0.7, 0.25, 0.7);
-      propBox(BX + bxp, p.h, BZ + 16, 1.0, 1.0, 1.1);
-      const fl = new THREE.PointLight(0xff9a2e, 5, 14); fl.position.set(X(BX + bxp), p.h + 1.6, Z(BZ + 16)); scene.add(fl);
-    }
-    // haies basses encadrant le parvis
-    for (const [hx, hz, hw, hd] of [[-16, 12, 6, 1.6], [16, 12, 6, 1.6], [-16, 20, 6, 1.6], [16, 20, 6, 1.6]]) {
-      hdeco(BOX, 0x2d5a35, BX + hx, p.h + 0.5, BZ + hz, hw, 1.0, hd);
-      propBox(BX + hx, p.h, BZ + hz, hw / 2, hd / 2, 1.0);
-    }
     // caméras de surveillance aux quatre coins du bâtiment
     for (const [cx2, cz2] of [[-12.8, -9.8], [12.8, -9.8], [-12.8, 9.8], [12.8, 9.8]]) {
       hdeco(BOX, 0x46536e, BX + cx2, 12.2, BZ + cz2, 0.5, 0.4, 0.8);
@@ -4251,9 +4228,9 @@ function buildSpyPOI(p) {
       makeStructBox(wx, 9.0, BZ + 10, 8, 8.85, 1.0, stoneM(), oStone);   // mur sud
       // toit plat sombre (gravier) + corniche dorée
       makeStructBox(wx, 17.4, BZ, 8.5, 0.45, 21, stoneM(), oStone);
-      hdeco(BOX, 0xb2b7bd, wx, 17.86, BZ, 8.4, 0.06, 20.9);
-      hdeco(BOX, GOLD, wx, 17.78, BZ + 10.15, 8.6, 0.28, 0.14);
-      hdeco(BOX, GOLD, wx, 17.78, BZ - 10.15, 8.6, 0.28, 0.14);
+      hdeco(BOX, CORN, wx, 17.86, BZ, 8.4, 0.06, 20.9);
+      hdeco(BOX, CORN, wx, 17.78, BZ + 10.15, 8.6, 0.4, 0.3);
+      hdeco(BOX, CORN, wx, 17.78, BZ - 10.15, 8.6, 0.4, 0.3);
       // fenêtres étroites sur les deux niveaux, face extérieure (x ±21,5)
       for (let f = 0; f < 2; f++) {
         for (const u of [-6, -2, 2, 6]) {
@@ -4336,39 +4313,145 @@ function buildSpyPOI(p) {
       hdeco(CYL_GEO, 0xa8adb4, BX + ax, 27.62, BZ + az, 0.42, 0.14, 0.42);
     }
 
-    // ---- STATUE ATLAS CHROMÉE devant l'entrée (comme la vraie Agence) :
-    // figure agenouillée portant le globe au-dessus d'elle, au bout du
-    // parvis, encadrée de deux arbres taillés et de deux bancs bleus
+    // ---- FAÇADE ET SILHOUETTE À LA FORTNITE : pierre rosée de taille, deux grandes tours rondes
+    // (bastions) encadrant l'entrée, haute tour ronde centrale, rotondes sur les ailes, podiums
+    // en terrasses avec escaliers et balustrades, quai, bassin et sculpture-fontaine devant.
     {
-      const st2 = new THREE.Group();
-      const cM = matC(0xc8ccd4, { metalness: 0.9, roughness: 0.15 });
-      const dS = matC(0x51607a, { metalness: 0.4 });
-      addBox(st2, 0.5, 1.0, 0.8, -0.45, 0.5, 0.2, cM);   // jambe agenouillée
-      addBox(st2, 0.5, 0.8, 0.5, 0.3, 0.4, -0.55, cM);   // jambe avant pliée
-      addBox(st2, 1.4, 1.8, 0.75, 0, 1.85, -0.1, cM);    // torse
-      const bL = addBox(st2, 0.38, 1.7, 0.38, -0.55, 3.3, -0.1, cM); bL.rotation.x = 0.3;
-      const bR = addBox(st2, 0.38, 1.7, 0.38, 0.55, 3.3, -0.1, cM); bR.rotation.x = 0.3;
-      addBox(st2, 0.6, 0.65, 0.6, 0, 3.05, 0.05, dS);    // tête
-      const globe2 = new THREE.Mesh(new THREE.SphereGeometry(0.95, 20, 14), matC(0x3fa9ff, { metalness: 0.4, roughness: 0.2, emissive: 0x0c3555, emissiveIntensity: 0.5 }));
-      globe2.position.set(0, 4.95, 0); globe2.castShadow = true; st2.add(globe2);
-      st2.scale.setScalar(0.65 * K);
-      st2.position.set(BX, p.h + 0.9, Z(BZ + 23)); scene.add(st2);
-      // socle métallique
-      hdeco(BOX, 0xa8adb4, BX, p.h + 0.4, BZ + 23, 2.6, 0.8, 2.6);
-      propBox(BX, p.h, BZ + 23, 1.3, 1.3, 0.85);
-      const st2L = new THREE.PointLight(0xbfd8ff, 4, 12); st2L.position.set(BX, p.h + 4.2 * K, Z(BZ + 23)); scene.add(st2L);
-      // deux arbres taillés sur touffes d'herbe + deux bancs bleus incurvés
-      for (const tx of [-3.8, 3.8]) {
-        hdeco(CYL_GEO, 0x6b4a2c, BX + tx, p.h + 1.2, BZ + 23, 0.22, 2.4, 0.22);
-        hdeco(CYL_GEO, 0x2d5a35, BX + tx, p.h + 2.7, BZ + 23, 1.3, 1.4, 1.3);
-        hdeco(CYL_GEO, 0x2d5a35, BX + tx, p.h + 3.7, BZ + 23, 0.9, 0.9, 0.9);
-        propBox(BX + tx, p.h, BZ + 23, 0.25, 0.25, 3.9);
+      const g = p.h, ST = WALL;
+      const sM = () => matC(ST, { roughness: 0.85 });
+      const sb = (x, y, z, w, h, d) => makeStructBox(BX + x, y, BZ + z, w, h, d, sM(), { hp: 600, mat: 'stone', indestructible: true });
+      const drum = (cx, cz, r, y0, y1) => { hdeco(CYL_HI, ST, BX + cx, (y0 + y1) / 2, BZ + cz, 2 * r, y1 - y0, 2 * r); propDisc(BX + cx, y0, BZ + cz, r * 0.96, y1 - y0, 12); };
+      const ring = (cx, cz, r, y, h = 0.5, grow = 0.45, hex = CORN) => hdeco(CYL_HI, hex, BX + cx, y + h / 2, BZ + cz, 2 * (r + grow), h, 2 * (r + grow));
+      const rail = (x0, z0, x1, z1, y, posts = true) => {
+        const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / 1.1)), a = Math.atan2(x1 - x0, z1 - z0);
+        if (posts) for (let i = 0; i <= n; i++) hdeco(BOX, TRIML, BX + x0 + (x1 - x0) * i / n, y + 0.4, BZ + z0 + (z1 - z0) * i / n, 0.16, 0.8, 0.16);
+        hdeco(BOX, TRIML, BX + (x0 + x1) / 2, y + 0.84, BZ + (z0 + z1) / 2, 0.22, 0.1, L, 0, a, 0);
+        hdeco(BOX, TRIML, BX + (x0 + x1) / 2, y + 0.1, BZ + (z0 + z1) / 2, 0.2, 0.12, L, 0, a, 0);
+      };
+      const circRail = (cx, cz, r, y, n = 28, gapA = null) => {
+        for (let i = 0; i < n; i++) {
+          const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
+          if (gapA && Math.cos((a0 + a1) / 2 - gapA[0]) > gapA[1]) continue;
+          rail(cx + Math.sin(a0) * r, cz + Math.cos(a0) * r, cx + Math.sin(a1) * r, cz + Math.cos(a1) * r, y, false);
+          hdeco(BOX, TRIML, BX + cx + Math.sin(a0) * r, y + 0.4, BZ + cz + Math.cos(a0) * r, 0.16, 0.8, 0.16);
+        }
+      };
+      // fenêtres hautes et étroites réparties sur un cylindre (angle 0 = vers le sud)
+      const slits = (cx, cz, r, y, h, angs, w = 0.8) => {
+        for (const a of angs) {
+          const px = cx + Math.sin(a) * (r + 0.05), pz = cz + Math.cos(a) * (r + 0.05);
+          hdeco(BOX, TRIML, BX + px, y + h / 2, BZ + pz, w + 0.5, h + 0.5, 0.2, 0, a, 0);
+          hdeco(BOX, GLASS, BX + px + Math.sin(a) * 0.1, y + h / 2, BZ + pz + Math.cos(a) * 0.1, w, h, 0.2, 0, a, 0);
+        }
+      };
+      const medallion = (cx, cz, r, y, R) => { // écusson GHOST rond sur la face sud d'une tour
+        const zf = cz + r + 0.05;
+        hdeco(CYL_HI, 0xc9a24a, BX + cx, y, BZ + zf, 2 * R * K, 0.2, 2 * R * K, Math.PI / 2, 0, 0);
+        hdeco(CYL_HI, 0x7fa6d9, BX + cx, y, BZ + zf + 0.12, 1.6 * R * K, 0.2, 1.6 * R * K, Math.PI / 2, 0, 0);
+        hdeco(CYL_HI, 0xf2eef0, BX + cx, y, BZ + zf + 0.24, 0.9 * R * K, 0.2, 0.9 * R * K, Math.PI / 2, 0, 0);
+      };
+
+      // -- bastions ronds de part et d'autre de l'entrée (2 niveaux), terrasse sommitale à balustrade
+      for (const sx of [-1, 1]) {
+        const cx = sx * 8.6, cz = 11.2, r = 4.7;
+        drum(cx, cz, r, g, 17.85);
+        ring(cx, cz, r, g, 0.7, 0.35);                  // socle
+        ring(cx, cz, r, 13.15, 0.5, 0.4);               // cordon du 1er niveau
+        ring(cx, cz, r, 17.35, 0.5, 0.55);              // corniche
+        hdeco(CYL_HI, CORN, BX + cx, 17.9, BZ + cz, 2 * (r + 0.1), 0.1, 2 * (r + 0.1)); // dessus
+        circRail(cx, cz, r + 0.2, 17.85, 30);           // balustrade sommitale
+        slits(cx, cz, r, 14.6, 2.4, [-0.62, 0.62, 1.25, -1.25, 1.9, -1.9]);
+        medallion(cx, cz, r, 14.9, 1.3);
       }
-      for (const bx of [-3.2, 3.2]) {
-        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.3, BZ + 20.8, 1.8, 0.12, 0.6);
-        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.55, BZ + 21.1, 0.5, 0.5, 0.12);
-        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.55, BZ + 20.5, 0.5, 0.5, 0.12);
-        propBox(BX + bx, p.h, BZ + 20.8, 0.9, 0.35, 0.5);
+      // -- haute tour ronde centrale (sur le toit, côté sud, hors du trou d'atrium)
+      {
+        const cx = 0, cz = 6.9, r = 2.9;
+        drum(cx, cz, r, 26.65, 36.6);
+        for (const y of [30.6, 33.9]) ring(cx, cz, r, y, 0.45, 0.35);
+        ring(cx, cz, r, 36.1, 0.7, 0.55);
+        hdeco(CYL_HI, CORN, BX + cx, 36.65, BZ + cz, 2 * (r + 0.55), 0.1, 2 * (r + 0.55));
+        circRail(cx, cz, r + 0.3, 36.6, 20);
+        slits(cx, cz, r, 27.6, 2.6, [-0.7, 0, 0.7], 0.7);
+        slits(cx, cz, r, 31.3, 2.2, [-0.5, 0.5], 0.7);
+        medallion(cx, cz, r, 34.9, 1.15);
+        hdeco(BOX, 0xb2b7bd, BX + cx, 40.6, BZ + cz, 0.14, 8, 0.14);             // mât
+        propBox(BX + cx, 36.6, BZ + cz, 0.1, 0.1, 8);
+        hdeco(BOX, 0x1f3a8a, BX + cx + 1.1, 42.6, BZ + cz, 2.2, 1.5, 0.06);       // drapeau GHOST
+        hdeco(BOX, 0xffffff, BX + cx + 1.1, 42.6, BZ + cz + 0.04, 0.7, 0.7, 0.02);
+      }
+      // -- rotondes sur les toits des ailes
+      for (const sx of [-1, 1]) {
+        const cx = sx * 17, cz = 0, r = 3.7;
+        drum(cx, cz, r, 17.85, 23.3);
+        ring(cx, cz, r, 22.8, 0.55, 0.5);
+        hdeco(CYL_HI, CORN, BX + cx, 23.35, BZ + cz, 2 * (r + 0.5), 0.1, 2 * (r + 0.5));
+        circRail(cx, cz, r + 0.3, 23.3, 22);
+        slits(cx, cz, r, 19.3, 3.0, [sx * Math.PI / 2, sx * Math.PI / 2 + 0.6, sx * Math.PI / 2 - 0.6, 0.0, sx * 0.6], 0.8);
+        hdeco(BOX, 0xb2b7bd, BX + cx, 26.2, BZ + cz, 0.12, 5.8, 0.12);          // petit mât
+        hdeco(BOX, 0x1f3a8a, BX + cx + 0.9, 27.6, BZ + cz, 1.8, 1.1, 0.05);
+      }
+
+      // -- PODIUMS EN TERRASSES devant la façade (deux niveaux), séparés par le passage central
+      for (const sx of [-1, 1]) {
+        const x0 = 6.6, x1 = 31, cxP = sx * (x0 + x1) / 2, wP = x1 - x0;
+        sb(cxP, g, 18.7, wP, 3.15, 7.4);                    // podium bas (dessus à 12,15)
+        hdeco(BOX, CORN, BX + cxP, g + 3.15 - 0.15, BZ + 22.5, wP + 0.4, 0.3, 0.4);  // coping
+        hdeco(BOX, CORN, BX + cxP, g + 0.3, BZ + 22.45, wP + 0.4, 0.6, 0.3);          // plinthe
+        sb(sx * 18.2, g + 3.15, 17.0, 12.4, 3.0, 3.6);      // podium haut (dessus à 15,15)
+        hdeco(BOX, CORN, BX + sx * 18.2, g + 6.0, BZ + 18.85, 12.8, 0.3, 0.4);
+        // balustrades : bord sud du podium bas (hors escalier), bord sud du podium haut, bout extérieur
+        rail(sx * 6.9, 22.3, sx * 23.6, 22.3, g + 3.15);
+        rail(sx * 28.4, 22.3, sx * 30.8, 22.3, g + 3.15);
+        rail(sx * 30.8, 22.3, sx * 30.8, 15.4, g + 3.15);
+        rail(sx * 12.2, 18.6, sx * 24.2, 18.6, g + 6.15);
+        rail(sx * 24.2, 18.6, sx * 24.2, 15.4, g + 6.15);
+        // escalier extérieur : 7 marches, montée vers le nord, depuis le quai
+        for (let k = 1; k <= 7; k++) sb(sx * 26, g, 26.9 - (k - 0.5) * 0.7, 4.2, k * 0.45, 0.7);
+        for (const dx of [-2.2, 2.2]) {                      // joues + main courante inclinée
+          sb(sx * 26 + dx, g, 24.65, 0.45, 1.2, 4.9);
+          hdeco(BOX, TRIML, BX + sx * 26 + dx, g + 2.65, BZ + 24.45, 0.2, 0.12, 8.0, Math.atan2(3.15, 7.35), 0, 0);
+        }
+        // arbres ronds (houppiers vert vif) et buis taillés sur le podium
+        for (const [tx, tz, th] of [[sx * 14.5, 19.2, g + 3.15], [sx * 25.5, 17.6, g + 3.15]]) {
+          hdeco(CYL_GEO, 0x6b4a2c, BX + tx, th + 1.6, BZ + tz, 0.38, 3.2, 0.38); propBox(BX + tx, th, BZ + tz, 0.3, 0.3, 3.2);
+          hdeco(SPH_GEO, 0x6fb83a, BX + tx, th + 4.4, BZ + tz, 4.2, 3.6, 4.2);
+          hdeco(SPH_GEO, 0x82c845, BX + tx + 0.7, th + 5.2, BZ + tz - 0.4, 3.0, 2.4, 3.0);
+        }
+        for (const [bx, bz] of [[sx * 9.2, 19.8], [sx * 21.5, 20.6]]) hdeco(SPH_GEO, 0x3f8f3a, BX + bx, g + 3.15 + 0.7, BZ + bz, 1.5, 1.4, 1.5);
+        // bancs bleus aux deux bouts du quai
+        for (const ex of [29.5]) {
+          hdeco(BOX, 0x2c6fbb, BX + sx * ex, g + 0.5, BZ + 25.2, 1.0, 0.14, 1.9);
+          hdeco(BOX, 0x2c6fbb, BX + sx * (ex + 0.4), g + 0.8, BZ + 25.2, 0.14, 0.6, 1.9);
+          propBox(BX + sx * ex, g, BZ + 25.2, 0.6, 1.0, 0.8);
+        }
+      }
+      // -- QUAI de pierre claire + chemin d'entrée, jusqu'au bassin
+      hdeco(BOX, TRIML, BX, g + 0.03, BZ + 25.6, 62, 0.07, 7.2);
+      hdeco(BOX, 0xe0d6d8, BX, g + 0.04, BZ + 17.6, 12.4, 0.07, 14.4);        // allée centrale
+      hdeco(BOX, CORN, BX, g + 0.05, BZ + 29.15, 62.4, 0.5, 0.5);             // bord du quai
+      rail(-31, 29.1, -5.9, 29.1, g + 0.3); rail(5.9, 29.1, 31, 29.1, g + 0.3);
+      // -- BASSIN (eau turquoise) en ellipse devant le quai
+      hdeco(CYL_HI, 0x4fb8d0, BX, g + 0.02, BZ + 34, 2 * 26, 0.05, 2 * 7.4);
+      // -- SOCLE ROND DE LA FONTAINE qui avance dans l'eau, avec balustrade circulaire
+      {
+        const cx = 0, cz = 31.2, r = 5.6;
+        hdeco(CYL_HI, 0xcfc4c7, BX + cx, g + 0.35, BZ + cz, 2 * r, 0.7, 2 * r);
+        propDisc(BX + cx, g, BZ + cz, r * 0.96, 0.7, 12);
+        hdeco(CYL_HI, CORN, BX + cx, g + 0.75, BZ + cz, 2 * (r + 0.25), 0.15, 2 * (r + 0.25));
+        circRail(cx, cz, r - 0.4, g + 0.7, 26, [Math.PI, 0.9]);                // ouvert côté quai (nord)
+        // sculpture chromée : sphère à emblème et deux lames incurvées
+        const cM = matC(0xe9ecf1, { metalness: 0.25, roughness: 0.35 });
+        const wx2 = X(BX + cx), wz2 = Z(BZ + cz - 0.6), by = g + 0.8;
+        const sph = new THREE.Mesh(new THREE.SphereGeometry(1.7 * K * 0.7, 28, 20), cM); sph.position.set(wx2, by + 2.6, wz2); sph.castShadow = true; scene.add(sph);
+        for (const sgn of [-1, 1]) {
+          const bl = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), cM);
+          bl.scale.set(0.38, 3.9, 1.5); bl.position.set(wx2 + sgn * 1.9, by + 3.0, wz2 + 0.1); bl.rotation.set(0, sgn * 0.5, -sgn * 0.28);
+          bl.castShadow = true; scene.add(bl);
+        }
+        const em = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.1, 24), matC(0xf2eef0, { metalness: 0.5, roughness: 0.3 }));
+        em.rotation.x = Math.PI / 2; em.position.set(wx2, by + 2.6, wz2 + 1.55 * K * 0.7); scene.add(em);
+        propDisc(BX + cx, g + 0.7, BZ + cz - 0.6, 1.3, 5.2, 8);
+        const fl2 = new THREE.PointLight(0xbfd8ff, 3.5, 16); fl2.position.set(wx2, by + 4, Z(BZ + cz + 2)); scene.add(fl2);
       }
     }
     { const H = curHouse; curHouse = null; finishHouse(H); }
