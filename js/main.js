@@ -320,8 +320,7 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
         // turquoise près du rivage, bleu profond au large ; la nuit, la mer s'assombrit
         float shore = smoothstep(1.18, 0.72, length(vWP.xz / vec2(440.0, 360.0)));
         vec3 base = mix(vec3(0.02, 0.28, 0.55), vec3(0.16, 0.78, 0.72), shore) * (1.0 - uNight * 0.62);
-        float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
-        outgoingLight = mix(outgoingLight, base * (0.75 + sparkle * 0.6), 0.55);
+        outgoingLight = mix(outgoingLight, base * 0.75, 0.55);
         outgoingLight = mix(outgoingLight, refl, fres * 0.75);
         outgoingLight += vec3(1.0, 0.92, 0.7) * glint;
         float distF = clamp(length(vWP.xz) / 230.0, 0.0, 1.0);
@@ -5769,8 +5768,11 @@ function updatePlayer(dt) {
   // plongeon : « s'accroupir » (F) dans l'eau fait couler, on remonte en le relâchant
   p.diving = p.inWater && !!p.crouchToggle;
   if ((down('jump') || p.jumpBuf > 0) && (p.grounded || p.coyote > 0) && p.vel.y <= 2 && !p.inWater && !blocked) { p.vel.y = JUMP_V * (sliding ? 1.08 : 1); p.grounded = false; p.coyote = 0; p.jumpBuf = 0; p.crouchToggle = false; p.slideT = 0; }
-  // petit bond de nage : sauter en surface fait sortir la tête de l'eau (grimper sur la berge)
-  if (p.inWater && !p.diving && (down('jump') || p.jumpBuf > 0) && !blocked) { p.vel.y = Math.max(p.vel.y, 3.4); p.jumpBuf = 0; }
+  // petit bond de nage : sauter en surface fait sortir la tête de l'eau (grimper
+  // sur la berge) — une seule impulsion par appui, pas de saut répété en
+  // maintenant Espace (le bond ne se relance qu'en retombant, après le délai)
+  p.swimHopCd = Math.max(0, (p.swimHopCd || 0) - dt);
+  if (p.inWater && !p.diving && (down('jump') || p.jumpBuf > 0) && !blocked && p.swimHopCd <= 0 && p.vel.y < 0.8) { p.vel.y = 3.4; p.swimHopCd = 0.85; p.jumpBuf = 0; }
   // dans l'eau : gravité réduite + frein vertical -> flottaison naturelle vers la surface
   p.vel.y -= GRAV * dt * (p.inWater ? 0.22 : 1);
   if (p.inWater) p.vel.y *= Math.max(0, 1 - 2.6 * dt);
@@ -5983,19 +5985,44 @@ function animateChar(ch, dt) {
     return;
   }
   P.head.rotation.set(0, 0, 0);
-  // NAGE : corps incliné dans l'eau (plus à plat en plongée), bras qui alternent des
-  // moulinets, petites battues de jambes. La tête reste près de la surface.
+  // NAGE façon crawl : corps à plat dans l'eau, roulis des épaules à chaque
+  // passage de bras, battements de jambes alternés, tête hors de l'eau pour
+  // respirer. En plongée : corps allongé, bras le long du corps. Sur place :
+  // on reste à flot, petits mouvements de bras et de jambes.
   if (ch.inWater && ch.mode === 'ground') {
     const dive = ch.pos.y < -1.25;
+    const moving = Math.min(1, hs / 5); // 0 = sur place, 1 = nage à fond
     P.hand.visible = false; // on nage : l'arme reste au dos, bras libres
-    m.rotation.x = dive ? -1.35 : -0.78; // tête hors de l'eau en surface, à plat en plongée
+    // corps : à plat en surface (poitrine relevée pour garder la tête hors de
+    // l'eau), bien allongé en plongée
+    m.rotation.x = dive ? -1.45 : -1.12 - moving * 0.1;
+    m.position.y += (dive ? 0 : 0.25) + Math.sin(ch.animT * 1.6) * 0.035; // léger tangage de flottaison
     const st = ch.animT * 1.05;
-    P.torso.rotation.x = 0.12;
-    P.hipL.rotation.x = Math.sin(st * 2) * 0.4; P.hipR.rotation.x = -Math.sin(st * 2) * 0.4;
-    P.kneeL.rotation.x = -0.35; P.kneeR.rotation.x = -0.35;
-    P.shL.rotation.set(Math.sin(st) * 1.7 - 0.4, 0, -0.3); P.shR.rotation.set(Math.sin(st + Math.PI) * 1.7 - 0.4, 0, 0.3);
-    P.elL.rotation.x = 0.25; P.elR.rotation.x = 0.25;
-    P.head.rotation.x = dive ? 0 : -0.55; // tête relevée pour respirer en surface
+    // roulis du buste au rythme des bras (crawl)
+    P.torso.rotation.set(0.1, 0, dive ? 0 : Math.sin(st) * 0.22 * (0.35 + moving));
+    // jambes : battements alternés, plus amples et plus vifs quand on nage
+    const kick = 0.22 + 0.5 * moving + (dive ? 0.15 : 0);
+    const kf = Math.sin(st * 2.4);
+    P.hipL.rotation.x = kf * kick; P.hipR.rotation.x = -kf * kick;
+    P.kneeL.rotation.x = -0.25 - Math.max(0, kf) * 0.55 * kick; // le talon remonte quand la jambe monte
+    P.kneeR.rotation.x = -0.25 - Math.max(0, -kf) * 0.55 * kick;
+    if (dive) {
+      // plongée : bras serrés le long du corps, mains qui poussent vers l'arrière
+      P.shL.rotation.set(0.35, 0, -0.12); P.shR.rotation.set(0.35, 0, 0.12);
+      P.elL.rotation.x = 0.15; P.elR.rotation.x = 0.15;
+    } else {
+      // bras : moulinets alternés — la main sort de l'eau en avant, revient le
+      // long du corps coude plié ; sur place, petits cercles pour rester à flot
+      const aL = Math.sin(st), aR = Math.sin(st + Math.PI);
+      const sw = 0.7 + 1.0 * moving;
+      P.shL.rotation.set(-0.35 + aL * sw, 0, -0.15 - Math.max(0, aL) * 0.2);
+      P.shR.rotation.set(-0.35 + aR * sw, 0, 0.15 + Math.max(0, aR) * 0.2);
+      P.elL.rotation.x = 0.2 + Math.max(0, -aL) * 1.2 * (0.3 + moving); // coude plié au retour
+      P.elR.rotation.x = 0.2 + Math.max(0, -aR) * 1.2 * (0.3 + moving);
+    }
+    // tête : hors de l'eau en surface pour respirer, dans l'axe du corps en plongée
+    P.head.rotation.x = dive ? 0.25 : -0.5;
+    P.head.rotation.z = dive ? 0 : -Math.sin(st) * 0.06; // compense le roulis du buste
     return;
   }
   const amp = ch.ampS, run = ch.runS, ph = ch.animT, sp = Math.sin(ph);
