@@ -211,9 +211,15 @@ const GHOST_BAD = new THREE.MeshBasicMaterial({ color: 0xff4d6a, transparent: tr
 // =====================================================================
 // Terrain & water
 const waterT = { value: 0 }, windT = { value: 0 };
+// ciel partagé avec le shader de l'eau : mis à jour par updateDayNight (reflet jour/nuit)
+const WSKY = {
+  top: new THREE.Color(0x3d8ae8), mid: new THREE.Color(0xa6dcff),
+  sun: new THREE.Vector3(0.5, 0.7, 0.35).normalize(), night: { value: 0 },
+};
 // =====================================================================
 const TERRAIN_SIZE = WORLD_R * 2 + 120;
 let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser terrainH
+let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel en temps réel
 {
   const SEG = 320; // maillage fin : la physique (terrainH) et le rendu restent collés à ~1,5 m près autour des creux de la Grotte (sinon : sol invisible)
   const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, SEG, SEG);
@@ -271,19 +277,27 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
   const wg = new THREE.PlaneGeometry(80000, 80000, 1, 1); wg.rotateX(-Math.PI / 2); // la mer s'étend à perte de vue
   // « vraie eau » : houle multi-échelles animée, reflet du ciel par fresnel,
   // tache du soleil qui scintille, turquoise près du rivage -> bleu profond au large.
+  // WSKY : les couleurs du ciel y sont copiées à chaque tick du cycle jour/nuit —
+  // l'eau reflète le ciel réel (nuit, aube, crépuscule) au lieu d'un midi figé.
   const wmat = new THREE.MeshStandardMaterial({ color: 0x1e9fd8, roughness: 0.1, metalness: 0.28, transparent: true, opacity: 0.88 });
   wmat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterT;
+    sh.uniforms.uTop = { value: WSKY.top };
+    sh.uniforms.uMid = { value: WSKY.mid };
+    sh.uniforms.uSun = { value: WSKY.sun };
+    sh.uniforms.uNight = WSKY.night; // objet partagé : la valeur se propage à chaque tick jour/nuit
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vWP; uniform float uT;
-      // petit ciel procédural (mêmes teintes que le dôme) pour le reflet de l'eau
+      varying vec3 vWP; uniform float uT; uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uSun; uniform float uNight;
+      // petit ciel procédural (mêmes teintes que le dôme, mises à jour par le cycle
+      // jour/nuit) pour le reflet de l'eau
       vec3 skyCol(vec3 dir) {
-        vec3 top = vec3(0.24, 0.54, 0.91), mid = vec3(0.65, 0.86, 1.0);
-        vec3 sd = normalize(vec3(0.5, 0.7, 0.35));
+        vec3 top = uTop, mid = uMid;
+        vec3 sd = normalize(uSun);
         vec3 c = mix(mid, top, smoothstep(0.05, 0.75, max(dir.y, 0.0)));
         float g = max(dot(normalize(dir), sd), 0.0);
-        c += mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.95, 0.82), smoothstep(0.05, 0.5, sd.y)) * (pow(g, 6.0) * 0.3 + pow(g, 48.0) * 0.6);
+        vec3 gc = mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.95, 0.82), smoothstep(0.05, 0.5, sd.y));
+        c += gc * (pow(g, 6.0) * 0.3 + pow(g, 48.0) * 0.6) * (1.0 - uNight * 0.9);
         return c;
       }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -300,12 +314,12 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
         R.y = abs(R.y);
         vec3 refl = skyCol(R);
         float fres = mix(0.06, 0.9, pow(1.0 - max(dot(V, normalize(normal)), 0.0), 3.0));
-        vec3 sunDir = normalize(vec3(0.5, 0.7, 0.35));
+        vec3 sunDir = normalize(uSun);
         float sg2 = max(dot(R, sunDir), 0.0);
-        float glint = pow(sg2, 640.0) * 3.0 + pow(sg2, 64.0) * 0.35;
-        // turquoise près du rivage, bleu profond au large
+        float glint = (pow(sg2, 640.0) * 3.0 + pow(sg2, 64.0) * 0.35) * (1.0 - uNight * 0.85);
+        // turquoise près du rivage, bleu profond au large ; la nuit, la mer s'assombrit
         float shore = smoothstep(1.18, 0.72, length(vWP.xz / vec2(440.0, 360.0)));
-        vec3 base = mix(vec3(0.02, 0.28, 0.55), vec3(0.16, 0.78, 0.72), shore);
+        vec3 base = mix(vec3(0.02, 0.28, 0.55), vec3(0.16, 0.78, 0.72), shore) * (1.0 - uNight * 0.62);
         float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
         outgoingLight = mix(outgoingLight, base * (0.75 + sparkle * 0.6), 0.55);
         outgoingLight = mix(outgoingLight, refl, fres * 0.75);
@@ -315,6 +329,7 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
         #include <opaque_fragment>`);
   };
   const water = new THREE.Mesh(wg, wmat);
+  waterMatRef = wmat;
   water.position.y = 0; scene.add(water);
   // fond marin opaque sous toute la mer : sans lui, l'eau translucide laissait voir le ciel au-delà du
   // carré de terrain et formait une bande bleu clair. Même teinte que le fond du terrain => mer uniforme.
@@ -1940,8 +1955,16 @@ function physics(ch, dt) {
   } else if (wasGrounded && ch.vel.y <= 0 && ch.pos.y - ground < 0.65) {
     ch.pos.y = ground; ch.vel.y = 0; ch.grounded = true;
   } else ch.grounded = false;
+  const wasWater = ch.inWater;
   ch.inWater = (onTerrain && ground < -0.4) || (!onTerrain && ch.pos.y < -0.4 && inGrotto(ch.pos.x, ch.pos.z)); ch.gcol = gcol;
-  if (ch.inWater && ch.pos.y < -0.9) { ch.pos.y = -0.9; if (ch.vel.y < 0) ch.vel.y = 0; ch.grounded = true; }
+  if (ch.inWater && !wasWater) ch.splashV = Math.max(0.4, -ch.vel.y); // vitesse d'entrée dans l'eau -> éclaboussure
+  // NAGE : on flotte à la surface (pieds à -0,9 m, tête hors de l'eau) ;
+  // la touche « s'accroupir » fait plonger (jusqu'à -1,8 m), on remonte en relâchant.
+  if (ch.inWater) {
+    const surfY = ch.diving ? -1.8 : -0.9;
+    if (ch.pos.y < surfY) { ch.pos.y = surfY; if (ch.vel.y < 0) ch.vel.y = 0; }
+    if (ch.pos.y <= surfY + 0.03) ch.grounded = true;
+  }
 }
 
 // =====================================================================
@@ -5679,8 +5702,14 @@ function updatePlayer(dt) {
   // saut : tenu, mémorisé 0,14 s avant l'atterrissage, et toléré 0,12 s après avoir quitté le sol (même en courant)
   p.coyote = p.grounded ? 0.12 : Math.max(0, (p.coyote || 0) - dt);
   p.jumpBuf = Math.max(0, (p.jumpBuf || 0) - dt);
+  // plongeon : « s'accroupir » (F) dans l'eau fait couler, on remonte en le relâchant
+  p.diving = p.inWater && !!p.crouchToggle;
   if ((down('jump') || p.jumpBuf > 0) && (p.grounded || p.coyote > 0) && p.vel.y <= 2 && !p.inWater && !blocked) { p.vel.y = JUMP_V * (sliding ? 1.08 : 1); p.grounded = false; p.coyote = 0; p.jumpBuf = 0; p.crouchToggle = false; p.slideT = 0; }
-  p.vel.y -= GRAV * dt;
+  // petit bond de nage : sauter en surface fait sortir la tête de l'eau (grimper sur la berge)
+  if (p.inWater && !p.diving && (down('jump') || p.jumpBuf > 0) && !blocked) { p.vel.y = Math.max(p.vel.y, 3.4); p.jumpBuf = 0; }
+  // dans l'eau : gravité réduite + frein vertical -> flottaison naturelle vers la surface
+  p.vel.y -= GRAV * dt * (p.inWater ? 0.22 : 1);
+  if (p.inWater) p.vel.y *= Math.max(0, 1 - 2.6 * dt);
   physics(p, dt);
   if (p.landV > 26 && !p.noFall) { const d = (p.landV - 26) * 6; damageChar(p, d, null, false, 'chute'); }
   if (p.grounded) p.noFall = false;
@@ -5773,8 +5802,15 @@ function updateChar(ch, dt) {
     if (hs > 3) { ch.stepT = (ch.stepT || 0) - dt * hs / 7; if (ch.stepT <= 0) { ch.stepT = 0.36; if (ch.isPlayer) sfx(stepSound(ch), 0.16); else if (player && ch.camD2 < 900) sfxAt(stepSound(ch), ch.pos, 0.6); } }
   } else if (ch.mode === 'ground' && ch.inWater) {
     const hs = Math.hypot(ch.vel.x, ch.vel.z);
-    if (hs > 2) { ch.stepT = (ch.stepT || 0) - dt * hs / 7; if (ch.stepT <= 0) { ch.stepT = 0.5; if (ch.isPlayer) sfx('step_water', 0.25); else if (ch.camD2 < 900) sfxAt('step_water', ch.pos, 0.6); if (ch.camD2 < 3600) burst(_v1.set(ch.pos.x, -0.3, ch.pos.z), 0xd8f4ff, 3, 2.5, 0.12, 0.8, 0.5); } }
+    if (hs > 2) { ch.stepT = (ch.stepT || 0) - dt * hs / 7; if (ch.stepT <= 0) { ch.stepT = 0.5; if (ch.isPlayer) sfx('step_water', 0.25); else if (ch.camD2 < 900) sfxAt('step_water', ch.pos, 0.6); if (ch.camD2 < 3600) { burst(_v1.set(ch.pos.x, -0.3, ch.pos.z), 0xd8f4ff, 3, 2.5, 0.12, 0.8, 0.5); ripple(ch.pos.x, ch.pos.z, 0.55 + hs * 0.06); } } }
   }
+  // éclaboussure à l'entrée dans l'eau : plus la chute est rapide, plus le plouf est gros
+  if (ch.inWater && !ch.wasInWaterFX && ch.mode === 'ground') {
+    const k = Math.min(1, (ch.splashV || 1) / 14);
+    if (ch.isPlayer || ch.camD2 < 6400) splashFX(ch.pos.x, ch.pos.z, k);
+    if (ch.isPlayer) sfx('splash', 0.4 + 0.6 * k); else if (ch.camD2 < 3600) sfxAt('splash', ch.pos, 0.8);
+  }
+  ch.wasInWaterFX = ch.inWater;
   animateChar(ch, dt);
 }
 function stepSound(ch) {
@@ -5883,6 +5919,21 @@ function animateChar(ch, dt) {
     return;
   }
   P.head.rotation.set(0, 0, 0);
+  // NAGE : corps incliné dans l'eau (plus à plat en plongée), bras qui alternent des
+  // moulinets, petites battues de jambes. La tête reste près de la surface.
+  if (ch.inWater && ch.mode === 'ground') {
+    const dive = ch.pos.y < -1.25;
+    P.hand.visible = false; // on nage : l'arme reste au dos, bras libres
+    m.rotation.x = dive ? -1.35 : -0.78; // tête hors de l'eau en surface, à plat en plongée
+    const st = ch.animT * 1.05;
+    P.torso.rotation.x = 0.12;
+    P.hipL.rotation.x = Math.sin(st * 2) * 0.4; P.hipR.rotation.x = -Math.sin(st * 2) * 0.4;
+    P.kneeL.rotation.x = -0.35; P.kneeR.rotation.x = -0.35;
+    P.shL.rotation.set(Math.sin(st) * 1.7 - 0.4, 0, -0.3); P.shR.rotation.set(Math.sin(st + Math.PI) * 1.7 - 0.4, 0, 0.3);
+    P.elL.rotation.x = 0.25; P.elR.rotation.x = 0.25;
+    P.head.rotation.x = dive ? 0 : -0.55; // tête relevée pour respirer en surface
+    return;
+  }
   const amp = ch.ampS, run = ch.runS, ph = ch.animT, sp = Math.sin(ph);
   // bras : balancent à l'opposé des jambes (jambe gauche devant = bras droit devant),
   // avec un léger retard de phase ; les coudes pompent en course
@@ -6165,11 +6216,17 @@ function updateCamera(dt) {
   // idem dans le sous-sol de l'Agence : le plancher du RDC protège la caméra
   const camUnderAgency = aClamped && inAgencyBasement(camera.position.x, camera.position.z);
   if (camera.position.y < th && !camUnder && !camUnderAgency) camera.position.y = th;
+  // plongée : la caméra suit sous la surface -> vue sous-marine (teinte bleue)
+  if (player.alive && player.diving && camera.position.y > -0.45) camera.position.y = -0.45;
   camTarget.copy(camera.position).add(d);
   camera.lookAt(camTarget);
   if (player.alive) player.mesh.visible = !scopeOn && player.mode !== 'bus' && player.mode !== 'drive';
   if (shake > 0) { shake = Math.max(0, shake - dt * 3); camera.position.x += (MR() - 0.5) * shake * 0.3; camera.position.y += (MR() - 0.5) * shake * 0.3; }
+  // teinte sous-marine : la caméra passe sous la surface (mer ou eau de la Grotte)
+  const uw = camera.position.y < -0.08 && (terrainH(camera.position.x, camera.position.z) < -0.35 || inGrotto(camera.position.x, camera.position.z));
+  if (uw !== camUnderwater) { camUnderwater = uw; $('uwTint').style.opacity = uw ? 0.55 : 0; }
 }
+let camUnderwater = false;
 
 // =====================================================================
 // HUD
@@ -6620,6 +6677,251 @@ function updateConfetti(dt) {
 }
 
 // =====================================================================
+// VIE AMBIANTE : oiseaux posés qui s'envolent quand on approche, papillons
+// au-dessus de l'herbe (jour), lucioles (nuit), poissons qui sautent avec
+// leur plouf, anneaux à la surface de l'eau (plongeons, sillage de nage).
+// =====================================================================
+const AMB = { t: 0, fishT: 4 };
+
+// ---- anneaux à la surface de l'eau ----
+const ripples = [];
+{
+  const rg = new THREE.RingGeometry(0.38, 0.6, 26); rg.rotateX(-Math.PI / 2); // anneau épais, lisible de loin
+  for (let i = 0; i < 20; i++) {
+    const m = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0xf4fbff, transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; m.renderOrder = 2; scene.add(m);
+    ripples.push({ m, life: 0, max: 0.8, s: 1 });
+  }
+}
+function ripple(x, z, scale = 1) {
+  const r = ripples.find((q) => q.life <= 0) || ripples[0];
+  r.life = r.max = 0.7 + 0.25 * scale; r.s = scale;
+  r.m.position.set(x, 0.03, z); r.m.visible = true;
+}
+function updateRipples(dt) {
+  for (const r of ripples) {
+    if (r.life <= 0) continue;
+    r.life -= dt;
+    if (r.life <= 0) { r.m.visible = false; continue; }
+    const k = 1 - r.life / r.max;
+    r.m.scale.setScalar((0.6 + k * 3.6) * r.s);
+    r.m.material.opacity = (1 - k) * 0.65;
+  }
+}
+// éclaboussure : gerbe blanche + anneau à la surface
+function splashFX(x, z, k = 1) {
+  burst(_v1.set(x, 0.15, z), 0xeaf8ff, 14 + Math.round(16 * k), 3.4 + 3.8 * k, 0.18, 0.95, 0.7);
+  burst(_v1.set(x, 0.1, z), 0xffffff, 6 + Math.round(6 * k), 5 + 4 * k, 0.1, 1, 0.5); // gouttelettes hautes
+  ripple(x, z, 0.9 + k);
+}
+
+// ---- oiseaux : posés au sol, ils s'envolent quand un personnage approche,
+// tournent en croissant puis vont se poser plus loin ----
+const birdBodyG = new THREE.BoxGeometry(0.09, 0.08, 0.24);
+const birdTailG = new THREE.BoxGeometry(0.05, 0.03, 0.12).translate(0, 0, 0.17);
+const birdWingLG = new THREE.BoxGeometry(0.24, 0.016, 0.11).translate(-0.12, 0, 0.02);
+const birdWingRG = new THREE.BoxGeometry(0.24, 0.016, 0.11).translate(0.12, 0, 0.02);
+const BIRD_COLS = [0x4a4f5c, 0xe8e8ec, 0x8a6a4a, 0x5c6b4a];
+const birds = [];
+function birdPerchSpot(b, farFromPlayer) {
+  const px = player ? player.pos.x : 0, pz = player ? player.pos.z : 0;
+  for (let k = 0; k < 14; k++) {
+    const a = MR() * 6.283, r = (farFromPlayer ? 70 : 25) + MR() * 110;
+    const x = px + Math.cos(a) * r, z = pz + Math.sin(a) * r;
+    if (Math.hypot(x, z) > WORLD_R - 40) continue;
+    const h = terrainH(x, z);
+    if (h < 0.8 || h > 32) continue;
+    b.p.set(x, h + 0.12, z); return true;
+  }
+  return false;
+}
+function makeBird() {
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color: BIRD_COLS[Math.floor(MR() * BIRD_COLS.length)] });
+  const wl = new THREE.Mesh(birdWingLG, mat), wr = new THREE.Mesh(birdWingRG, mat);
+  grp.add(new THREE.Mesh(birdBodyG, mat), new THREE.Mesh(birdTailG, mat), wl, wr);
+  scene.add(grp);
+  const b = {
+    grp, wl, wr, state: 'perch', landing: false, p: new THREE.Vector3(), v: new THREE.Vector3(),
+    target: new THREE.Vector3(), t: MR() * 20, cruiseT: 0, flapV: 12,
+    cx: 0, cz: 0, cr: 25, cw: 0.3, alt: 18,
+  };
+  if (!birdPerchSpot(b, false)) b.p.set(MR() * 100, 6, MR() * 100);
+  birds.push(b); return b;
+}
+function updateBirds(dt) {
+  while (birds.length < 12) makeBird();
+  for (const b of birds) {
+    b.t += dt;
+    if (b.state === 'perch') {
+      // un personnage à moins de 11 m : envol !
+      for (const ch of chars) {
+        if (!ch.alive || ch.mode === 'bus') continue;
+        const dx = ch.pos.x - b.p.x, dz = ch.pos.z - b.p.z, d2 = dx * dx + dz * dz;
+        if (d2 < 121) {
+          const d = Math.max(0.6, Math.sqrt(d2));
+          b.state = 'fly'; b.landing = false; b.cruiseT = 0; b.flapV = 16;
+          b.v.set(-dx / d * 7, 6.5 + MR() * 3, -dz / d * 7);
+          const px = player ? player.pos.x : 0, pz = player ? player.pos.z : 0;
+          b.cx = px + (MR() - 0.5) * 130; b.cz = pz + (MR() - 0.5) * 130;
+          b.cr = 18 + MR() * 26; b.cw = (MR() < 0.5 ? -1 : 1) * (0.22 + MR() * 0.28); b.alt = 14 + MR() * 13;
+          break;
+        }
+      }
+      if (b.state === 'perch') {
+        b.grp.position.copy(b.p);
+        b.grp.rotation.set(0, b.t * 0.1, 0); // tourne tranquillement la tête
+        b.wl.rotation.z = -0.12; b.wr.rotation.z = 0.12; // ailes pliées
+        continue;
+      }
+    }
+    // en vol : croissant autour d'un centre, puis descente vers un nouveau perchoir
+    b.cruiseT += dt;
+    if (b.cruiseT > 21 && !b.landing) { b.landing = true; if (!birdPerchSpot(b, true)) b.cruiseT = 0, b.landing = false; else b.target.copy(b.p); }
+    let tx, ty, tz;
+    if (b.landing) { tx = b.target.x; ty = b.target.y + 0.12; tz = b.target.z; }
+    else { const a = b.t * b.cw; tx = b.cx + Math.cos(a) * b.cr; ty = b.alt; tz = b.cz + Math.sin(a) * b.cr; }
+    const dx = tx - b.p.x, dy = ty - b.p.y, dz = tz - b.p.z;
+    const d = Math.hypot(dx, dy, dz) || 1, sp = b.landing ? 7.5 : 11.5;
+    b.v.lerp(_v1.set(dx / d * sp, dy / d * sp, dz / d * sp), Math.min(1, dt * 2.4));
+    if (b.landing && d < 2.6) {
+      b.state = 'perch'; b.landing = false; b.flapV = 12;
+      b.p.copy(b.target); b.grp.position.copy(b.p);
+      continue;
+    }
+    b.p.addScaledVector(b.v, dt);
+    if (!b.landing) b.p.y = Math.max(b.p.y, terrainH(b.p.x, b.p.z) + 2.5); // jamais sous le sol
+    b.flapV = b.landing ? 7 : 13;
+    b.grp.position.copy(b.p);
+    b.grp.rotation.order = 'YXZ';
+    const hs = Math.hypot(b.v.x, b.v.z);
+    if (hs > 0.3) b.grp.rotation.y = Math.atan2(-b.v.x, -b.v.z);
+    b.grp.rotation.x = Math.atan2(b.v.y, Math.max(hs, 0.3));
+    const f = Math.sin(b.t * b.flapV) * 0.85;
+    b.wl.rotation.z = -f; b.wr.rotation.z = f;
+  }
+}
+
+// ---- papillons : volettent au-dessus de l'herbe, le jour seulement ----
+const bflyBodyG = new THREE.BoxGeometry(0.018, 0.018, 0.07);
+const bflyWingLG = new THREE.PlaneGeometry(0.085, 0.065).rotateX(-Math.PI / 2).translate(-0.048, 0, 0);
+const bflyWingRG = new THREE.PlaneGeometry(0.085, 0.065).rotateX(-Math.PI / 2).translate(0.048, 0, 0);
+const BFLY_COLS = [0xfff2b0, 0xffb84d, 0x7ec8ff, 0xff8ad4, 0xfff5f5];
+const bflies = [];
+function makeBfly() {
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: BFLY_COLS[Math.floor(MR() * BFLY_COLS.length)], side: THREE.DoubleSide });
+  const wl = new THREE.Mesh(bflyWingLG, mat), wr = new THREE.Mesh(bflyWingRG, mat);
+  grp.add(new THREE.Mesh(bflyBodyG, mat), wl, wr);
+  scene.add(grp);
+  const b = { grp, wl, wr, hx: 0, hz: 0, ph: MR() * 9, sp: 0.6 + MR() * 0.6, t: MR() * 9 };
+  bflies.push(b); return b;
+}
+function updateBflies(dt) {
+  const show = !!player && nightF < 0.45 && player.mode !== 'bus';
+  while (bflies.length < 12) makeBfly();
+  for (const b of bflies) {
+    b.t += dt;
+    b.grp.visible = show;
+    if (!show) continue;
+    const px = player.pos.x, pz = player.pos.z;
+    // « maison » près du joueur : les papillons suivent la zone de jeu
+    const dx = b.hx - px, dz = b.hz - pz;
+    if (dx * dx + dz * dz > 3600) { b.hx = px + (MR() - 0.5) * 55; b.hz = pz + (MR() - 0.5) * 55; b.ph = MR() * 9; }
+    const x = b.hx + Math.sin(b.t * 0.55 + b.ph) * 5.5 + Math.sin(b.t * 1.3 + b.ph * 2) * 2;
+    const z = b.hz + Math.cos(b.t * 0.48 + b.ph) * 5.5;
+    const g = terrainH(x, z);
+    if (g < -0.25) { b.hx = px + (MR() - 0.5) * 40; b.hz = pz + (MR() - 0.5) * 40; continue; } // au-dessus de l'eau : on déménage
+    const y = Math.max(g, 0.2) + 0.55 + Math.sin(b.t * 1.7 + b.ph) * 0.35;
+    const mvx = x - b.grp.position.x, mvz = z - b.grp.position.z;
+    b.grp.position.set(x, y, z);
+    if (Math.hypot(mvx, mvz) > 0.002) b.grp.rotation.y = Math.atan2(-mvx, -mvz);
+    const f = Math.sin(b.t * 17 * b.sp) * 1.05;
+    b.wl.rotation.z = -f; b.wr.rotation.z = f;
+  }
+}
+
+// ---- lucioles : points lumineux qui dérivent au-dessus de l'herbe, la nuit ----
+const FF_N = 42;
+const ffPos = new Float32Array(FF_N * 3);
+const ffHome = []; for (let i = 0; i < FF_N; i++) ffHome.push({ x: 0, z: 0, ph: MR() * 9, ph2: MR() * 9 });
+const ffGeo = new THREE.BufferGeometry();
+ffGeo.setAttribute('position', new THREE.BufferAttribute(ffPos, 3));
+const ffMat = new THREE.PointsMaterial({ color: 0xd6ff9e, size: 0.12, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+const ffPts = new THREE.Points(ffGeo, ffMat); ffPts.frustumCulled = false; scene.add(ffPts);
+function updateFireflies() {
+  ffMat.opacity = nightF * 0.9;
+  ffPts.visible = nightF > 0.06 && !!player;
+  if (!ffPts.visible) return;
+  const px = player.pos.x, pz = player.pos.z, t = AMB.t;
+  for (let i = 0; i < FF_N; i++) {
+    const h = ffHome[i];
+    const dx = h.x - px, dz = h.z - pz;
+    if (dx * dx + dz * dz > 2500) { h.x = px + (MR() - 0.5) * 65; h.z = pz + (MR() - 0.5) * 65; h.ph = MR() * 9; }
+    const x = h.x + Math.sin(t * 0.7 + h.ph) * 4;
+    const z = h.z + Math.cos(t * 0.6 + h.ph * 1.3) * 4;
+    ffPos[i * 3] = x; ffPos[i * 3 + 2] = z;
+    ffPos[i * 3 + 1] = Math.max(terrainH(x, z), 0.15) + 0.6 + Math.sin(t * 1.1 + h.ph2) * 0.7;
+  }
+  ffGeo.attributes.position.needsUpdate = true;
+}
+
+// ---- poissons : sautent en arc hors de l'eau avec un plouf à chaque bout ----
+const fishGeo = mergeGeometries([
+  new THREE.BoxGeometry(0.07, 0.16, 0.3),
+  new THREE.BoxGeometry(0.045, 0.1, 0.14).translate(0, 0.02, 0.24), // queue
+]);
+const fishMat = new THREE.MeshStandardMaterial({ color: 0xa8ccd6, roughness: 0.3, metalness: 0.55 });
+const fishes = [];
+function spawnFish() {
+  if (!player) return;
+  for (let k = 0; k < 8; k++) {
+    const a = MR() * 6.283, r = 13 + MR() * 38;
+    const x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
+    if (Math.hypot(x, z) > WORLD_R + 30 || inGrotto(x, z)) continue;
+    if (terrainH(x, z) > -1.5) continue;
+    const m = new THREE.Mesh(fishGeo, fishMat); scene.add(m);
+    const dir = MR() * 6.283;
+    fishes.push({ m, p: new THREE.Vector3(x, -1.15, z), v: new THREE.Vector3(Math.cos(dir) * 1.4, 6.2 + MR() * 2.4, Math.sin(dir) * 1.4), wet: true, t: 0 });
+    return;
+  }
+}
+function updateFishes(dt) {
+  AMB.fishT -= dt;
+  if (AMB.fishT <= 0) { AMB.fishT = 2.5 + MR() * 5; if (state === 'playing') spawnFish(); }
+  for (let i = fishes.length - 1; i >= 0; i--) {
+    const q = fishes[i];
+    q.t += dt;
+    q.v.y -= 21 * dt;
+    q.p.addScaledVector(q.v, dt);
+    q.m.position.copy(q.p);
+    q.m.rotation.order = 'YXZ';
+    const hs = Math.hypot(q.v.x, q.v.z);
+    if (hs > 0.05) q.m.rotation.y = Math.atan2(-q.v.x, -q.v.z);
+    q.m.rotation.x = Math.atan2(q.v.y, Math.max(hs, 0.05));
+    if (q.wet && q.p.y > 0) { // sortie de l'eau : petit plouf
+      q.wet = false; ripple(q.p.x, q.p.z, 0.5);
+      burst(_v1.set(q.p.x, 0.1, q.p.z), 0xeaf8ff, 5, 2.2, 0.1, 0.9, 0.4);
+    }
+    if (!q.wet && q.p.y < -0.1 && q.v.y < 0) { // retombée : plouf final
+      ripple(q.p.x, q.p.z, 0.7);
+      burst(_v1.set(q.p.x, 0.1, q.p.z), 0xeaf8ff, 7, 2.6, 0.11, 0.9, 0.45);
+      if (player && (player.pos.x - q.p.x) ** 2 + (player.pos.z - q.p.z) ** 2 < 2500) sfx('plip', 0.35);
+      scene.remove(q.m); fishes.splice(i, 1); continue;
+    }
+    if (q.t > 4.5) { scene.remove(q.m); fishes.splice(i, 1); }
+  }
+}
+
+function updateAmbient(dt) {
+  AMB.t += dt;
+  updateBirds(dt);
+  updateBflies(dt);
+  updateFireflies();
+  updateFishes(dt);
+}
+
+// =====================================================================
 // Day / night cycle
 // =====================================================================
 const TOD_KEYS = [
@@ -6634,6 +6936,7 @@ const TOD_KEYS = [
 ];
 let tod = pick([0.3, 0.42, 0.5, 0.62, 0.7, 0.74]); // starting time of day changes every match
 const DAY_LEN = 900; // seconds for a full day
+let nightF = 0; // facteur nuit (0 = plein jour, 1 = nuit noire) : lucioles, papillons, eau
 const _ca = new THREE.Color(), _cb = new THREE.Color();
 let todAcc = 1;
 function lerpHex(a, b, t, out) { return out.set(a).lerp(_cb.set(b), t); }
@@ -6645,6 +6948,10 @@ function updateDayNight(dt) {
   lerpHex(A[3], B[3], t, FOG_COL); if (scene.fog) scene.fog.color.copy(FOG_COL); if (skyMat) skyMat.uniforms.bot.value.copy(FOG_COL);
   lerpHex(A[4], B[4], t, sunLight.color); sunLight.intensity = lerp(A[5], B[5], t); hemi.intensity = lerp(A[6], B[6], t);
   const night = clamp(1 - sunLight.intensity / 1.2, 0, 1);
+  nightF = night;
+  // l'eau reflète le ciel du moment (plein jour, crépuscule aurore/rouge ou nuit)
+  if (skyMat) { WSKY.top.copy(skyMat.uniforms.top.value); WSKY.mid.copy(skyMat.uniforms.mid.value); WSKY.sun.copy(skyMat.uniforms.sunDir.value); }
+  WSKY.night.value = night;
   if (stars) stars.material.opacity = night;
   // sun path (moon at night keeps light from above)
   const ang = (tod - 0.25) * Math.PI * 2, el = Math.sin(ang);
@@ -6727,6 +7034,8 @@ function step(dt) {
   updatePadsVents(dt);
   updateMarker(dt);
   updateDayNight(dt);
+  updateAmbient(dt);
+  updateRipples(dt);
   updateBuilds(dt);
   updateWorld(dt);
   // dérive des nuages au vent (retour en boucle de l'autre côté du ciel)
@@ -6774,7 +7083,8 @@ window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
+window.__game = { structs, rebuildHouse, towers, outline,
+  ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
 // storm est aussi exposé directement : window.__game.storm
 

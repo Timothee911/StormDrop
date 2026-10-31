@@ -81,6 +81,8 @@ export function sfx(name, vol = 1, pan = 0) {
     case 'step_stone': tone(o, t, 0.04, 'square', 420, 300, 0.08); noise(o, t, 0.05, 'highpass', 1800, 1, 0.002, 0.35); break;
     case 'step_metal': tone(o, t, 0.12, 'triangle', 820, 760, 0.12); tone(o, t, 0.1, 'sine', 1240, 1180, 0.06); break;
     case 'step_water': noise(o, t, 0.22, 'bandpass', 600, 0.8, 0.03, 0.5); break;
+    case 'splash': noise(o, t, 0.55, 'lowpass', 1100, 0.6, 0.006, 1.1); tone(o, t, 0.2, 'sine', 190, 70, 0.5); break;
+    case 'plip': tone(o, t, 0.1, 'sine', 950, 320, 0.3); break;
     case 'equip': tone(o, t, 0.05, 'square', 500, 700, 0.07); noise(o, t + 0.04, 0.06, 'bandpass', 2500, 2, 0.002, 0.25); break;
     case 'edit': tone(o, t, 0.06, 'sine', 1200, 1500, 0.12); break;
     case 'editok': tone(o, t, 0.08, 'triangle', 600, 900, 0.2); noise(o, t, 0.1, 'bandpass', 1500, 1.5, 0.003, 0.3); break;
