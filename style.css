@@ -361,14 +361,26 @@ body.touch #game { touch-action: none; }
 #joyBase { position: absolute; left: 20px; bottom: 250px; width: 140px; height: 140px; border-radius: 50%; background: rgba(16, 20, 48, .35); border: 2px solid rgba(255, 255, 255, .3); pointer-events: none; opacity: .55; transition: opacity .15s; }
 #joyBase.on { opacity: 1; }
 #joyKnob { position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 50%; background: rgba(255, 255, 255, .5); border: 2px solid rgba(255, 255, 255, .7); }
+/* boutons de pièces de construction (tactile) : grille 2×2 au-dessus du joystick, côté gauche, visibles en mode CONS */
+#tPieces { position: absolute; left: calc(16px + env(safe-area-inset-left)); bottom: 408px; right: auto; display: none; grid-template-columns: 66px 66px; gap: 7px; pointer-events: auto; }
+#tPieces.on { display: grid; }
+#tPieces .tp { width: 66px; height: 40px; border-radius: 12px; background: rgba(16, 20, 48, .55); border: 2px solid rgba(255, 255, 255, .35); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; text-transform: uppercase; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+#tPieces .tp:active { background: rgba(255, 226, 74, .45); border-color: #ffe24a; }
 /* HUD plus compact sur téléphone */
 body.touch #minimap { width: 118px; height: 118px; }
 body.touch .slot { width: 52px; height: 52px; }
 body.touch #perf { display: none; }
 body.touch #ammoInfo { font-size: 28px; }
+/* sur tactile, l'aide clavier (T changer · clic droit) n'a pas de sens */
+body.touch #ammoInfo small { display: none; }
 @media (max-width: 560px) {
   body.touch .slot { width: 44px; height: 44px; }
-  body.touch #bars { width: 190px; }
+  /* HUD compact tactile : la vie remonte en haut à gauche, la hotbar passe
+     au-dessus des matériaux pour ne plus chevaucher le bas de l'écran */
+  body.touch #bars { position: fixed; left: 14px; top: 14px; bottom: auto; width: 150px; }
+  body.touch #bottomright { bottom: 74px; }
+  /* matériaux déplacés à gauche, sous la zone du joystick */
+  body.touch #mats { position: fixed; right: auto; left: 14px; bottom: 186px; }
 }
 /* téléphone en paysage : boutons en grappe compacte à droite, hors du HUD */
 @media (max-height: 540px) and (pointer: coarse) {
@@ -386,6 +398,8 @@ body.touch #ammoInfo { font-size: 28px; }
   #tPause { right: auto; left: 68px; top: 14px; }
   #joyBase { width: 110px; height: 110px; bottom: 190px; }
   #joyKnob { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
+  #tPieces { left: 14px; right: auto; bottom: auto; top: 64px; grid-template-columns: repeat(4, 58px); }
+  #tPieces .tp { width: 58px; height: 34px; font-size: 9px; }
   body.touch #minimap { width: 84px; height: 84px; }
   body.touch #bars { width: 140px; }
   body.touch #bottomleft { bottom: 74px; }
@@ -393,7 +407,9 @@ body.touch #ammoInfo { font-size: 28px; }
 }
 
 /* sur téléphone, la hotbar / barre de construction / matériaux deviennent tapables */
-body.touch #hotbar, body.touch #buildbar, body.touch #mats { pointer-events: auto; }
+body.touch #hotbar, body.touch #mats { pointer-events: auto; }
+/* en tactile, la barre de pièces clavier est remplacée par les gros boutons #tPieces */
+body.touch #buildbar { display: none; }
 
 /* ---------- Disposition façon Fortnite ---------- */
 /* haut droite : une seule rangée sous la minicarte (tempête · joueurs · éliminations · éliminations d'équipe) */

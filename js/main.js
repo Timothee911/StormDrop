@@ -1248,15 +1248,16 @@ function gableRoof(cx, cz, topY, w, d, roofH, bodyHex, roofHex, opts = {}) {
   }
 }
 function furniture(cx, cz, y, w, d, skipCorner, accent, avoid) {
-  // a few pieces of furniture placed in free quadrants (decorative, no collision)
+  // Intérieurs meublés : mobilier varié posé dans les quadrants libres.
   // avoid = [{x, z}] : emplacements à laisser libres (coffres, caisses de munitions)
   const spots = [[-1, -1], [1, -1], [1, 1], [-1, 1]].filter((q) => !(skipCorner && q[0] === -1 && q[1] === -1));
-  const kinds = ['table', 'bed', 'sofa', 'shelf', 'rug'];
+  const kinds = ['table', 'bed', 'sofa', 'shelf', 'rug', 'tv', 'desk', 'wardrobe', 'plant'];
   let placed = 0;
-  for (let i = 0; i < spots.length && placed < 3; i++) {
+  const maxPieces = Math.min(spots.length, w >= 10 ? 5 : 4); // grandes maisons mieux meublées
+  for (let i = 0; i < spots.length && placed < maxPieces; i++) {
     const [qx, qz] = spots[i], x = cx + qx * w / 4, z = cz + qz * d / 4;
     if (avoid && avoid.some((a) => Math.hypot(a.x - x, a.z - z) < 2)) continue;
-    const k = kinds[(i + randi(0, 4)) % kinds.length];
+    const k = kinds[(i + randi(0, kinds.length - 1)) % kinds.length];
     if (k === 'table') {
       hbox(0x9a6a40, x, y + 0.72, z, 1.5, 0.1, 0.95); for (const [a, b] of [[-0.62, -0.38], [0.62, -0.38], [-0.62, 0.38], [0.62, 0.38]]) hbox(0x6e4a2c, x + a, y, z + b, 0.1, 0.72, 0.1); hbox(0xc0392b, x - 1.05, y, z, 0.5, 0.45, 0.5); hbox(0xc0392b, x - 1.05, y + 0.45, z - 0.22, 0.5, 0.55, 0.08);
       propBox(x, y, z, 0.8, 0.55, 0.85); propBox(x - 1.05, y, z, 0.3, 0.3, 1.0); // table + chaise
@@ -1264,9 +1265,37 @@ function furniture(cx, cz, y, w, d, skipCorner, accent, avoid) {
     else if (k === 'bed') { hbox(0x6e4a2c, x, y, z, 1.4, 0.4, 2.1); hbox(accent, x, y + 0.4, z + 0.15, 1.35, 0.16, 1.7); hbox(0xffffff, x, y + 0.4, z - 0.75, 1.0, 0.2, 0.45); hbox(0x6e4a2c, x, y, z - 1.05, 1.5, 1.0, 0.12); propBox(x, y, z - 0.03, 0.75, 1.08, 1.0); }
     else if (k === 'sofa') { hbox(accent, x, y, z, 2.0, 0.45, 0.85); hbox(accent, x, y + 0.45, z - 0.35, 2.0, 0.5, 0.18); hbox(accent, x - 0.95, y + 0.45, z, 0.16, 0.3, 0.85); hbox(accent, x + 0.95, y + 0.45, z, 0.16, 0.3, 0.85); propBox(x, y, z, 1.05, 0.48, 0.95); }
     else if (k === 'shelf') { hbox(0x7a5232, x, y, z, 1.4, 1.8, 0.4); for (let j = 0; j < 3; j++) hbox(pick([0x3b6fd1, 0xe08a2e, 0x2f9e7a, 0xd2483a]), x + rand(-0.4, 0.4), y + 0.35 + j * 0.55, z + 0.05, 0.5, 0.28, 0.3); propBox(x, y, z, 0.72, 0.22, 1.8); }
+    else if (k === 'tv') { // coin télé : meuble + écran + dalle allumée
+      hbox(0x6e4a2c, x, y, z, 1.6, 0.5, 0.5);
+      hbox(0x14161a, x, y + 0.5, z, 1.35, 0.8, 0.08);
+      hbox(0x3b6fd1, x, y + 0.56, z + 0.05, 1.05, 0.6, 0.02);
+      propBox(x, y, z, 0.85, 0.28, 1.32);
+    }
+    else if (k === 'desk') { // bureau + chaise + écran posé
+      hbox(0x8a5a30, x, y + 0.72, z, 1.5, 0.08, 0.7); for (const [a, b] of [[-0.65, -0.28], [0.65, -0.28], [-0.65, 0.28], [0.65, 0.28]]) hbox(0x6e4a2c, x + a, y, z + b, 0.08, 0.72, 0.08);
+      hbox(0xc0392b, x + 0.95, y, z, 0.45, 0.45, 0.45);
+      hbox(0x2b2f36, x - 0.25, y + 0.8, z, 0.3, 0.24, 0.2);
+      propBox(x, y, z, 0.8, 0.4, 0.8);
+    }
+    else if (k === 'wardrobe') { // armoire deux portes
+      hbox(0x7a5232, x, y, z, 1.3, 2.1, 0.6);
+      hbox(0x9a9690, x - 0.12, y + 1.05, z + 0.31, 0.06, 0.06, 0.04);
+      hbox(0x9a9690, x + 0.12, y + 1.05, z + 0.31, 0.06, 0.06, 0.04);
+      propBox(x, y, z, 0.68, 0.32, 2.1);
+    }
+    else if (k === 'plant') { // plante verte en pot
+      hbox(0xb3592a, x, y, z, 0.42, 0.4, 0.42);
+      for (let j = 0; j < 4; j++) hbox(0x2f9e4a, x + rand(-0.15, 0.15), y + 0.4 + j * 0.26, z + rand(-0.15, 0.15), 0.52 - j * 0.09, 0.28, 0.52 - j * 0.09);
+      propBox(x, y, z, 0.24, 0.24, 0.66);
+    }
     else hbox(accent, x, y + 0.01, z, 2.4, 0.03, 1.6); // tapis : décor plat, sans collision
     placed++;
   }
+  // suspension au plafond : fil + abat-jour chaud, décalée à l'écart de l'escalier
+  // et assez haute pour ne masquer ni la porte ni la fenêtre (2,6 m)
+  const lx = cx + w / 8, lz = cz + d / 8;
+  hbox(0x2b2f36, lx, y + 3.3, lz, 0.05, 0.35, 0.05, null);
+  hbox(0xffe8b0, lx, y + 2.98, lz, 0.55, 0.3, 0.55, null);
 }
 // collider de décor indestructible (mobilier, coffres, caisses, pads…)
 const propCols = [];
@@ -2597,6 +2626,8 @@ const down = (act) => !!keys[BIND[act]];
 // =====================================================================
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 let touchUIRoot = null, touchResetFn = null;
+// état du joystick analogique (rempli par touchInit, lu par updatePlayer)
+const touchJoy = { x: 0, y: 0, mag: 0, on: false };
 function touchInit() {
   if (!IS_TOUCH || window.__touchDone) return;
   window.__touchDone = true;
@@ -2614,29 +2645,36 @@ function touchInit() {
     <div id="tBuild" class="tbtn">CONS</div>
     <div id="tCrouch" class="tbtn">ACCROUPI</div>
     <div id="tMap" class="tbtn small">CARTE</div>
-    <div id="tPause" class="tbtn small">PAUSE</div>`;
+    <div id="tPause" class="tbtn small">PAUSE</div>
+    <div id="tPieces"><div class="tp" data-p="wall">MUR</div><div class="tp" data-p="floor">SOL</div><div class="tp" data-p="ramp">RAMPE</div><div class="tp" data-p="cone">TOIT</div></div>`;
   document.body.appendChild(ui);
   touchUIRoot = ui;
   // l'aide du menu pause parle de raccourcis clavier : version tactile
   const ch = document.querySelector('#pause .ctl-help');
-  if (ch) ch.innerHTML = '<span>TIR : tirer / placer</span><span>VISER : viser</span><span>E : interagir / véhicule</span><span>CONS : construire</span><span>CARTE : carte</span><span>Glisse à droite : caméra</span><span>Joystick à fond : sprint</span>';
+  if (ch) ch.innerHTML = '<span>TIR : tirer / placer</span><span>VISER : viser</span><span>E : interagir / véhicule</span><span>CONS : construire (MUR / SOL / RAMPE / TOIT)</span><span>CARTE : carte</span><span>Glisse à droite : caméra</span><span>Joystick : vitesse à l\'inclinaison, à fond = sprint</span>';
   const $t = (id) => document.getElementById(id);
   const joyBase = $t('joyBase'), joyKnob = $t('joyKnob');
   // ---- joystick flottant (moitié gauche de l'écran) ----
   let joyId = null, joyCX = 0, joyCY = 0, joyX = 0, joyY = 0;
   const JOY_R = 58;
   function joyApply() {
-    // direction binaire sur les touches virtuelles (marche, sprint, dive du bus)
-    const k = (on, act) => { keys[BIND[act]] = on; };
+    // joystick analogique : amplitude du pouce = vitesse (zone morte 15 %)
     const mag = Math.hypot(joyX, joyY);
-    const fwd = joyY < -0.32, back = joyY > 0.32, left = joyX < -0.32, right = joyX > 0.32;
+    const dead = 0.15;
+    touchJoy.on = mag > dead;
+    touchJoy.x = joyX / (mag || 1); touchJoy.y = joyY / (mag || 1);
+    touchJoy.mag = Math.min(1, (mag - dead) / (0.9 - dead));
+    // les touches virtuelles restent (dive du bus, émotes, autres systèmes)
+    const k = (on, act) => { keys[BIND[act]] = on; };
+    const fwd = joyY < -0.3, back = joyY > 0.3, left = joyX < -0.3, right = joyX > 0.3;
     k(fwd, 'forward'); k(back, 'back'); k(left, 'left'); k(right, 'right');
     // joystick à fond = sprint
-    const spr = mag > 0.92;
+    const spr = mag > 0.9;
     keys[BIND.sprint] = spr; keys.ShiftRight = spr;
   }
   function joyEnd() {
     joyId = null; joyX = joyY = 0;
+    touchJoy.on = false; touchJoy.mag = 0;
     for (const a of ['forward', 'back', 'left', 'right', 'sprint']) keys[BIND[a]] = false;
     keys.ShiftRight = false;
     joyBase.classList.remove('on');
@@ -2664,11 +2702,19 @@ function touchInit() {
   $t('tInteract').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.interact); }, { passive: false });
   $t('tReload').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.reload); }, { passive: false });
   $t('tBuild').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.buildToggle); }, { passive: false });
+  // boutons de pièces de construction : gros boutons dédiés au pouce, visibles en mode CONS
+  for (const b of ui.querySelectorAll('#tPieces .tp')) {
+    b.addEventListener('touchstart', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (state !== 'playing' || paused) return;
+      cancelEdit(); buildPiece = b.dataset.p; setBuildMode(true);
+    }, { passive: false });
+  }
   $t('tMap').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.map); }, { passive: false });
   $t('tPause').addEventListener('touchstart', (e) => { e.preventDefault(); press('Escape'); }, { passive: false });
   // ---- événements tactiles globaux (document) : le calque #touchUI est
   // pointer-events:none, on écoute partout SAUF sur les boutons et le HUD tapable ----
-  const skipTarget = (t) => t.closest && t.closest('.tbtn, #hotbar, #buildbar, #mats, #minimap, button, .panel, #bigmap, #pause, #gameSettings, #victory, #endscreen, #spectate, input, select');
+  const skipTarget = (t) => t.closest && t.closest('.tbtn, #tPieces, #hotbar, #buildbar, #mats, #minimap, button, .panel, #bigmap, #pause, #gameSettings, #victory, #endscreen, #spectate, input, select');
   // reset complet des commandes tactiles (pause, carte, onglet caché)
   touchResetFn = () => {
     joyEnd(); lookId = null;
@@ -2816,6 +2862,7 @@ function setBuildMode(on) {
   buildMode = on;
   if (on) { player.using = null; player.reloading = 0; player.emoting = null; }
   document.getElementById('crosshair').classList.toggle('build', on);
+  const tp = document.getElementById('tPieces'); if (tp) tp.classList.toggle('on', on); // boutons pièces tactiles
   updateBuildBar(); updateHotbar();
 }
 function selectSlot(i) {
@@ -3133,17 +3180,18 @@ function onBotDamaged(b, attacker) {
   if (!attacker || attacker === b) return;
   if (b.hench) { alertHenchmen(b.henchPoi, attacker); return; } // pas de construction, juste l'alerte
   if (!b.target || !b.target.alive || MR() < 0.5) { b.target = attacker; b.react = 0.15; }
-  // Les bots construisent peu : cooldown long, faible probabilité, et une pièce à la fois.
-  if (b.mode === 'ground' && b.grounded && b.buildCd <= 0 && !(b.buildQ && b.buildQ.length) && MR() < 0.1 + b.skill * 0.1 * DIFF.aim) {
-    b.buildCd = rand(10, 20) / DIFF.aim;
+  b.hitT = 1.4; // pris pour cible : esquive plus vive pendant 1,4 s
+  // Les bots construisent peu : cooldown très long, faible probabilité, et une pièce à la fois.
+  if (b.mode === 'ground' && b.grounded && b.buildCd <= 0 && !(b.buildQ && b.buildQ.length) && MR() < 0.06 + b.skill * 0.06 * DIFF.aim) {
+    b.buildCd = rand(14, 26) / DIFF.aim;
     const mat = botMat(b, 40);
     if (!mat) return;
     const yaw = Math.atan2(-(attacker.pos.x - b.pos.x), -(attacker.pos.z - b.pos.z));
     const fake = { pos: b.pos, yaw };
-    if (b.hp + b.shield < 60 && MR() < 0.5) botBox(b, mat, attacker); // box complète seulement en grand danger
+    if (b.hp + b.shield < 60 && MR() < 0.35) botBox(b, mat, attacker); // box complète seulement en grand danger
     else {
       const t = computeTarget(fake, 'wall', 0); queueBuild(b, 'wall', t.cx, t.cz, t.y, t.d, mat);
-      if (MR() < 0.25) { b.rampRush = rand(1.5, 2.5); }
+      if (MR() < 0.15) { b.rampRush = rand(1.5, 2.5); }
     }
   }
 }
@@ -3309,8 +3357,10 @@ function botThink(b, dt) {
   if (b.boxedT > 0) {
     b.boxedT -= dt;
     if (b.boxedT > 0 && b.heals > 0 && b.shield < 100 && !b.healing) { b.healing = 2.5; }
-    if (b.healing > 0) { b.healing -= dt; if (b.healing <= 0) { b.healing = 0; if (b.heals > 0) { b.heals--; b.shield = Math.min(100, b.shield + 50); } } }
   }
+  // le soin coule aussi hors de la caisse (repli tactique)
+  if (b.healing > 0) { b.healing -= dt; if (b.healing <= 0) { b.healing = 0; if (b.heals > 0) { b.heals--; b.shield = Math.min(100, b.shield + 50); } } }
+  if (b.hitT > 0) b.hitT = Math.max(0, b.hitT - dt);
   botBuildQueue(b, dt); botBoxEdit(b, dt);
   if (b.rampRush > 0 && b.target && b.target.alive) { botRampStep(b, dt); }
   else if (b.target && b.target.alive && b.mode === 'ground' && b.buildCd <= 0 && b.target.pos.y > b.pos.y + 3 && b.target.pos.distanceTo(b.pos) < 40 && MR() < dt * 0.25 * DIFF.aim) { b.rampRush = rand(1.5, 3); b.buildCd = rand(8, 14); }
@@ -3322,12 +3372,18 @@ function botThink(b, dt) {
     const pref = !W || W.melee ? 2 : W === WEAPONS.shotgun ? 6 : W === WEAPONS.sniper ? 50 : W === WEAPONS.smg ? 14 : 24;
     const nx = dx / (d || 1), nz = dz / (d || 1);
     let approach = d > pref + 4 ? 1 : d < pref - 3 ? -0.7 : 0;
+    // repli tactique : blessé, on garde ses distances et on se soigne au lieu de charger
+    if (b.hp + b.shield < 45) {
+      approach = d < 30 ? -1 : 0;
+      if (b.mode === 'ground' && !b.healing && b.heals > 0) b.healing = 2.5;
+    }
     if (b.rampRush > 0) approach = 1;
     if (b.boxedT > 0) approach = 0;
     b.strafeT -= dt; if (b.strafeT <= 0) { b.strafe = MR() < 0.5 ? -1 : 1; b.strafeT = rand(0.5, 1.6); }
     const strafeK = b.rampRush > 0 || b.boxedT > 0 ? 0 : 0.8;
     wish.set(nx * approach - nz * b.strafe * strafeK, 0, nz * approach + nx * b.strafe * strafeK);
-    if (b.grounded && MR() < dt * 0.6) b.vel.y = JUMP_V;
+    // esquive : sous le feu, on saute et on strafe plus souvent
+    if (b.grounded && MR() < dt * (b.hitT > 0 ? 2.2 : 0.6)) b.vel.y = JUMP_V;
     // aim & shoot
     if (b.react <= 0 && W) {
       b.burst -= dt;
@@ -3336,6 +3392,8 @@ function botThink(b, dt) {
         _o.copy(b.pos); _o.y += 1.55;
         _v3.copy(tp); _v3.y += rand(0.9, 1.7);
         const dist = _o.distanceTo(_v3);
+        // tir prédictif : on mène la cible mobile comme un vrai joueur
+        _v3.addScaledVector(b.target.vel, Math.min(0.7, dist / 110));
         _v2.subVectors(_v3, _o).normalize();
         const err = (0.05 + dist * 0.0009) / (b.skill * DIFF.aim) + (b.target.vel.lengthSq() > 9 ? 0.03 : 0) + (b.target.crouch ? 0.01 : 0);
         _v2.x += (MR() - 0.5) * err * 2; _v2.y += (MR() - 0.5) * err * 2; _v2.z += (MR() - 0.5) * err * 2; _v2.normalize();
@@ -3518,7 +3576,9 @@ function airControl(ch, wish, dt) {
     ch.vel.x = lerp(ch.vel.x, wish.x * sp, Math.min(1, dt * 2)); ch.vel.z = lerp(ch.vel.z, wish.z * sp, Math.min(1, dt * 2));
     const descending = ch.vel.y < 0 && !(ch.launchT > 0);
     if (!ch.isPlayer && descending && h < (ch.deployH || 40)) deployGlider(ch);
-    if (descending && h < 16 && !ch.manualFall) deployGlider(ch); // auto-deploy (sauf si le joueur l'a refermé lui-même)
+    // Hauteur max de chute libre : sous 30 m du sol, le planeur s'ouvre d'office —
+    // même refermé à la main, impossible de finir la chute sans lui (comme Fortnite).
+    if (descending && h < 30) deployGlider(ch);
     ch.windT = (ch.windT || 0) - dt; if (ch.isPlayer && ch.windT <= 0) { ch.windT = 1.1; sfx('whoosh', 0.25 + Math.max(0, dive) * 0.3); }
   } else if (ch.mode === 'glide') {
     const fwdK = ch.isPlayer ? (down('forward') ? 1 : down('back') ? -1 : 0) : 0.5;
@@ -5668,6 +5728,10 @@ function updatePlayer(dt) {
     if (down('right')) wish.add(right); if (down('left')) wish.sub(right);
   }
   if (wish.lengthSq() > 0) wish.normalize();
+  // joystick analogique : la vitesse suit l'inclinaison du pouce (0 → 1)
+  if (IS_TOUCH && touchJoy.on && !blocked) {
+    wish.set(0, 0, 0).addScaledVector(fwd, -touchJoy.y).addScaledVector(right, touchJoy.x).multiplyScalar(touchJoy.mag);
+  }
   if (p.mode === 'bus') return;
   if (p.mode === 'drive') { driveVehicle(p, dt); return; }
   if (p.mode === 'fall' || p.mode === 'glide') {
