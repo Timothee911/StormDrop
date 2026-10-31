@@ -29,6 +29,8 @@ const MATS = {
   dot: { color: 0xff3b2f, emissive: 0xff2a1f, emissiveIntensity: 1.6, roughness: 0.4 },
   glow: { color: 0x9fe3ff, emissive: 0x3aa8ff, emissiveIntensity: 0.9, roughness: 0.3 },
   rope: { color: 0xd8cdb4, metalness: 0, roughness: 0.9 },
+  glass: { color: 0xcfe9f4, metalness: 0.05, roughness: 0.06, transparent: true, opacity: 0.42 }, // tube transparent du grappin
+  rubber: { color: 0x17191c, metalness: 0.0, roughness: 0.92 }, // ventouse noire mate
   string: { color: 0xeeeeee, metalness: 0, roughness: 0.6 },
   fire: { color: 0xff5a3d, emissive: 0xff5a3d, emissiveIntensity: 0.55, roughness: 0.5 },
 };
@@ -408,32 +410,39 @@ const BUILDERS = {
     P.box('dot', 0.006, 0.006, 0.006, 0.0, y + 0.1, -0.12);
   },
 
-  // ---- Grappin de Skye (lanceur de grappin avec bobine) ----
+  // ---- Grappin de Skye (grappler : ventouse noire, tube transparent,
+  // enrouleur doré sur bras mécanique gris, poignée noire texturée) ----
   grapple(P, acc) {
     const y = 0.03;
-    // corps de pistolet à gros canon
-    P.prof('receiver', [[-0.22, y + 0.07], [0.12, y + 0.07], [0.14, y - 0.06], [-0.2, y - 0.07]], 0.09, 0, 0.012);
-    P.cyl('steel', 0.055, 0.34, 0, y + 0.02, -0.3, 'z', 14);
-    P.cyl('receiver', 0.065, 0.04, 0, y + 0.02, -0.46, 'z', 14);
-    P.cyl('steel', 0.04, 0.012, 0, y + 0.02, -0.482, 'z', 14); // bouche
-    // crochet chargé
-    P.cyl('bright', 0.01, 0.2, 0, y + 0.02, -0.5, 'z', 6);
-    for (const a of [0, 2.1, 4.2]) { P.box('bright', 0.012, 0.07, 0.012, Math.sin(a) * 0.04, y + 0.02 + Math.cos(a) * 0.04, -0.62, 0.6 * Math.cos(a), 0, -a); }
-    P.cyl('glow', 0.025, 0.04, 0, y + 0.02, -0.58, 'z', 10);
-    // poignée + pontet
-    P.prof('poly', [[0.02, y - 0.07], [0.13, y - 0.07], [0.16, y - 0.25], [0.09, y - 0.26]], 0.052, 0, 0.007);
+    // poignée noire texturée : stries antidérapantes sur les flancs
+    P.prof('poly', [[0.04, y - 0.07], [0.13, y - 0.07], [0.17, y - 0.27], [0.09, y - 0.28]], 0.055, 0, 0.007);
+    for (let i = 0; i < 4; i++) P.box('poly', 0.06, 0.01, 0.014, 0, y - 0.1 - i * 0.048, 0.1 + i * 0.048);
     trigger(P, -0.05, y - 0.07 + 0.005);
-    // bobine de câble sur le dessus + moteur
-    P.cyl('steel', 0.1, 0.1, 0, y + 0.13, -0.05, 'x', 16);
-    P.cyl('rope', 0.088, 0.075, 0, y + 0.13, -0.05, 'x', 16);
-    P.cyl('steel', 0.025, 0.12, 0, y + 0.13, -0.05, 'x', 8);
-    P.cyl('glow', 0.03, 0.01, 0.056, y + 0.13, -0.05, 'x', 10);
-    P.cyl('steel', 0.04, 0.1, 0, y + 0.0, 0.2, 'z', 10); // bloc batterie
-    P.box(acc, 0.05, 0.03, 0.09, 0, y + 0.075, 0.2);
-    P.prof('poly', [[0.14, y + 0.04], [0.32, y + 0.02], [0.32, y - 0.08], [0.14, y - 0.06]], 0.06, 0, 0.01);
-    // câble qui sort vers le crochet
-    P.cyl('rope', 0.006, 0.4, 0, y + 0.05, -0.25, 'z', 5);
-    P.box('steel', 0.02, 0.05, 0.02, 0, y + 0.1, -0.45);
+    // pontet
+    P.prof('poly', [[-0.1, y - 0.08], [-0.045, y - 0.08], [-0.045, y - 0.16], [-0.085, y - 0.16]], 0.014, 0, 0.004);
+    // bras mécanique gris : carcasse + col de fixation du tube
+    P.prof('receiver', [[-0.14, y + 0.095], [0.1, y + 0.095], [0.12, y - 0.075], [-0.12, y - 0.085]], 0.085, 0, 0.01);
+    P.box('receiver', 0.075, 0.055, 0.06, 0, y + 0.03, -0.12);
+    // tube transparent : le câble s'enroule à l'intérieur
+    P.cyl('glass', 0.068, 0.26, 0, y + 0.035, -0.28, 'z', 16);
+    P.cyl('steel', 0.076, 0.028, 0, y + 0.035, -0.165, 'z', 16); // bague arrière
+    P.cyl('steel', 0.076, 0.028, 0, y + 0.035, -0.395, 'z', 16); // bague avant
+    // ventouse noire à l'extrémité (lèvre souple évasée)
+    P.cyl('rubber', 0.06, 0.06, 0, y + 0.035, -0.445, 'z', 16);
+    P.cyl('rubber', 0.094, 0.032, 0, y + 0.035, -0.487, 'z', 16);
+    P.cyl('rubber', 0.05, 0.02, 0, y + 0.035, -0.517, 'z', 12);
+    // câble qui sort du tube vers la ventouse
+    P.cyl('rope', 0.007, 0.1, 0, y + 0.035, -0.465, 'z', 5);
+    // enrouleur doré/bronze monté sur le dessus (flasques + câble bobiné + axe)
+    P.box('steel', 0.05, 0.09, 0.09, 0, y + 0.085, -0.02); // support
+    P.cyl('gold', 0.088, 0.02, 0.056, y + 0.165, -0.02, 'x', 16);
+    P.cyl('gold', 0.088, 0.02, -0.056, y + 0.165, -0.02, 'x', 16);
+    P.cyl('brass', 0.062, 0.09, 0, y + 0.165, -0.02, 'x', 16);
+    P.cyl('gold', 0.028, 0.13, 0, y + 0.165, -0.02, 'x', 8);
+    // câble qui descend de la bobine vers l'arrière du tube
+    P.box('rope', 0.012, 0.07, 0.012, 0, y + 0.1, -0.1);
+    // liseré de rareté sur la carcasse
+    P.box(acc, 0.06, 0.018, 0.03, 0, y + 0.085, 0.09);
   },
 };
 

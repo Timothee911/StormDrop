@@ -269,19 +269,49 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
   scene.add(terrain);
 
   const wg = new THREE.PlaneGeometry(80000, 80000, 1, 1); wg.rotateX(-Math.PI / 2); // la mer s'étend à perte de vue
-  const wmat = new THREE.MeshStandardMaterial({ color: 0x23a3e0, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.84 });
-  // animated ripples + sparkles: the normal is perturbed in the fragment shader from the world position
+  // « vraie eau » : houle multi-échelles animée, reflet du ciel par fresnel,
+  // tache du soleil qui scintille, turquoise près du rivage -> bleu profond au large.
+  const wmat = new THREE.MeshStandardMaterial({ color: 0x1e9fd8, roughness: 0.1, metalness: 0.28, transparent: true, opacity: 0.88 });
   wmat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterT;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; uniform float uT;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      varying vec3 vWP; uniform float uT;
+      // petit ciel procédural (mêmes teintes que le dôme) pour le reflet de l'eau
+      vec3 skyCol(vec3 dir) {
+        vec3 top = vec3(0.24, 0.54, 0.91), mid = vec3(0.65, 0.86, 1.0);
+        vec3 sd = normalize(vec3(0.5, 0.7, 0.35));
+        vec3 c = mix(mid, top, smoothstep(0.05, 0.75, max(dir.y, 0.0)));
+        float g = max(dot(normalize(dir), sd), 0.0);
+        c += mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.95, 0.82), smoothstep(0.05, 0.5, sd.y)) * (pow(g, 6.0) * 0.3 + pow(g, 48.0) * 0.6);
+        return c;
+      }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        float w1 = sin(vWP.x * 0.31 + uT * 1.4) + sin(vWP.z * 0.27 - uT * 1.1) + 0.6 * sin((vWP.x + vWP.z) * 0.62 + uT * 2.3);
+        // houle : deux trains de vagues croisés + clapot fin
+        float ph = vWP.x * 0.31 + vWP.z * 0.17 + uT * 1.35;
+        float w1 = sin(ph) + sin(vWP.z * 0.27 - uT * 1.1 + sin(ph) * 0.8) + 0.6 * sin((vWP.x + vWP.z) * 0.62 + uT * 2.3);
         float w2 = cos(vWP.z * 0.33 + uT * 1.2) + cos(vWP.x * 0.24 + uT * 0.9) + 0.6 * cos((vWP.x - vWP.z) * 0.55 - uT * 2.0);
-        normal = normalize(normal + (viewMatrix * vec4(w1 * 0.05, 0.0, w2 * 0.05, 0.0)).xyz);`)
-      .replace('#include <opaque_fragment>', `float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
+        float w3 = sin(vWP.x * 1.7 + uT * 2.6) + sin(vWP.z * 1.9 - uT * 2.2);
+        normal = normalize(normal + (viewMatrix * vec4(w1 * 0.045 + w3 * 0.012, 0.0, w2 * 0.045 + w3 * 0.012, 0.0)).xyz);`)
+      .replace('#include <opaque_fragment>', `
+        // reflet du ciel (fresnel) + chemin du soleil sur l'eau
+        vec3 V = normalize(cameraPosition - vWP);
+        vec3 R = reflect(-V, normalize(normal));
+        R.y = abs(R.y);
+        vec3 refl = skyCol(R);
+        float fres = mix(0.06, 0.9, pow(1.0 - max(dot(V, normalize(normal)), 0.0), 3.0));
+        vec3 sunDir = normalize(vec3(0.5, 0.7, 0.35));
+        float sg2 = max(dot(R, sunDir), 0.0);
+        float glint = pow(sg2, 640.0) * 3.0 + pow(sg2, 64.0) * 0.35;
+        // turquoise près du rivage, bleu profond au large
+        float shore = smoothstep(1.18, 0.72, length(vWP.xz / vec2(440.0, 360.0)));
+        vec3 base = mix(vec3(0.02, 0.28, 0.55), vec3(0.16, 0.78, 0.72), shore);
+        float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
+        outgoingLight = mix(outgoingLight, base * (0.75 + sparkle * 0.6), 0.55);
+        outgoingLight = mix(outgoingLight, refl, fres * 0.75);
+        outgoingLight += vec3(1.0, 0.92, 0.7) * glint;
         float distF = clamp(length(vWP.xz) / 230.0, 0.0, 1.0);
-        outgoingLight = mix(outgoingLight, vec3(0.03, 0.32, 0.62), 0.28); outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.55, 0.75, 1.0), smoothstep(0.75, 1.0, distF));
+        outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.55, 0.75, 1.0), smoothstep(0.75, 1.0, distF));
         #include <opaque_fragment>`);
   };
   const water = new THREE.Mesh(wg, wmat);
@@ -791,17 +821,17 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
 // =====================================================================
 // Grass : touffes de fines lames courbes (dégradé sombre -> clair), très nombreuses, qui ondulent au vent
 {
-  const N = LOWQ ? 7000 : HIGHQ ? 46000 : 28000;
+  const N = LOWQ ? 9000 : HIGHQ ? 62000 : 38000;
   const gr = mulberry32(90210); // générateur local : ne modifie pas la génération du reste du monde
   const rr = (a, b) => a + (b - a) * gr();
-  // une touffe = 9 lames : chacune a un pied large, un segment médian et une pointe, penchée vers l'extérieur
+  // une touffe = 12 lames : chacune a un pied large, un segment médian et une pointe, penchée vers l'extérieur
   const tuft = (() => {
     const pos = [], col = [], nor = [], idx = [];
-    const NB = 9;
+    const NB = 12;
     for (let i = 0; i < NB; i++) {
-      const ang = gr() * 6.283, rad = Math.sqrt(gr()) * 0.2, bx = Math.cos(ang) * rad, bz = Math.sin(ang) * rad;
+      const ang = gr() * 6.283, rad = Math.sqrt(gr()) * 0.26, bx = Math.cos(ang) * rad, bz = Math.sin(ang) * rad;
       const yaw = ang + rr(-0.9, 0.9), lean = rr(0.12, 0.55) * (0.6 + rad * 2.5);
-      const h = rr(0.3, 0.68) * (i < 3 ? 1.0 : 0.8), w = rr(0.03, 0.05);
+      const h = rr(0.42, 0.85) * (i < 4 ? 1.0 : 0.82), w = rr(0.035, 0.055);
       const dx = Math.sin(yaw), dz = Math.cos(yaw); // direction de la penche
       const wx = Math.cos(yaw), wz = -Math.sin(yaw); // largeur de la lame
       const rows = [[0, w, 0.0, 0.34], [0.52, w * 0.72, lean * 0.45, 0.72], [1.0, 0.0, lean * 1.15, 1.0]];
@@ -843,7 +873,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
   const NF = Math.floor(N / 5);
   const grass = new THREE.InstancedMesh(tuft, gm, N), flowers = new THREE.InstancedMesh(flower, fm, NF);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color(), col2 = new THREE.Color();
-  const GR = [0x6fcf45, 0x86dc50, 0x55b83c, 0x9be35c, 0x62c447], DRY = new THREE.Color(0xc6c85a), DARK = new THREE.Color(0x2f8a3a);
+  const GR = [0x53d241, 0x69df50, 0x44bb38, 0x8ce85c, 0x5ccd46], DRY = new THREE.Color(0xc6c85a), DARK = new THREE.Color(0x2f8a3a);
   const FL = [0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff, 0xa98bff, 0xff8a3d, 0x5ac8ff];
   let ng = 0, nf = 0, guard = 0;
   while ((ng < N || nf < NF) && guard++ < N * 14) {
@@ -863,7 +893,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
       sc.set(k, k * (0.85 + gr() * 0.5), k); m4.compose(ps.set(x, h - 0.04, z), q, sc);
       grass.setMatrixAt(ng, m4);
       col.setHex(GR[(gr() * GR.length) | 0]).lerp(DARK, bw.forest * 0.55);
-      col.lerp(DRY, Math.max(0, 0.5 - patch) * 0.9 * (1 - bw.forest)); // quelques zones d'herbe sèche
+      col.lerp(DRY, Math.max(0, 0.5 - patch) * 0.5 * (1 - bw.forest)); // quelques zones d'herbe sèche (plus discrètes)
       grass.setColorAt(ng, col); ng++;
     }
   }
@@ -875,7 +905,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
 const trees = [], rocks = [], cacti = [];
 const dummy = new THREE.Object3D();
 const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
-let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
+let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
 {
   const pts = [], cpts = [];
   let tries = 0;
@@ -893,26 +923,47 @@ let trunkIM, leafIM, leaf2IM, rockIM, cactusIM;
   }
   const trunkG = new THREE.CylinderGeometry(0.28, 0.42, 1, 6); trunkG.translate(0, 0.5, 0);
   const leafG = new THREE.ConeGeometry(1, 1, 7); leafG.translate(0, 0.5, 0);
+  // houppier du feuillu : trois boules fusionnées => grosse canopée ronde (arbre « à l'ancienne »)
+  const ballG = mergeGeometries([
+    new THREE.IcosahedronGeometry(0.72, 1).translate(-0.58, 0.12, 0.22),
+    new THREE.IcosahedronGeometry(1, 1).translate(0, 0.55, 0),
+    new THREE.IcosahedronGeometry(0.68, 1).translate(0.58, 0.1, -0.25),
+  ]);
   trunkIM = new THREE.InstancedMesh(trunkG, matC(0x7a4a26), pts.length);
   leafIM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
   leaf2IM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
+  leafBallIM = new THREE.InstancedMesh(ballG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
   const lc = new THREE.Color(), snowC = new THREE.Color(0xeef6ff);
   pts.forEach((p, i) => {
     const s = rand(0.85, 1.35);
+    const round = p.snow < 0.3 && R() < 0.45; // deux espèces : sapin stylisé et feuillu rond
     const tree = { i, x: p.x, z: p.z, y: p.h - 0.2, s, hp: 150, alive: true, ims: null };
-    dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(s, 2.8 * s, s); dummy.updateMatrix();
-    trunkIM.setMatrixAt(i, dummy.matrix);
-    dummy.position.set(p.x, tree.y + 2.0 * s, p.z); dummy.scale.set(2.6 * s, 4.2 * s, 2.6 * s); dummy.updateMatrix(); leafIM.setMatrixAt(i, dummy.matrix);
-    dummy.position.set(p.x, tree.y + 4.3 * s, p.z); dummy.scale.set(1.8 * s, 3.2 * s, 1.8 * s); dummy.updateMatrix(); leaf2IM.setMatrixAt(i, dummy.matrix);
-    lc.setHSL(0.27 + rand(-0.04, 0.05), 0.55 + rand(0.15), 0.32 + rand(0.1));
-    if (p.snow > 0.3) { lc.setHSL(0.36, 0.35, 0.28); leafIM.setColorAt(i, lc); leaf2IM.setColorAt(i, lc.lerp(snowC, 0.75 * p.snow)); }
-    else { leafIM.setColorAt(i, lc); lc.offsetHSL(0.01, 0, 0.05); leaf2IM.setColorAt(i, lc); }
-    tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + 3.2 * s });
+    if (round) {
+      // feuillu : tronc plus haut, canopée ronde de trois boules
+      dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(s, 3.4 * s, s); dummy.updateMatrix();
+      trunkIM.setMatrixAt(i, dummy.matrix);
+      leafIM.setMatrixAt(i, ZERO_M); leaf2IM.setMatrixAt(i, ZERO_M);
+      dummy.position.set(p.x, tree.y + 3.1 * s, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(2.3 * s, 2.1 * s, 2.3 * s); dummy.updateMatrix(); leafBallIM.setMatrixAt(i, dummy.matrix);
+      lc.setHSL(0.27 + rand(-0.035, 0.045), 0.62 + rand(0.13), 0.35 + rand(0.09));
+      leafBallIM.setColorAt(i, lc);
+      tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + 5 * s });
+    } else {
+      // sapin : deux étages de cônes bien pleins
+      dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(s, 2.8 * s, s); dummy.updateMatrix();
+      trunkIM.setMatrixAt(i, dummy.matrix);
+      leafBallIM.setMatrixAt(i, ZERO_M);
+      dummy.position.set(p.x, tree.y + 2.0 * s, p.z); dummy.scale.set(3.0 * s, 4.6 * s, 3.0 * s); dummy.updateMatrix(); leafIM.setMatrixAt(i, dummy.matrix);
+      dummy.position.set(p.x, tree.y + 4.3 * s, p.z); dummy.scale.set(2.2 * s, 3.6 * s, 2.2 * s); dummy.updateMatrix(); leaf2IM.setMatrixAt(i, dummy.matrix);
+      lc.setHSL(0.27 + rand(-0.04, 0.05), 0.55 + rand(0.15), 0.32 + rand(0.1));
+      if (p.snow > 0.3) { lc.setHSL(0.36, 0.35, 0.28); leafIM.setColorAt(i, lc); leaf2IM.setColorAt(i, lc.lerp(snowC, 0.75 * p.snow)); }
+      else { leafIM.setColorAt(i, lc); lc.offsetHSL(0.01, 0, 0.05); leaf2IM.setColorAt(i, lc); }
+      tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + 3.2 * s });
+    }
     tree.col.tree = tree;
     trees.push(tree);
   });
-  for (const t of trees) t.ims = [trunkIM, leafIM, leaf2IM];
-  for (const im of [trunkIM, leafIM, leaf2IM]) { im.castShadow = true; im.receiveShadow = true; im.userData.treeIM = true; im.userData.list = trees; scene.add(im); addTarget(im); }
+  for (const t of trees) t.ims = [trunkIM, leafIM, leaf2IM, leafBallIM];
+  for (const im of [trunkIM, leafIM, leaf2IM, leafBallIM]) { im.castShadow = true; im.receiveShadow = true; im.userData.treeIM = true; im.userData.list = trees; scene.add(im); addTarget(im); }
   // Cacti (desert)
   const cacG = mergeGeometries([
     new THREE.CylinderGeometry(0.42, 0.48, 3.4, 8).translate(0, 1.7, 0),
@@ -4455,20 +4506,7 @@ function buildSpyPOI(p) {
       { const H = curHouse; curHouse = null; finishHouse(H); }
     }
 
-    // ---- enseigne « THE AGENCY » au-dessus de la porte (texture canvas
-    // large : le plan 7,5 x 2,6 doit garder ses proportions de texte)
-    const signCanvas = document.createElement('canvas');
-    signCanvas.width = 768; signCanvas.height = 266;
-    const sg = signCanvas.getContext('2d');
-    sg.fillStyle = '#1f3a8a'; sg.fillRect(0, 0, 768, 266);
-    sg.fillStyle = '#ffc400'; sg.font = 'bold 62px Georgia, serif';
-    sg.textAlign = 'center'; sg.textBaseline = 'middle';
-    sg.fillText('THE AGENCY', 384, 108);
-    sg.fillStyle = '#c9d6f2'; sg.font = 'bold 26px Georgia, serif';
-    sg.fillText('CONFIDENTIAL · EYES ONLY', 384, 190);
-    const signTex = new THREE.CanvasTexture(signCanvas);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.5 * K, 2.6 * K), new THREE.MeshBasicMaterial({ map: signTex }));
-    sign.position.set(BX, 12.9, Z(BZ + 10.56)); scene.add(sign);
+    // ---- enseigne « THE AGENCY » retirée : la façade reste nue, sans affiche
 
     // ---- éclairage : hall, étages de l'atrium, sous-sol et façade (portée x K)
     const hallL = new THREE.PointLight(0xffe0b8, 10, 26 * K); hallL.position.set(BX, 12, BZ); scene.add(hallL);
