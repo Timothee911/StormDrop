@@ -281,7 +281,7 @@ let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser
         normal = normalize(normal + (viewMatrix * vec4(w1 * 0.05, 0.0, w2 * 0.05, 0.0)).xyz);`)
       .replace('#include <opaque_fragment>', `float sparkle = pow(max(0.0, sin(vWP.x * 0.9 + uT * 2.2) * sin(vWP.z * 1.1 - uT * 1.8)), 48.0) * smoothstep(60.0, 8.0, length(vWP.xz - cameraPosition.xz));
         float distF = clamp(length(vWP.xz) / 230.0, 0.0, 1.0);
-        outgoingLight = mix(outgoingLight, vec3(0.03, 0.32, 0.62), 0.28); outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.55, 0.75, 1.0), smoothstep(0.75, 1.0, distF)) + vec3(sparkle * 0.5);
+        outgoingLight = mix(outgoingLight, vec3(0.03, 0.32, 0.62), 0.28); outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.55, 0.75, 1.0), smoothstep(0.75, 1.0, distF));
         #include <opaque_fragment>`);
   };
   const water = new THREE.Mesh(wg, wmat);
@@ -4709,6 +4709,68 @@ function buildSpyPOI(p) {
     hdeco(SPH_GEO, 0xf4f1ea, p.x - 11, D3 + 0.9, p.z + 2, 2.2, 2.2, 2.2);
     dc(0xb2b7bd, -7.6, D3 + 3.2, 2.5, 0.12, 6.4, 0.12); dc(0x1f3a8a, -7.6 - 0.9, D3 + 5.4, 2.5, 1.8, 1.0, 0.05);
     rail(-14.5, -4.2, -6.5, -4.2, D3, false); rail(-14.5, 4.2, -6.5, 4.2, D3, false);
+    // ---- DÉTAILS DE LUXE : cheminée, jet-skis, bouées, mobilier, plantes, ancres, guirlande de pavillons…
+    // cheminée profilée sur le toit de la timonerie (bande bleue, liseré doré, sortie noire)
+    dc(0xf4f5f8, -12.8, D3 + 1.3, -2.6, 2.4, 2.6, 2.2); dc(0x1f3a8a, -12.8, D3 + 1.9, -2.6, 2.46, 0.55, 2.26); dc(GD, -12.8, D3 + 2.25, -2.6, 2.5, 0.1, 2.3);
+    dc(0x22262f, -12.8, D3 + 2.7, -2.6, 2.1, 0.2, 1.9);
+    hdeco(CYL_GEO, 0x2c313c, p.x - 12.8, D3 + 3.0, p.z - 2.6, 0.5, 0.7, 0.5);
+    // feux de navigation (bâbord rouge / tribord vert), feu de mât blanc, projecteurs
+    dc(0xff2a2a, -7.0, D2 + 2.65, -3.95, 0.3, 0.3, 0.12); dc(0x2aff5a, -7.0, D2 + 2.65, 3.95, 0.3, 0.3, 0.12);
+    dc(0xfff6c8, -9, D3 + 5.0, -1.5, 0.3, 0.3, 0.3);
+    for (const sv of [-1, 1]) { dc(0x39424e, -7.2, D3 + 0.25, sv * 3.6, 0.5, 0.5, 0.5); dc(0xfff6c8, -6.9, D3 + 0.25, sv * 3.6, 0.1, 0.3, 0.3); }
+    dc(0xb2b7bd, -13.8, D3 + 2.6, 3.2, 0.08, 5.2, 0.08); dc(0xb2b7bd, -6.9, D3 + 2.0, -3.4, 0.08, 4.0, 0.08);     // antennes fouets
+    // pavillons de fête de la proue à la coque (deux guirlandes)
+    for (const sv of [-1, 1]) for (let i = 1; i <= 8; i++) {
+      const t = i / 9, u = -36.5 + (-29.5 + 36.5) * t, y = D0 + 4.2 + (D0 + 1.4 - D0 - 4.2) * t - 0.55 * Math.sin(Math.PI * t), v = sv * 5.9 * t;
+      dc([0xff3b3b, 0xffc400, 0x1f6fff, 0xffffff, 0x2cc56b][i % 5], u, y - 0.14, v, 0.26, 0.26, 0.05, Math.atan2(5.9 * sv, 7));
+    }
+    // plage arrière : deux jet-skis amarrés + bouée de sauvetage
+    for (const [sv, col] of [[-1, 0xffc400], [1, 0x1f6fff]]) {
+      dc(col, 36.6, 0.05, sv * 2.2, 2.4, 0.5, 0.9); dc(0xf4f5f8, 37.9, 0.12, sv * 2.2, 0.6, 0.3, 0.7); dc(0x22262f, 36.3, 0.42, sv * 2.2, 1.1, 0.2, 0.5); dc(0x39424e, 37.0, 0.55, sv * 2.2, 0.1, 0.35, 0.7);
+    }
+    // bouées de sauvetage orange sur les lisses du pont principal (+ filin blanc)
+    for (const u of [-24, -10, 2, 14, 22.5]) for (const sv of [-1, 1]) {
+      hdeco(CYL_GEO, 0xff5a1f, p.x + u, D0 + 0.55, p.z + sv * 6.92, 0.95, 0.12, 0.95, Math.PI / 2, 0, 0);
+      hdeco(CYL_GEO, 0xf4f5f8, p.x + u, D0 + 0.55, p.z + sv * 6.98, 0.5, 0.12, 0.5, Math.PI / 2, 0, 0);
+      for (const a of [0, Math.PI / 2]) hdeco(BOX, 0xffffff, p.x + u + Math.cos(a) * 0.36, D0 + 0.55 + Math.sin(a) * 0.36, p.z + sv * 6.95, 0.16, 0.16, 0.14, 0, 0, 0);
+    }
+    // ancres le long de la coque + guindeaux à la proue
+    for (const sv of [-1, 1]) {
+      dc(0x39424e, -26, 0.9, sv * 7.12, 0.2, 1.5, 0.1); dc(0x39424e, -26, 1.45, sv * 7.12, 0.9, 0.18, 0.1); dc(0x39424e, -26, 0.25, sv * 7.12, 0.8, 0.14, 0.1);
+      hdeco(CYL_GEO, 0x39424e, p.x - 35.4, D0 + 0.25, p.z + sv * 0.8, 0.9, 0.5, 0.9); dc(GD, -35.4, D0 + 0.52, sv * 0.8, 0.5, 0.06, 0.5);
+    }
+    // taquets d'amarrage le long du pont
+    for (let u = -24; u <= 24; u += 8) for (const sv of [-1, 1]) { dc(0xb2b7bd, u, D0 + 0.12, sv * 6.55, 0.5, 0.22, 0.14); dc(0xb2b7bd, u, D0 + 0.26, sv * 6.55, 0.14, 0.1, 0.34); }
+    // lattes de teck sur le pont avant et la plage arrière
+    for (let k = -6; k <= 6; k++) { dc(0xc9b583, -22.5, D0 + 0.012, k * 1.0 + 0.5, 11, 0.02, 0.05); }
+    for (let k = -6; k <= 6; k++) dc(0xc9b583, 19.2, D0 + 0.012, k * 1.0 + 0.5, 20, 0.02, 0.05);
+    // coin repas à l'arrière (bâbord) : table ronde, quatre chaises, parasol
+    hdeco(CYL_GEO, 0x5a3a22, p.x + 16, D0 + 0.8, p.z - 2.6, 1.9, 0.08, 1.9); dc(0x39424e, 16, D0 + 0.4, -2.6, 0.18, 0.8, 0.18);
+    for (const [cu, cv] of [[14.7, -2.6], [17.3, -2.6], [16, -3.9], [16, -1.3]]) { dc(0xf1e8d6, cu, D0 + 0.4, cv, 0.6, 0.1, 0.6); dc(0xf1e8d6, cu + (cu < 16 ? -0.28 : cu > 16 ? 0.28 : 0), D0 + 0.8, cv + (cv < -2.6 ? -0.28 : cv > -2.6 ? 0.28 : 0), cu === 16 ? 0.6 : 0.08, 0.7, cu === 16 ? 0.08 : 0.6); dc(0x5a3a22, cu, D0 + 0.2, cv, 0.1, 0.4, 0.1); }
+    dc(0xe8e1d2, 16, D0 + 1.7, -2.6, 0.08, 1.9, 0.08); hdeco(SPH_GEO, 0xf4efe2, p.x + 16, D0 + 2.6, p.z - 2.6, 3.0, 0.8, 3.0); dc(GD, 16, D0 + 2.98, -2.6, 0.14, 0.2, 0.14);
+    dc(0xffffff, 16, D0 + 0.86, -2.6, 0.3, 0.2, 0.3); pb(16, D0, -2.6, 0.9, 0.9, 0.8);
+    // plantes en pot (palmiers d'intérieur et buissons)
+    const plant = (u, y, v, s = 1) => {
+      dc(0xb0873a, u, y + 0.3 * s, v, 0.7 * s, 0.6 * s, 0.7 * s); dc(0x5a3a22, u, y + 0.62 * s, v, 0.62 * s, 0.05, 0.62 * s);
+      dc(0x6b4b2a, u, y + 1.2 * s, v, 0.14 * s, 1.1 * s, 0.14 * s);
+      hdeco(SPH_GEO, 0x2f8f4a, p.x + u, y + 1.9 * s, p.z + v, 1.5 * s, 0.9 * s, 1.5 * s);
+      hdeco(SPH_GEO, 0x49b062, p.x + u + 0.25 * s, y + 2.1 * s, p.z + v - 0.2 * s, 1.0 * s, 0.7 * s, 1.0 * s);
+    };
+    for (const [u, y, v] of [[9.2, D0, -6.0], [27.4, D0, -6.0], [27.4, D0, 6.0], [-17.4, D0, 5.9], [-14.7, D0, 3.9], [-14.7, D0, -3.9], [7.4, D0, -3.4], [-2.5, D0, 3.6], [-14.2, D1, 4.4], [-14.2, D1, -4.4], [8.6, D1, -5.6], [8.6, D1, 5.2], [-14.7, D2, 4.6], [-4.4, D2, -4.8]]) plant(u, y, v, 0.8);
+    // cadres de tableau, miroir et enceintes dans le salon
+    for (const [u, v, c] of [[-15.6, -3.2, 0x1f3a8a], [-15.6, 3.2, 0xc43b2f]]) { dc(GD, u, D0 + 2.3, v, 0.08, 1.4, 1.8); dc(c, u + 0.04, D0 + 2.3, v, 0.04, 1.2, 1.6); }
+    dc(0x22262f, 7.5, D0 + 1.0, -4.5, 0.5, 2.0, 0.5); dc(0x22262f, 7.5, D0 + 1.0, 4.5, 0.5, 2.0, 0.5);
+    // lampadaires de pont (feux chauds) le long du pont principal
+    for (const u of [-20, -6, 18]) for (const sv of [-1, 1]) { dc(0x39424e, u, D0 + 0.6, sv * 6.5, 0.08, 1.2, 0.08); dc(0xfff0c0, u, D0 + 1.3, sv * 6.5, 0.24, 0.24, 0.24); }
+    // plaque de nom « GHOST » sur le tableau arrière (de part et d'autre de l'échelle de bain)
+    {
+      const nc = document.createElement('canvas'); nc.width = 512; nc.height = 160; const ng = nc.getContext('2d');
+      ng.fillStyle = '#10151f'; ng.fillRect(0, 0, 512, 160); ng.strokeStyle = '#ffc400'; ng.lineWidth = 6; ng.strokeRect(6, 6, 500, 148);
+      ng.fillStyle = '#ffc400'; ng.font = '900 88px "Lilita One", "Barlow Condensed", Impact, sans-serif'; ng.textAlign = 'center'; ng.textBaseline = 'middle'; ng.fillText('GHOST', 256, 70);
+      ng.font = '700 28px "Barlow Condensed", sans-serif'; ng.fillStyle = '#e9edf4'; ng.fillText('MONACO', 256, 132);
+      const nt = new THREE.CanvasTexture(nc); nt.colorSpace = THREE.SRGBColorSpace; nt.anisotropy = 4;
+      for (const sv of [-1, 1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 1.25), new THREE.MeshBasicMaterial({ map: nt })); m.position.set(p.x + 29.04, 1.0, p.z + sv * 4.8); m.rotation.y = Math.PI / 2; scene.add(m); }
+    }
     // éclairage doux des salons
     for (const [u, y, v, I, d] of [[-4, D0 + 3.3, 0, 7, 16], [-9.5, D1 + 3.2, 0, 6, 13], [-10, D2 + 2.6, 0, 4, 9], [3, D1 + 2.8, -3, 4, 10], [23.5, D0 + 3, 0, 3, 14]]) {
       const L = new THREE.PointLight(0xffe3b0, I, d); L.position.set(p.x + u, y, p.z + v); scene.add(L);
@@ -6148,6 +6210,7 @@ function updateHUD(dt) {
   }
   { let n = 0; for (const c of chars) if (c.alive && !c.hench) n++; $('aliveN').textContent = n; }
   $('killsN').textContent = player.kills;
+  { let tk = 0; for (const c of chars) if (!c.hench && c.team === player.team) tk += c.kills; $('teamKillsN').textContent = tk; }
   updateTeamHUD();
   updateHUDStatic();
   const it = player.item;
@@ -6161,7 +6224,7 @@ function updateHUD(dt) {
   if (storm.phase === -1) st = 'Zone en préparation';
   else if (storm.phase >= PHASES.length) st = 'Zone finale';
   else { const s = Math.max(0, Math.ceil(storm.timer)); const tt = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; st = storm.stage === 'wait' ? `Fermeture dans ${tt}` : `Se referme · ${tt}`; }
-  $('stormText').textContent = st;
+  { const mt = st.match(/\d+:\d\d/); const si = $('stormInfo'); $('stormText').textContent = mt ? mt[0] : '--'; si.title = st; si.dataset.full = st; }
   $('stormInfo').classList.toggle('closing', storm.phase >= 0 && storm.phase < PHASES.length && storm.stage !== 'wait');
   // prompt
   const pr = $('prompt');
@@ -6236,7 +6299,7 @@ function drawMap(ctx, size, cx, cz, viewW, full) {
   }
   if (full) {
     ctx.font = `800 ${Math.round(size / 30)}px "Barlow Condensed", sans-serif`; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
-    ctx.fillText(document.getElementById('stormText').textContent, 14, 30);
+    ctx.fillText(document.getElementById('stormInfo').dataset.full || '', 14, 30);
     ctx.font = `700 ${Math.round(size / 40)}px "Barlow Condensed", sans-serif`; ctx.textAlign = 'center';
     for (const p of POIS) { const [x, z] = w2m(p.x, p.z, cx, cz, scale, size); ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(p.name.toUpperCase(), x + 1, z + 1); ctx.fillStyle = p.spy ? '#ffd23f' : '#fff'; ctx.fillText(p.name.toUpperCase(), x, z); }
     if (bus.active) {

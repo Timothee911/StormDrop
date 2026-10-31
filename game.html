@@ -25,10 +25,11 @@
 
   <div id="topright">
     <canvas id="minimap" width="200" height="200"></canvas>
-    <div id="stormInfo"><span class="storm-ico"></span><span id="stormText">--</span></div>
     <div id="counts">
-      <div class="count"><span class="lbl"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z"/></svg>Joueurs</span><span id="aliveN">30</span></div>
-      <div class="count"><span class="lbl"><svg viewBox="0 0 24 24"><path d="M12 2C7 2 4 5.6 4 10c0 2.6 1.2 4.6 3 5.8V19h2v2h6v-2h2v-3.2c1.8-1.2 3-3.2 3-5.8 0-4.4-3-8-8-8zM9 13a2 2 0 110-4 2 2 0 010 4zm6 0a2 2 0 110-4 2 2 0 010 4z"/></svg>Éliminations</span><span id="killsN">0</span></div>
+      <div id="stormInfo" title="Tempête"><span class="storm-ico"></span><span id="stormText">--</span></div>
+      <div class="count" title="Joueurs restants"><span class="lbl"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8z"/></svg></span><span id="aliveN">30</span></div>
+      <div class="count" title="Mes éliminations"><span class="lbl"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="none" stroke-width="2.4"/><circle cx="12" cy="12" r="2.2"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5" stroke-width="2.4"/></svg></span><span id="killsN">0</span></div>
+      <div class="count" title="Éliminations de l'équipe"><span class="lbl"><svg viewBox="0 0 24 24"><circle cx="10" cy="12" r="6.5" fill="none" stroke-width="2.2"/><circle cx="10" cy="12" r="1.9"/><path d="M10 2v4M10 18v4M0 12h4M16 12h4" stroke-width="2.2"/><path d="M20 3v7M16.5 6.5h7" stroke-width="2.4"/></svg></span><span id="teamKillsN">0</span></div>
     </div>
   </div>
 
@@ -55,7 +56,6 @@
       <div class="bpiece" data-p="ramp"><svg viewBox="0 0 24 24"><path d="M3 21 L21 4 L21 21 Z"/></svg><kbd data-a="ramp"></kbd></div>
       <div class="bpiece" data-p="cone"><svg viewBox="0 0 24 24"><path d="M2 20 L12 5 L22 20 Z"/></svg><kbd data-a="cone"></kbd></div>
     </div>
-    <div id="hotbar"></div>
   </div>
   <div id="bottomright">
     <div id="mats">
@@ -63,7 +63,7 @@
       <div class="mat" data-mat="stone"><svg class="mi stone" viewBox="0 0 24 24"><rect x="2" y="4" width="9" height="7" rx="1"/><rect x="13" y="4" width="9" height="7" rx="1"/><rect x="6" y="13" width="12" height="7" rx="1"/></svg><span class="n" id="matStone">0</span></div>
       <div class="mat" data-mat="metal"><svg class="mi metal" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="7" cy="7" r="1.3" fill="#00000066"/><circle cx="17" cy="7" r="1.3" fill="#00000066"/><circle cx="7" cy="17" r="1.3" fill="#00000066"/><circle cx="17" cy="17" r="1.3" fill="#00000066"/></svg><span class="n" id="matMetal">0</span></div>
     </div>
-    <div id="ammoInfo"></div>
+    <div id="hotrow"><div id="ammoInfo"></div><div id="hotbar"></div></div>
   </div>
   <div id="poiBanner"></div>
   <div id="markerLbl"></div>

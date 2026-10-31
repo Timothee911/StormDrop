@@ -388,9 +388,28 @@ body.touch #ammoInfo { font-size: 28px; }
   body.touch #minimap { width: 84px; height: 84px; }
   body.touch #bars { width: 140px; }
   body.touch #bottomleft { bottom: 74px; }
-  body.touch #mats { bottom: 148px; }
-  body.touch #bottomright { right: 18px; bottom: 118px; }
+    body.touch #bottomright { right: 18px; bottom: 118px; }
 }
 
 /* sur téléphone, la hotbar / barre de construction / matériaux deviennent tapables */
 body.touch #hotbar, body.touch #buildbar, body.touch #mats { pointer-events: auto; }
+
+/* ---------- Disposition façon Fortnite ---------- */
+/* haut droite : une seule rangée sous la minicarte (tempête · joueurs · éliminations · éliminations d'équipe) */
+#topright { gap: 6px; }
+#counts { display: flex; gap: 5px; align-items: stretch; justify-content: flex-end; width: 206px; }
+#counts #stormInfo, #counts .count { flex-direction: row; align-items: center; justify-content: center; gap: 5px; min-width: 0; padding: 4px 8px; border-radius: 6px; }
+#counts #stormInfo { font-size: 17px; padding: 4px 8px; }
+#counts #stormInfo .storm-ico { width: 12px; height: 12px; }
+#counts .count .lbl { display: flex; font-size: 0; }
+#counts .count .lbl svg { width: 16px; height: 16px; fill: #fff; stroke: #fff; opacity: .9; }
+#counts .count span:last-child { font-size: 21px; font-family: var(--font-display); line-height: 1; }
+/* bas droite : matériaux en rangée, puis [munitions | barre d'objets] */
+#bottomright { gap: 10px; align-items: flex-end; }
+#mats { flex-direction: row; align-items: stretch; gap: 6px; }
+#mats .mat { flex-direction: column; align-items: center; justify-content: center; min-width: 58px; padding: 6px 8px 5px; gap: 2px; border-radius: 6px; font-size: 20px; line-height: 1; }
+#mats .mi { width: 26px; height: 26px; }
+#hotrow { display: flex; align-items: flex-end; gap: 14px; }
+#ammoInfo { min-width: 150px; display: flex; flex-direction: column; align-items: flex-end; padding-bottom: 6px; }
+#ammoInfo .wn { font-size: 15px; margin-bottom: 0; }
+body.touch #hotrow { gap: 6px; }
