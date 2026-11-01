@@ -71,6 +71,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // de la mesure. On sonde quelques secondes : le circuit est suivi si chacune repasse
   // régulièrement sur un point (sinon, échec avec le dernier relevé).
   let ombres = null;
+  // Chaque ombre doit repasser sur un point de son circuit pendant la fenêtre
+  // de sondage (pas les 5 en même temps : elles se décalent naturellement).
+  const vues = new Set();
   for (let i = 0; i < 12; i++) {
     ombres = await frame.evaluate(() => {
       const G = window.__game;
@@ -78,19 +81,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const team = G.henchmen.filter((c) => c.alive && c.henchPoi.key === 'agency');
       // le bassin de l'atrium (solide, agrandi x1,5 : ~4,65 x 3,9) : personne ne doit y spawn
       const inBasin = team.filter((c) => Math.hypot(c.pos.x - ag.x, c.pos.z - ag.z) < 5.4);
-      const onRoute = team.filter((c) => c.route && c.route.some((w) => Math.hypot(w.x - c.pos.x, w.z - c.pos.z) < 1.5));
       return {
         names: G.henchmen.filter((c) => c.alive && !c.boss).every((c) => c.name === 'Ombre'),
         spawnClear: inBasin.length === 0,
-        onRoute: onRoute.length,
         team: team.length,
+        // par ombre : est-elle sur un point du circuit à cet instant ?
+        surPoint: team.map((c) => !!(c.route && c.route.some((w) => Math.hypot(w.x - c.pos.x, w.z - c.pos.z) < 1.5))),
       };
     });
-    if (ombres.spawnClear === true && ombres.onRoute === ombres.team) break;
+    ombres.surPoint.forEach((ok, j) => { if (ok) vues.add(j); });
+    if (ombres.spawnClear === true && vues.size >= ombres.team) break;
     await new Promise(r => setTimeout(r, 1000));
   }
+  ombres.vues = vues.size;
   check('PNJ nommés « Ombre »', ombres.names === true);
-  check("ombres de l'Agence sur leur circuit, hors du bassin", ombres.spawnClear === true && ombres.onRoute === ombres.team, JSON.stringify(ombres));
+  check("ombres de l'Agence sur leur circuit, hors du bassin", ombres.spawnClear === true && vues.size === ombres.team, JSON.stringify(ombres));
 
   // --- 2ter. Coffres des étages de l'Agence (2 par niveau en plus du hall) ---
   const floorChests = await frame.evaluate(() => {
