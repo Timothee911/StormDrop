@@ -922,6 +922,14 @@ const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
 let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
 {
   const pts = [], cpts = [];
+  // pas deux arbres l'un dans l'autre : distance minimale entre deux pieds d'arbre/cactus
+  // (canopées de ~3-4 m de rayon => 7 m entre les troncs)
+  const MIN_D2 = 7 * 7;
+  const tooClose = (x, z) => {
+    for (const q of pts) if ((q.x - x) ** 2 + (q.z - z) ** 2 < MIN_D2) return true;
+    for (const q of cpts) if ((q.x - x) ** 2 + (q.z - z) ** 2 < MIN_D2) return true;
+    return false;
+  };
   let tries = 0;
   while (pts.length + cpts.length < 620 && tries++ < 12000) {
     const a = rand(Math.PI * 2), r = Math.sqrt(R()) * ISLAND_R;
@@ -930,9 +938,10 @@ let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
     if (h < 2.2 || h > 34 || r > coastR(x / OVAL_X, z / OVAL_Z) * 0.8) continue;
     if (inPOI(x, z, 6)) continue;
     const bw = biomeW(x, z);
-    if (bw.desert > 0.5) { if (R() < 0.82) continue; cpts.push({ x, z, h }); continue; }
+    if (bw.desert > 0.5) { if (R() < 0.82) continue; if (tooClose(x, z)) continue; cpts.push({ x, z, h }); continue; }
     const dens = fbm(x * 0.02 + 40, z * 0.02);
     if (dens < 0.42 - bw.forest * 0.25 && R() < 0.8 - bw.forest * 0.4) continue; // forests clustered
+    if (tooClose(x, z)) continue;
     pts.push({ x, z, h, snow: bw.snow });
   }
   const trunkG = new THREE.CylinderGeometry(0.28, 0.42, 1, 6); trunkG.translate(0, 0.5, 0);
