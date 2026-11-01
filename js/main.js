@@ -1984,7 +1984,12 @@ function physics(ch, dt) {
     ch.pos.y = ground; ch.vel.y = 0; ch.grounded = true;
   } else ch.grounded = false;
   const wasWater = ch.inWater;
-  ch.inWater = (onTerrain && ground < -0.4) || (!onTerrain && ch.pos.y < -0.4 && inGrotto(ch.pos.x, ch.pos.z)); ch.gcol = gcol;
+  // NAGE : on est dans l'eau dès que les pieds passent sous la surface (-0,4 m),
+  // que l'on patauge sur le fond marin (terrain) ou que l'on marche sur une
+  // construction immergée (escalier, dalle posés dans l'eau) — sinon le perso
+  // restait debout et descendait sous l'eau au lieu de nager. La grotte est
+  // couverte par le même test (son plan d'eau est aussi sous -0,4 m).
+  ch.inWater = (onTerrain && ground < -0.4) || (!onTerrain && ch.pos.y < -0.4); ch.gcol = gcol;
   if (ch.inWater && !wasWater) ch.splashV = Math.max(0.4, -ch.vel.y); // vitesse d'entrée dans l'eau -> éclaboussure
   // NAGE : on flotte à la surface (pieds à -0,9 m, tête hors de l'eau) ;
   // la touche « s'accroupir » fait plonger (jusqu'à -1,8 m), on remonte en relâchant.
