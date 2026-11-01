@@ -59,9 +59,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('5 boss vivants + étiquette', staff.bosses.length === 5 && staff.bosses.every((b) => b.alive && b.tag), JSON.stringify(staff.bosses.map((b) => b.name + ':' + b.w)));
   check('ombres spawnées', staff.henchAlive >= 14, 'total=' + staff.hench + ' vivants=' + staff.henchAlive);
   const yachtRig = staff.bosses.filter((b) => b.poi === 'yacht' || b.poi === 'rig');
-  // pont du Yacht à sol+1,4 m ; La Plateforme flotte EN PLEINE MER (plus
-  // d'îlot dessous) : TNTina patrouille le pont à 14,7 m (mer + 14,6 m)
-  check('boss du Yacht/Plateforme sur leur structure', yachtRig.length === 2 && yachtRig.every((b) => b.poi === 'yacht' ? Math.abs(b.y - (b.ground + 1.4)) < 0.8 : Math.abs(b.y - 14.7) < 1), JSON.stringify(yachtRig.map((b) => b.poi + ':y=' + b.y + '/sol=' + b.ground)));
+  // pont du Yacht à 3,9 m au-dessus de la mer (il flotte, plus d'îlot aplani) ;
+  // La Plateforme flotte EN PLEINE MER (plus d'îlot dessous) : TNTina patrouille
+  // le pont à 14,7 m (mer + 14,6 m)
+  check('boss du Yacht/Plateforme sur leur structure', yachtRig.length === 2 && yachtRig.every((b) => b.poi === 'yacht' ? Math.abs(b.y - 3.9) < 1 : Math.abs(b.y - 14.7) < 1), JSON.stringify(yachtRig.map((b) => b.poi + ':y=' + b.y + '/sol=' + b.ground)));
   const agencyBoss = staff.bosses.find((b) => b.poi === 'agency');
   check("boss de l'Agence dans le hall", agencyBoss && Math.abs(agencyBoss.y - 9.05) < 1.2, 'y=' + (agencyBoss && agencyBoss.y) + ' sol=' + (agencyBoss && agencyBoss.ground));
 
@@ -561,7 +562,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       return p.alive && Math.hypot(p.pos.x - tx, p.pos.z - tz) < 2.5;
     };
     // DESCENTE RÉELLE de l'escalier (12 marches vers le nord, à l'ouest du hall, plan agrandi x1,5)
-    const stairs = walkTo(-15.75, 12, 60); // va au sommet de l'escalier
+    // Point de passage (-15.75, 8) : l'ancien (-15.75, 12) est DANS l'empreinte du bastion
+    // rond sud-ouest (tour de façade ajoutée par la refonte, collider propDisc qui
+    // pénètre ~4 m dans le hall à z > 10) — on s'arrête au sommet de l'escalier,
+    // au nord de la tour, puis on descend vers le nord.
+    const stairs = walkTo(-15.75, 8, 60); // va au sommet de l'escalier (nord du bastion)
     let down = false;
     if (stairs) {
       G.setCam(0, -0.2); // regarde plein nord (descente)

@@ -4593,6 +4593,42 @@ function buildSpyPOI(p) {
       { const H = curHouse; curHouse = null; finishHouse(H); }
     }
 
+    // ---- STATUE ATLAS CHROMÉE devant l'entrée (comme la vraie Agence) :
+    // figure agenouillée portant le globe au-dessus d'elle, au bout du
+    // parvis, encadrée de deux arbres taillés et de deux bancs bleus
+    {
+      const st2 = new THREE.Group();
+      const cM = matC(0xc8ccd4, { metalness: 0.9, roughness: 0.15 });
+      const dS = matC(0x51607a, { metalness: 0.4 });
+      addBox(st2, 0.5, 1.0, 0.8, -0.45, 0.5, 0.2, cM);   // jambe agenouillée
+      addBox(st2, 0.5, 0.8, 0.5, 0.3, 0.4, -0.55, cM);   // jambe avant pliée
+      addBox(st2, 1.4, 1.8, 0.75, 0, 1.85, -0.1, cM);    // torse
+      const bL = addBox(st2, 0.38, 1.7, 0.38, -0.55, 3.3, -0.1, cM); bL.rotation.x = 0.3;
+      const bR = addBox(st2, 0.38, 1.7, 0.38, 0.55, 3.3, -0.1, cM); bR.rotation.x = 0.3;
+      addBox(st2, 0.6, 0.65, 0.6, 0, 3.05, 0.05, dS);    // tête
+      const globe2 = new THREE.Mesh(new THREE.SphereGeometry(0.95, 20, 14), matC(0x3fa9ff, { metalness: 0.4, roughness: 0.2, emissive: 0x0c3555, emissiveIntensity: 0.5 }));
+      globe2.position.set(0, 4.95, 0); globe2.castShadow = true; st2.add(globe2);
+      st2.scale.setScalar(0.65 * K);
+      st2.position.set(BX, p.h + 0.9, Z(BZ + 23)); scene.add(st2);
+      // socle métallique
+      hdeco(BOX, 0xa8adb4, BX, p.h + 0.4, BZ + 23, 2.6, 0.8, 2.6);
+      propBox(BX, p.h, BZ + 23, 1.3, 1.3, 0.85);
+      const st2L = new THREE.PointLight(0xbfd8ff, 4, 12); st2L.position.set(BX, p.h + 4.2 * K, Z(BZ + 23)); scene.add(st2L);
+      // deux arbres taillés sur touffes d'herbe + deux bancs bleus incurvés
+      for (const tx of [-3.8, 3.8]) {
+        hdeco(CYL_GEO, 0x6b4a2c, BX + tx, p.h + 1.2, BZ + 23, 0.22, 2.4, 0.22);
+        hdeco(CYL_GEO, 0x2d5a35, BX + tx, p.h + 2.7, BZ + 23, 1.3, 1.4, 1.3);
+        hdeco(CYL_GEO, 0x2d5a35, BX + tx, p.h + 3.7, BZ + 23, 0.9, 0.9, 0.9);
+        propBox(BX + tx, p.h, BZ + 23, 0.25, 0.25, 3.9);
+      }
+      for (const bx of [-3.2, 3.2]) {
+        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.3, BZ + 20.8, 1.8, 0.12, 0.6);
+        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.55, BZ + 21.1, 0.5, 0.5, 0.12);
+        hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.55, BZ + 20.5, 0.5, 0.5, 0.12);
+        propBox(BX + bx, p.h, BZ + 20.8, 0.9, 0.35, 0.5);
+      }
+    }
+
     // ---- enseigne « THE AGENCY » retirée : la façade reste nue, sans affiche
 
     // ---- éclairage : hall, étages de l'atrium, sous-sol et façade (portée x K)
