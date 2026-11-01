@@ -4597,6 +4597,7 @@ function buildSpyPOI(p) {
     // figure agenouillée portant le globe au-dessus d'elle, au bout du
     // parvis, encadrée de deux arbres taillés et de deux bancs bleus
     {
+      curHouse = { boxes: [], deco: [], mesh: null }; // contexte requis par hdeco
       const st2 = new THREE.Group();
       const cM = matC(0xc8ccd4, { metalness: 0.9, roughness: 0.15 });
       const dS = matC(0x51607a, { metalness: 0.4 });
@@ -4627,6 +4628,7 @@ function buildSpyPOI(p) {
         hdeco(BOX, 0x2c6fbb, BX + bx, p.h + 0.55, BZ + 20.5, 0.5, 0.5, 0.12);
         propBox(BX + bx, p.h, BZ + 20.8, 0.9, 0.35, 0.5);
       }
+      finishHouse(curHouse); curHouse = null;
     }
 
     // ---- enseigne « THE AGENCY » retirée : la façade reste nue, sans affiche
