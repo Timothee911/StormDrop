@@ -5827,8 +5827,9 @@ function pickupItem(ch, L) {
 function autoPickups(ch) {
   for (const L of loot) {
     if (!L.alive || (L.item.kind !== 'ammo' && L.item.kind !== 'mats')) continue;
-    if (L.vel.lengthSq() > 0.5) continue;
-    if (Math.hypot(L.pos.x - ch.pos.x, L.pos.z - ch.pos.z) < 1.4 && Math.abs(L.pos.y - ch.pos.y) < 1.8) {
+    // ramassage automatique élargi : il suffit d'être juste à côté (2,6 m, la portée du E),
+    // même si l'objet vient d'être lâché et n'est pas encore posé
+    if (Math.hypot(L.pos.x - ch.pos.x, L.pos.z - ch.pos.z) < 2.6 && Math.abs(L.pos.y - ch.pos.y) < 2.2) {
       if (L.item.kind === 'ammo') { ch.ammo[L.item.type] = Math.min(999, ch.ammo[L.item.type] + L.item.amount); if (ch.isPlayer) showCenter('', `+${L.item.amount} ${AMMO_NAMES[L.item.type]}`, 0.9); }
       else { ch.mats[L.item.mat] = Math.min(999, ch.mats[L.item.mat] + L.item.amount); if (ch.isPlayer) matGain(L.item.mat, L.item.amount); }
       removeLoot(L); if (ch.isPlayer) sfx('pickup', 0.35);
