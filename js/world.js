@@ -5,7 +5,8 @@ export const ISLAND_R = 400;
 export const WORLD_R = 480;
 export const CELL = 4;
 // Île ovale : étirée de 10 % d'ouest en est et aplatie de 10 % du nord au sud (rapport ~1,22).
-// Les POI restent aux mêmes coordonnées : les îlots (Requin, Yacht, Plateforme) restent des îlots.
+// Les POI restent aux mêmes coordonnées : Le Requin reste un îlot ; le Yacht et
+// La Plateforme sont en pleine mer (plus d'îlot aplani en dessous d'eux).
 export const OVAL_X = 1.1, OVAL_Z = 0.9;
 
 export function mulberry32(a) {
@@ -89,7 +90,7 @@ export function terrainH(x, z) {
   let h = rawH(x, z);
   for (let i = 0; i < POIS.length; i++) {
     const p = POIS[i];
-    if (p.key === 'yacht') continue; // le Yacht flotte en pleine mer : plus d'îlot aplani autour
+    if (p.key === 'yacht' || p.key === 'rig') continue; // Yacht et Plateforme flottent en pleine mer : plus d'îlot aplani autour
     const dx = x - p.x, dz = z - p.z;
     const d2 = dx * dx + dz * dz, lim = p.r * 1.7;
     if (d2 < lim * lim) {

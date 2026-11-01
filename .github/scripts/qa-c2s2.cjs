@@ -59,8 +59,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('5 boss vivants + étiquette', staff.bosses.length === 5 && staff.bosses.every((b) => b.alive && b.tag), JSON.stringify(staff.bosses.map((b) => b.name + ':' + b.w)));
   check('ombres spawnées', staff.henchAlive >= 14, 'total=' + staff.hench + ' vivants=' + staff.henchAlive);
   const yachtRig = staff.bosses.filter((b) => b.poi === 'yacht' || b.poi === 'rig');
-  // pont du Yacht à sol+1,4 m ; plateforme de La Plateforme à sol+12,2 m
-  check('boss du Yacht/Plateforme sur leur structure', yachtRig.length === 2 && yachtRig.every((b) => b.poi === 'yacht' ? Math.abs(b.y - (b.ground + 1.4)) < 0.8 : Math.abs(b.y - (b.ground + 12.2)) < 1), JSON.stringify(yachtRig.map((b) => b.poi + ':y=' + b.y + '/sol=' + b.ground)));
+  // pont du Yacht à sol+1,4 m ; La Plateforme flotte EN PLEINE MER (plus
+  // d'îlot dessous) : TNTina patrouille le pont à 14,7 m (mer + 14,6 m)
+  check('boss du Yacht/Plateforme sur leur structure', yachtRig.length === 2 && yachtRig.every((b) => b.poi === 'yacht' ? Math.abs(b.y - (b.ground + 1.4)) < 0.8 : Math.abs(b.y - 14.7) < 1), JSON.stringify(yachtRig.map((b) => b.poi + ':y=' + b.y + '/sol=' + b.ground)));
   const agencyBoss = staff.bosses.find((b) => b.poi === 'agency');
   check("boss de l'Agence dans le hall", agencyBoss && Math.abs(agencyBoss.y - 9.05) < 1.2, 'y=' + (agencyBoss && agencyBoss.y) + ' sol=' + (agencyBoss && agencyBoss.ground));
 

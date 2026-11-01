@@ -3901,6 +3901,11 @@ function finishGrotto() {
   grottoRockMesh = mesh;
   grottoGeos.length = 0;
 }
+// La Plateforme : hauteurs du pont (dessous RIG_DY, dessus RIG_DT) — le POI
+// est EN PLEINE MER (plus d'îlot dessous), les pieds s'ancrent sur les fonds.
+const RIG_DY = 13.4, RIG_DT = 14.6;
+// torchère de La Plateforme : flamme + lumière (animées dans updateWorld)
+let rigFlare = null;
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
     // ---- L'AGENCE : refonte totale extérieur + intérieur pour coller à
@@ -5183,76 +5188,198 @@ function buildSpyPOI(p) {
     // fusion de toutes les roches de la grotte en un seul maillage
     finishGrotto();
   } else if (p.key === 'rig') {
-    // Plateforme pétrolière : coque gris-bleu à bandes jaunes, grues rouges,
-    // hélipad jaune en porte-à-faux, passerelle vers la station satellite.
-    const y = Math.max(terrainH(p.x, p.z), 2.4);
-    const py = y + 11;
+    // LA PLATEFORME — refonte totale : vraie plate-forme pétrolière EN PLEINE
+    // MER (l'îlot dessous a été retiré du terrain). Quatre pieds géants ancrés
+    // sur les fonds marins, entretoisements en X, pont principal 32x24 avec
+    // garde-corps jaunes, tour de forage à croisillons, grue rouge, hélipad en
+    // porte-à-faux, torchère allumée, canot de sauvetage et passerelle vers
+    // la station de contrôle.
+    const DY = RIG_DY, DT = RIG_DT; // dessous / dessus du pont
     curHouse = { boxes: [], deco: [], mesh: null };
-    // pattes télescopiques avec bande de flottaison jaune
-    for (const [lx, lz] of [[-9, -7], [9, -7], [-9, 7], [9, 7]]) {
-      makeStructBox(p.x + lx, y - 1, p.z + lz, 2.2, 13, 2.2, matC(0x46586a, { metalness: 0.4 }), { indestructible: true });
-      hdeco(BOX, 0xf1c40f, p.x + lx, y + 1.5, p.z + lz, 2.5, 0.7, 2.5);
+    const STEEL = (m) => matC(0x46586a, Object.assign({ metalness: 0.4, roughness: 0.55 }, m));
+    // entretoise / diagonale décorative entre deux points (coordonnées absolues)
+    const brace = (x1, y1, z1, x2, y2, z2, hex = 0x3d4c5c) => {
+      const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1, L = Math.hypot(dx, dy, dz);
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, mz = (z1 + z2) / 2;
+      if (Math.abs(dx) >= Math.abs(dz)) hdeco(BOX, hex, mx, my, mz, L, 0.24, 0.24, 0, 0, Math.atan2(dy, dx));
+      else hdeco(BOX, hex, mx, my, mz, 0.24, 0.24, L, -Math.atan2(dy, dz), 0, 0);
+    };
+    // ---- STRUCTURE SOUS-MARINE : 4 pieds du fond marin (-6,5) au pont (DY)
+    const LEGS = [[-12, -9], [12, -9], [-12, 9], [12, 9]];
+    for (const [lx, lz] of LEGS) {
+      makeStructBox(p.x + lx, -6.5, p.z + lz, 2.6, 21.1, 2.6, STEEL(), { indestructible: true });
+      hdeco(CYL_GEO, 0x46586a, p.x + lx, 0.8, p.z + lz, 3.1, 1.5, 3.1); // jupe de flottaison
+      hdeco(CYL_GEO, 0xf1c40f, p.x + lx, 0.1, p.z + lz, 3.1, 0.45, 3.1); // bande jaune à la ligne de flottaison
+      hdeco(CYL_GEO, 0x8fa3ad, p.x + lx, DY - 1.4, p.z + lz, 3.3, 0.5, 3.3); // collier de jonction sous le pont
     }
-    makeStructBox(p.x, py, p.z, 26, 1.2, 20, matC(0x3d4c5c, { metalness: 0.4 }), { indestructible: true });
-    // jupe de coque sous le pont + hublots dorés
-    const skirt = (sx2, sz2, w2, d2) => makeStructBox(p.x + sx2, py - 2.1, p.z + sz2, w2, 2.1, d2, matC(0x46586a, { metalness: 0.4 }), { indestructible: true });
-    skirt(0, -10.6, 26, 1.2); skirt(0, 10.6, 26, 1.2); skirt(-13.6, 0, 1.2, 20); skirt(13.6, 0, 1.2, 20);
-    for (let i = 0; i < 9; i++) {
-      hdeco(BOX, 0xffd23f, p.x - 10 + i * 2.5, py - 1.05, p.z - 11.3, 0.55, 0.55, 0.15);
-      hdeco(BOX, 0xffd23f, p.x - 10 + i * 2.5, py - 1.05, p.z + 11.3, 0.55, 0.55, 0.15);
+    // entretoisements horizontaux (visibles à travers l'eau) + diagonales en X
+    for (const y of [-2.5, 5.5]) {
+      brace(p.x - 12, y, p.z - 9, p.x + 12, y, p.z - 9); brace(p.x - 12, y, p.z + 9, p.x + 12, y, p.z + 9);
+      brace(p.x - 12, y, p.z - 9, p.x - 12, y, p.z + 9); brace(p.x + 12, y, p.z - 9, p.x + 12, y, p.z + 9);
     }
-    // conteneurs industriels (le coffre-fort garde sa place)
-    const CC = [0xc0392b, 0x2980b9, 0xf1c40f, 0x27ae60, 0xecf0f1];
-    for (let k = 0; k < 5; k++) { if (k === 1) continue;
-      makeStructBox(p.x - 8 + (k % 3) * 8, py + 1.2, p.z - 5 + Math.floor(k / 3) * 8, 6.5, 2.8, 2.8, matC(CC[k], { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+    for (const [ax, az] of [[-12, -9], [12, 9]]) {
+      brace(p.x + ax, 0.5, p.z + az, p.x + ax, DY - 0.8, p.z - az, 0x51657a);
+      brace(p.x + ax, DY - 0.8, p.z + az, p.x + ax, 0.5, p.z - az, 0x51657a);
+      brace(p.x + ax, 0.5, p.z + az, p.x - ax, DY - 0.8, p.z + az, 0x51657a);
+      brace(p.x + ax, DY - 0.8, p.z + az, p.x - ax, 0.5, p.z + az, 0x51657a);
     }
-    // conduites jaunes le long du pont + évents
-    hdeco(BOX, 0xf1c40f, p.x, py + 1.35, p.z + 9.6, 25, 0.35, 0.35);
-    hdeco(BOX, 0xf1c40f, p.x, py + 1.75, p.z + 9.6, 25, 0.35, 0.35);
-    hdeco(BOX, 0xf1c40f, p.x + 12.6, py + 1.35, p.z, 0.35, 0.35, 19);
-    propBox(p.x, py + 1.2, p.z + 9.6, 12.5, 0.25, 0.7); propBox(p.x, py + 1.6, p.z + 9.6, 12.5, 0.25, 0.7); // conduites-garde-corps solides
-    propBox(p.x + 12.6, py + 1.2, p.z, 0.25, 9.5, 0.7);
-    for (const [vx, vz] of [[-11, 7], [-11, 9.5]]) {
-      hdeco(CYL_GEO, 0x8fa3ad, p.x + vx, py + 3.2, p.z + vz, 0.7, 3.6, 0.7);
-      hdeco(CYL_GEO, 0xf1c40f, p.x + vx, py + 5.2, p.z + vz, 0.85, 0.5, 0.85);
-      propBox(p.x + vx, py + 1.4, p.z + vz, 0.85, 0.85, 4.3); // cheminée de la Plateforme : solide
+    // ---- PONT PRINCIPAL : plaque 32x24, dessus à DT (14,6)
+    makeStructBox(p.x, DY, p.z, 32, 1.2, 24, matC(0x3d4c5c, { metalness: 0.35, roughness: 0.6 }), { indestructible: true });
+    // jupe de coque sous le pont + hublots dorés sur les deux longs côtés
+    const skirt = (sx2, sz2, w2, d2) => makeStructBox(p.x + sx2, DY - 2.1, p.z + sz2, w2, 2.1, d2, STEEL(), { indestructible: true });
+    skirt(0, -11.8, 32, 1.2); skirt(0, 11.8, 32, 1.2); skirt(-15.4, 0, 1.2, 24); skirt(15.4, 0, 1.2, 24);
+    for (let i = 0; i < 11; i++) {
+      hdeco(BOX, 0xffd23f, p.x - 12.5 + i * 2.5, DY - 1.05, p.z - 12.5, 0.55, 0.55, 0.15);
+      hdeco(BOX, 0xffd23f, p.x - 12.5 + i * 2.5, DY - 1.05, p.z + 12.5, 0.55, 0.55, 0.15);
     }
-    // grue rouge : mât plein + flèche + contrepoids + câble
+    // lignes de sécurité jaunes peintes au sol, le long des bords du pont
+    for (const [rx, rz, rw, rd] of [[0, 11.6, 30, 0.5], [0, -11.6, 30, 0.5], [15.6, 0, 0.5, 23], [-15.6, 0, 0.5, 23]])
+      hdeco(BOX, 0xf1c40f, p.x + rx, DT + 0.015, p.z + rz, rw, 0.03, rd);
+    // ---- GARDE-CORPS JAUNES (décoratifs) : poteaux + deux lisses, trous
+    // laissés pour l'hélipad (ouest), la passerelle (est) et la grue
+    const rail = (x1, z1, x2, z2) => {
+      const dx = x2 - x1, dz = z2 - z1, L = Math.hypot(dx, dz);
+      const n = Math.max(2, Math.round(L / 3)), ry = -Math.atan2(dz, dx);
+      const mx = p.x + (x1 + x2) / 2, mz = p.z + (z1 + z2) / 2;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        hdeco(BOX, 0xf1c40f, p.x + x1 + dx * t, DT + 0.55, p.z + z1 + dz * t, 0.12, 1.1, 0.12);
+      }
+      for (const rh of [0.45, 0.95]) hdeco(BOX, 0xf1c40f, mx, DT + rh, mz, L, 0.07, 0.07, 0, ry, 0);
+    };
+    rail(-15.6, 11.6, 15.6, 11.6); // sud
+    rail(-15.6, -11.6, 15.6, -11.6); // nord
+    rail(-15.6, -11.6, -15.6, -7); rail(-15.6, -1, -15.6, 11.6); // ouest (trou hélipad)
+    rail(15.6, -11.6, 15.6, 4); rail(15.6, 9.5, 15.6, 11.6); // est (trou passerelle)
+    // ---- CONTENEURS INDUSTRIELS le long du bord sud (le coffre-fort garde sa place)
+    const CC = [0xc0392b, 0x2980b9, 0xf1c40f, 0x27ae60];
+    for (let k = 0; k < 3; k++)
+      makeStructBox(p.x - 10 + k * 7, DT, p.z + 9, 6.5, 2.8, 2.8, matC(CC[k], { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+    makeStructBox(p.x - 12, DT, p.z - 2, 6.5, 2.8, 2.8, matC(0xecf0f1, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+    // barils
+    for (const [bx, bz, c] of [[-4.5, -8.5, 0xb03a2e], [-3.4, -8.9, 0x2c5f8a], [-4.1, -7.6, 0xf1c40f], [12.5, 8.5, 0xb03a2e], [13.4, 7.8, 0x2c5f8a]]) {
+      hdeco(CYL_GEO, c, p.x + bx, DT + 0.55, p.z + bz, 0.9, 1.1, 0.9);
+      hdeco(CYL_GEO, 0x22262f, p.x + bx, DT + 1.12, p.z + bz, 0.95, 0.08, 0.95);
+    }
+    // ---- CONDUITES JAUNES + ÉVENTS le long du bord nord
+    hdeco(BOX, 0xf1c40f, p.x - 3, DT + 1.35, p.z - 10.9, 22, 0.35, 0.35);
+    hdeco(BOX, 0xf1c40f, p.x - 3, DT + 1.75, p.z - 10.9, 22, 0.35, 0.35);
+    propBox(p.x - 3, DT + 1.2, p.z - 10.9, 11, 0.25, 0.7); propBox(p.x - 3, DT + 1.6, p.z - 10.9, 11, 0.25, 0.7); // conduites-garde-corps solides
+    for (const [vx, vz] of [[-11, -8], [-11, -10.2]]) {
+      hdeco(CYL_GEO, 0x8fa3ad, p.x + vx, DT + 3.2, p.z + vz, 0.7, 3.6, 0.7);
+      hdeco(CYL_GEO, 0xf1c40f, p.x + vx, DT + 5.2, p.z + vz, 0.85, 0.5, 0.85);
+      propBox(p.x + vx, DT + 1.4, p.z + vz, 0.85, 0.85, 4.3); // cheminée : solide
+    }
+    // ---- TOUR DE FORAGE (nord-est du pont) : 4 montants + croisillons + couronne
     {
-      const cx = p.x + 10, cz = p.z + 5, base = py + 1.2;
+      const dx = p.x + 10.5, dz = p.z - 9.5;
+      for (const [ox, oz] of [[-2.6, -2.6], [2.6, -2.6], [-2.6, 2.6], [2.6, 2.6]])
+        makeStructBox(dx + ox, DT, dz + oz, 0.9, 17, 0.9, matC(0x9aa7b4, { metalness: 0.5, roughness: 0.45 }), { indestructible: true });
+      for (let lv = 0; lv < 4; lv++) {
+        const y0 = DT + 1 + lv * 4, y1 = y0 + 4;
+        brace(dx - 2.6, y0, dz - 2.6, dx - 2.6, y1, dz + 2.6, 0x8fa3ad); brace(dx - 2.6, y1, dz - 2.6, dx - 2.6, y0, dz + 2.6, 0x8fa3ad);
+        brace(dx + 2.6, y0, dz - 2.6, dx + 2.6, y1, dz + 2.6, 0x8fa3ad); brace(dx + 2.6, y1, dz - 2.6, dx + 2.6, y0, dz + 2.6, 0x8fa3ad);
+        brace(dx - 2.6, y0, dz - 2.6, dx + 2.6, y1, dz - 2.6, 0x8fa3ad); brace(dx - 2.6, y1, dz - 2.6, dx + 2.6, y0, dz - 2.6, 0x8fa3ad);
+        brace(dx - 2.6, y0, dz + 2.6, dx + 2.6, y1, dz + 2.6, 0x8fa3ad); brace(dx - 2.6, y1, dz + 2.6, dx + 2.6, y0, dz + 2.6, 0x8fa3ad);
+        // lisses horizontales de niveau
+        for (const s of [-1, 1]) { hdeco(BOX, 0x8fa3ad, dx, y1, dz + s * 2.6, 5.2, 0.16, 0.16); hdeco(BOX, 0x8fa3ad, dx + s * 2.6, y1, dz, 0.16, 0.16, 5.2); }
+      }
+      // couronne + cabine de couronnement + balise
+      hdeco(BOX, 0x9aa7b4, dx, DT + 17.6, dz, 6, 0.7, 6);
+      hdeco(BOX, 0xbcd8e8, dx, DT + 18.7, dz, 2.6, 1.6, 2.6);
+      hdeco(CYL_GEO, 0x22262f, dx, DT + 21.4, dz, 0.3, 1.9, 0.3);
+      const beacon = new THREE.Mesh(CYL_GEO, new THREE.MeshBasicMaterial({ color: 0xff3b30 }));
+      beacon.scale.set(0.4, 0.4, 0.4); beacon.position.set(dx, DT + 22.6, dz); scene.add(beacon);
+      // colonne de forage : traverse le pont jusqu'à la mer
+      hdeco(CYL_GEO, 0x22262f, dx, DT - 2.6, dz, 0.6, 22, 0.6);
+      propBox(dx, DT - 13, dz, 0.35, 0.35, 20); // colonne : solide
+      // panneau rayé d'avertissement au pied
+      for (let i = 0; i < 5; i++) hdeco(BOX, i % 2 ? 0x22262f : 0xf1c40f, dx - 2.6 + i * 1.3, DT + 1.4, dz + 3.1, 1.3, 2.8, 0.1);
+    }
+    // ---- GRUE ROUGE : mât + flèche inclinée + contrepoids + câble + crochet
+    {
+      const cx = p.x + 10, cz = p.z + 5, base = DT;
       makeStructBox(cx, base, cz, 1.3, 17, 1.3, matC(0xb03a2e, { metalness: 0.3, roughness: 0.5 }), { indestructible: true });
       hdeco(BOX, 0xb03a2e, cx - 5.5, base + 16.2, cz, 12, 0.7, 0.9, 0, 0, 0.1);
       hdeco(BOX, 0xb03a2e, cx + 2.2, base + 15.4, cz, 2.4, 1.4, 1.6);
-      propBox(cx - 5.5, base + 15.5, cz, 6, 0.45, 1.4); // flèche de grue inclinée : solide (portée verticale du dévers 0,1 rad)
+      hdeco(BOX, 0xf1c40f, cx, base + 8.5, cz, 1.5, 1.2, 1.5); // cabine de grue
+      propBox(cx - 5.5, base + 15.5, cz, 6, 0.45, 1.4); // flèche inclinée : solide
       propBox(cx + 2.2, base + 14.7, cz, 1.2, 0.8, 1.4); // contrepoids : solide
       hdeco(BOX, 0x22262f, cx - 10.6, base + 9, cz, 0.12, 12, 0.12);
       hdeco(BOX, 0x3a3f47, cx - 10.6, base + 2.6, cz, 0.7, 0.5, 0.7);
-      propBox(cx - 10.6, base + 3, cz, 0.1, 0.1, 12); // câble de grue : solide
+      propBox(cx - 10.6, base + 3, cz, 0.1, 0.1, 12); // câble : solide
       propBox(cx - 10.6, base + 2.35, cz, 0.35, 0.35, 0.5); // crochet : solide
     }
-    // hélipad jaune en porte-à-faux à l'ouest, marquage H
-    makeStructBox(p.x - 19, py + 0.4, p.z - 4, 7, 0.8, 7, matC(0xf1c40f, { metalness: 0.2, roughness: 0.6 }), { indestructible: true });
-    hdeco(BOX, 0x22262f, p.x - 19 - 0.9, py + 1.25, p.z - 4, 0.55, 0.1, 2.6);
-    hdeco(BOX, 0x22262f, p.x - 19 + 0.9, py + 1.25, p.z - 4, 0.55, 0.1, 2.6);
-    hdeco(BOX, 0x22262f, p.x - 19, py + 1.25, p.z - 4, 1.8, 0.1, 0.55);
-    hdeco(BOX, 0x8fa3ad, p.x - 17, py - 1.2, p.z - 4, 5.5, 0.5, 0.5, 0, 0, 0.5);
-    hdeco(BOX, 0x8fa3ad, p.x - 17, py - 1.2, p.z - 4, 5.5, 0.5, 0.5, 0, 0, -0.5);
-    propBox(p.x - 17, py - 2.5, p.z - 4, 2.75, 0.25, 2.6); // antennes en X : solides (portée verticale du dévers)
-    // passerelle treillis vers la station satellite (salle de contrôle)
-    makeStructBox(p.x + 17, py + 0.4, p.z + 7, 9, 0.8, 2.6, matC(0xf1c40f, { metalness: 0.2, roughness: 0.6 }), { indestructible: true });
-    makeStructBox(p.x + 24, y - 1, p.z + 7, 2, 13, 2, matC(0x46586a, { metalness: 0.4 }), { indestructible: true });
-    makeStructBox(p.x + 24, py + 0.2, p.z + 7, 7, 1, 7, matC(0x9fb4c7, { metalness: 0.2, roughness: 0.5 }), { indestructible: true });
-    makeStructBox(p.x + 24, py + 1.2, p.z + 7, 4.6, 3, 3.6, matC(0xbcd8e8, { metalness: 0.1, roughness: 0.4 }), { indestructible: true });
-    hdeco(BOX, 0x2c5f8a, p.x + 24, py + 2.5, p.z + 5.15, 4.2, 0.8, 0.1);
-    hdeco(CYL_GEO, 0xf1c40f, p.x + 24, py + 5.6, p.z + 7, 0.25, 3, 0.25);
-    propBox(p.x + 24, py + 4.1, p.z + 7, 0.25, 0.25, 3); // antenne de la station : solide
-    for (const [fx, fz] of [[-2.6, -1], [2.6, 1]]) { hdeco(BOX, 0xf1c40f, p.x + 17 + fx, py + 1.7, p.z + 7 + fz, 0.15, 1.3, 0.15); propBox(p.x + 17 + fx, py + 1.05, p.z + 7 + fz, 0.1, 0.1, 1.3); } // poteaux : solides
+    // ---- TORCHÈRE (sud-ouest) : cheminée + flamme vivante + lumière
+    {
+      const fx = p.x - 14, fz = p.z + 10.5;
+      propBox(fx, DT, fz, 0.6, 0.6, 12); // cheminée : solide
+      hdeco(CYL_GEO, 0x8fa3ad, fx, DT + 6, fz, 1.1, 12, 1.1);
+      hdeco(CYL_GEO, 0x3a3f47, fx, DT + 12.3, fz, 1.5, 0.6, 1.5); // couronne
+      hdeco(CYL_GEO, 0xb03a2e, fx, DT + 0.4, fz, 1.6, 0.25, 1.6); // collier rouge
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.6, 8), new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.95 }));
+      flame.position.set(fx, DT + 13.8, fz); scene.add(flame);
+      const fl = new THREE.PointLight(0xff8c2a, 2.4, 26, 2); fl.position.set(fx, DT + 13.5, fz); scene.add(fl);
+      rigFlare = { flame, light: fl };
+    }
+    // feux de navigation sur les coins du pont (rouge ouest / vert est)
+    for (const [nx, nz, c] of [[-15.5, -11.5, 0xff3b30], [-15.5, 11.5, 0xff3b30], [15.5, -11.5, 0x2ecc71], [15.5, 11.5, 0x2ecc71]]) {
+      hdeco(BOX, 0x3a3f47, p.x + nx, DT + 0.45, p.z + nz, 0.1, 0.9, 0.1);
+      const dot = new THREE.Mesh(CYL_GEO, new THREE.MeshBasicMaterial({ color: c }));
+      dot.scale.set(0.28, 0.28, 0.28); dot.position.set(p.x + nx, DT + 1, p.z + nz); scene.add(dot);
+    }
+    // ---- CANOT DE SAUVETAGE (sud-est) sur ses daviers
+    {
+      const bx = p.x + 13, bz = p.z + 10.8;
+      hdeco(BOX, 0x8fa3ad, bx - 1.6, DT + 1.3, bz, 0.15, 1.5, 0.15); hdeco(BOX, 0x8fa3ad, bx + 1.6, DT + 1.3, bz, 0.15, 1.5, 0.15);
+      hdeco(BOX, 0xe67e22, bx, DT + 1.05, bz, 3.4, 0.9, 1.3); // coque
+      hdeco(BOX, 0xf5f6fa, bx, DT + 1.6, bz, 3.0, 0.3, 1.0); // cabine
+      propBox(bx, DT + 0.7, bz, 1.7, 0.65, 0.5); // canot : solide
+    }
+    // ---- HÉLIPAD JAUNE en porte-à-faux à l'ouest (niveau du pont), marquage H
+    makeStructBox(p.x - 20, DY + 0.4, p.z - 4, 8, 0.8, 8, matC(0x2b3a4a, { metalness: 0.3, roughness: 0.6 }), { indestructible: true });
+    hdeco(BOX, 0xf1c40f, p.x - 20, DT + 0.02, p.z - 4, 7.2, 0.05, 7.2); // liseré jaune
+    hdeco(BOX, 0x22262f, p.x - 20 - 0.9, DT + 0.07, p.z - 4, 0.55, 0.1, 2.6);
+    hdeco(BOX, 0x22262f, p.x - 20 + 0.9, DT + 0.07, p.z - 4, 0.55, 0.1, 2.6);
+    hdeco(BOX, 0x22262f, p.x - 20, DT + 0.07, p.z - 4, 1.8, 0.1, 0.55);
+    // balises d'angle de l'hélipad
+    for (const [hx, hz] of [[-3.4, -3.4], [3.4, -3.4], [-3.4, 3.4], [3.4, 3.4]]) {
+      const dot = new THREE.Mesh(CYL_GEO, new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+      dot.scale.set(0.25, 0.25, 0.25); dot.position.set(p.x - 20 + hx, DT + 0.35, p.z - 4 + hz); scene.add(dot);
+      hdeco(BOX, 0x3a3f47, p.x - 20 + hx, DT + 0.15, p.z - 4 + hz, 0.1, 0.5, 0.1);
+    }
+    // sous-structure de l'hélipad : poutre + diagonales
+    makeStructBox(p.x - 18.5, DY - 2.4, p.z - 4, 5, 0.8, 1.2, STEEL(), { indestructible: true });
+    brace(p.x - 16, DY - 1, p.z - 8, p.x - 20, DY - 1.6, p.z - 4, 0x51657a);
+    brace(p.x - 16, DY - 1, p.z + 0, p.x - 20, DY - 1.6, p.z - 4, 0x51657a);
+    // ---- PASSERELLE vers la station de contrôle (est) + station sur pied propre
+    makeStructBox(p.x + 17, DY + 0.4, p.z + 7, 9, 0.8, 2.6, matC(0x2b3a4a, { metalness: 0.3, roughness: 0.6 }), { indestructible: true });
+    hdeco(BOX, 0xf1c40f, p.x + 17, DT + 0.05, p.z + 7, 8.6, 0.06, 0.5); // ligne de sécurité centrale
+    for (const [fx, fz] of [[-2.6, -1], [2.6, 1], [-2.6, 1], [2.6, -1]]) {
+      hdeco(BOX, 0xf1c40f, p.x + 17 + fx, DT + 0.55, p.z + 7 + fz, 0.15, 1.1, 0.15);
+      propBox(p.x + 17 + fx, DT, p.z + 7 + fz, 0.1, 0.1, 1.1); // poteaux : solides
+    }
+    for (const rh of [0.45, 0.95]) hdeco(BOX, 0xf1c40f, p.x + 17, DT + rh, p.z + 7, 8.6, 0.07, 0.07);
+    makeStructBox(p.x + 24, -6.5, p.z + 7, 2.4, 21.1, 2.4, STEEL(), { indestructible: true });
+    brace(p.x + 12, 0.5, p.z + 7, p.x + 24, DY - 0.8, p.z + 7, 0x51657a);
+    makeStructBox(p.x + 24, DY + 0.2, p.z + 7, 7, 1, 7, matC(0x9fb4c7, { metalness: 0.2, roughness: 0.5 }), { indestructible: true });
+    makeStructBox(p.x + 24, DT, p.z + 7, 4.6, 3, 3.6, matC(0xbcd8e8, { metalness: 0.1, roughness: 0.4 }), { indestructible: true });
+    hdeco(BOX, 0x2c5f8a, p.x + 24, DT + 1.3, p.z + 5.15, 4.2, 0.8, 0.1); // baies vitrées
+    hdeco(BOX, 0x2c5f8a, p.x + 24, DT + 1.3, p.z + 8.85, 4.2, 0.8, 0.1);
+    hdeco(CYL_GEO, 0xf1c40f, p.x + 24, DT + 4.4, p.z + 7, 0.25, 3, 0.25); // antenne
+    // radar satellite tourné vers le ciel
+    hdeco(CYL_GEO, 0xd8e4ee, p.x + 21.5, DT + 4.6, p.z + 9.5, 2.2, 0.35, 2.2, 0.9, 0, 0);
+    hdeco(BOX, 0x8fa3ad, p.x + 21.5, DT + 3.6, p.z + 9.5, 0.2, 1.6, 0.2);
+    propBox(p.x + 24, DT + 2.9, p.z + 7, 0.25, 0.25, 3); // antenne : solide
     { const H = curHouse; curHouse = null; finishHouse(H); }
-    spawnChest(p.x - 5, py + 1.3, p.z + 6);
-    spawnChest(p.x + 8, py + 1.3, p.z + 6);
-    lootSpots.push({ x: p.x, y: py + 1.3, z: p.z });
-    buildVault(p, { x: p.x, y: py + 1.2, z: p.z - 5 });
-    buildPhoneBooth(p, { x: p.x - 8, y: py + 1.2, z: p.z + 5 });
+    spawnChest(p.x - 5, DT + 0.1, p.z + 6);
+    spawnChest(p.x + 8, DT + 0.1, p.z + 6);
+    spawnChest(p.x - 6, DT + 0.1, p.z - 6.5);
+    lootSpots.push({ x: p.x, y: DT + 0.7, z: p.z });
+    lootSpots.push({ x: p.x - 8, y: DT + 0.7, z: p.z - 2 });
+    lootSpots.push({ x: p.x + 5, y: DT + 0.7, z: p.z - 3 });
+    buildVault(p, { x: p.x, y: DT, z: p.z - 5 });
+    buildPhoneBooth(p, { x: p.x - 8, y: DT, z: p.z + 5 });
     placePad(p.x + 16, p.z);
     placePad(p.x - 16, p.z);
   }
@@ -5359,7 +5486,7 @@ function startGame() {
     // point d'appui : le pont du Yacht ou la plateforme de La Plateforme, sinon le terrain
     let sy, wpBox = null;
     if (p.key === 'yacht') { sy = 2.4 + 1.5; wpBox = { x: p.x - 4, z: p.z, hx: 3, hz: 1 }; }
-    else if (p.key === 'rig') { const yr = Math.max(terrainH(p.x, p.z), 2.4) + 11; sy = yr + 1.3; wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; }
+    else if (p.key === 'rig') { sy = RIG_DT + 0.1; wpBox = { x: p.x, z: p.z, hx: 8, hz: 6 }; } // TNTina patrouille le pont
     // La Grotte : Brutus et ses ombres gardent la caverne souterraine
     else if (p.key === 'grotto') { sy = GROTTO.floor1 + 3.6 + 0.1; wpBox = { x: GROTTO.cavernX, z: GROTTO.cavernZ, hx: 10, hz: 10 }; }
     // L'Agence : le boss garde le hall du rez-de-chaussée (le coffre-fort est en sous-sol)
@@ -6427,17 +6554,27 @@ function updateHUD(dt) {
   $('busHint').style.display = player.mode === 'bus' ? 'block' : 'none';
 }
 
-// Minimap
-const mapCanvas = document.createElement('canvas'); mapCanvas.width = mapCanvas.height = 512;
+// Minimap — carte pré-rendue haute résolution (1024px) : relief ombré
+// (hillshade lumière nord-ouest), biomes, forêts mouchetées, écume sur la
+// ligne de rivage, empreintes des bâtiments (dont ceux des POI espions).
+const mapCanvas = document.createElement('canvas'); mapCanvas.width = mapCanvas.height = 1024;
 {
   const g = mapCanvas.getContext('2d');
-  const img = g.createImageData(512, 512);
-  const S = WORLD_R * 2 + 40;
-  for (let j = 0; j < 512; j++) for (let i = 0; i < 512; i++) {
-    const x = (i / 512 - 0.5) * S, z = (j / 512 - 0.5) * S, h = terrainH(x, z);
+  const N = 1024, S = WORLD_R * 2 + 40;
+  const img = g.createImageData(N, N);
+  const H = new Float32Array(N * N);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++)
+    H[j * N + i] = terrainH((i / N - 0.5) * S, (j / N - 0.5) * S);
+  const step = S / N;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const h = H[j * N + i];
+    const x = (i / N - 0.5) * S, z = (j / N - 0.5) * S;
     let r, gg, b;
-    if (h < 0) { const d = clamp(-h / 6, 0, 1); r = 40 - d * 10; gg = 150 - d * 40; b = 210 - d * 30; }
-    else if (h < 1.6) { r = 236; gg = 216; b = 150; }
+    if (h < 0) {
+      const d = clamp(-h / 6, 0, 1);
+      r = 36 - d * 12; gg = 150 - d * 46; b = 205 - d * 38;
+      if (h > -0.55) { r += 70; gg += 60; b += 42; } // écume près de la rive
+    } else if (h < 1.6) { r = 236; gg = 216; b = 150; }
     else if (h > 40) { r = 235; gg = 240; b = 250; }
     else if (h > 26) { r = 140; gg = 145; b = 150; }
     else {
@@ -6446,13 +6583,32 @@ const mapCanvas = document.createElement('canvas'); mapCanvas.width = mapCanvas.
       r = lerp(r, 232, bw.desert); gg = lerp(gg, 196, bw.desert); b = lerp(b, 120, bw.desert);
       r = lerp(r, 50, bw.forest * 0.6); gg = lerp(gg, 140, bw.forest * 0.6); b = lerp(b, 60, bw.forest * 0.6);
       r = lerp(r, 236, bw.snow); gg = lerp(gg, 242, bw.snow); b = lerp(b, 250, bw.snow);
+      // feuillage sombre moucheté dans les forêts
+      if (bw.forest > 0.35 && h < 32 && vnoise(i * 0.77 + 13, j * 0.77 + 31) > 0.82) { r *= 0.55; gg *= 0.68; b *= 0.55; }
     }
-    const k = (j * 512 + i) * 4; img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255;
+    if (h >= 0) {
+      // relief : lumière venant du nord-ouest (pentes exposées éclaircies)
+      const hx = (H[j * N + Math.min(N - 1, i + 1)] - H[j * N + Math.max(0, i - 1)]) / (2 * step);
+      const hz = (H[Math.min(N - 1, j + 1) * N + i] - H[Math.max(0, j - 1) * N + i]) / (2 * step);
+      const sh = clamp(1 + (hx + hz) * 0.4, 0.55, 1.45);
+      r *= sh; gg *= sh; b *= sh;
+    }
+    const k = (j * N + i) * 4; img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  g.fillStyle = 'rgba(120,90,60,.55)';
-  for (const s of structs) if (s.kind === 'house' && !s.indestructible) { const x = (s.minX / S + 0.5) * 512, z = (s.minZ / S + 0.5) * 512; g.fillRect(x, z, Math.max(1, (s.maxX - s.minX) / S * 512), Math.max(1, (s.maxZ - s.minZ) / S * 512)); }
-  mapCanvas.S = S;
+  // empreintes des bâtiments : maisons destructibles (brun) et structures des
+  // POI espions, indestructibles (gris acier) — pont de La Plateforme inclus
+  for (const s of structs) {
+    if (s.kind !== 'house') continue;
+    const x = (s.minX / S + 0.5) * N, z = (s.minZ / S + 0.5) * N;
+    const w = Math.max(1, (s.maxX - s.minX) / S * N), d = Math.max(1, (s.maxZ - s.minZ) / S * N);
+    g.fillStyle = s.indestructible ? 'rgba(52,62,78,.92)' : 'rgba(110,84,58,.92)';
+    g.fillRect(x, z, w, d);
+    g.strokeStyle = s.indestructible ? 'rgba(170,190,210,.55)' : 'rgba(60,44,28,.6)';
+    g.lineWidth = 0.6;
+    g.strokeRect(x, z, w, d);
+  }
+  mapCanvas.S = S; mapCanvas.N = N;
 }
 const mm = $('minimap').getContext('2d');
 $('bigmapCanvas').addEventListener('mousedown', (e) => {
@@ -6462,18 +6618,58 @@ $('bigmapCanvas').addEventListener('mousedown', (e) => {
 });
 const bm = $('bigmapCanvas').getContext('2d');
 function w2m(x, z, cx, cz, scale, size) { return [(x - cx) * scale + size / 2, (z - cz) * scale + size / 2]; }
+// Icône de POI dessiné à la main : forme dédiée pour chaque POI espion
+// (derrick, aileron, yacht, crâne, étoile), point blanc pour les autres.
+function drawPOIIcon(ctx, p, x, z, s) {
+  ctx.save(); ctx.translate(x, z);
+  ctx.lineWidth = Math.max(1, s * 0.16); ctx.strokeStyle = '#0a2a4a';
+  ctx.fillStyle = p.spy ? '#ffd23f' : '#ffffff';
+  if (p.key === 'rig') { // derrick de forage
+    ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s, s); ctx.lineTo(-s, s); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(0, s); ctx.stroke();
+  } else if (p.key === 'shark') { // aileron de requin
+    ctx.beginPath(); ctx.moveTo(-s, s); ctx.quadraticCurveTo(0, -s, s * 0.5, s); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (p.key === 'yacht') { // coque + voile
+    ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s * 0.6, s * 0.3); ctx.lineTo(0, s * 0.3); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillRect(-s, s * 0.3, 2 * s, s * 0.5); ctx.strokeRect(-s, s * 0.3, 2 * s, s * 0.5);
+  } else if (p.key === 'grotto') { // crâne
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.85, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#0a2a4a';
+    ctx.beginPath(); ctx.arc(-s * 0.32, -s * 0.12, s * 0.2, 0, 7); ctx.arc(s * 0.32, -s * 0.12, s * 0.2, 0, 7); ctx.fill();
+    ctx.fillRect(-s * 0.1, s * 0.28, s * 0.2, s * 0.3);
+  } else if (p.key === 'agency') { // étoile de l'Agence
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) { const rr = i % 2 ? s * 0.45 : s; const a = -Math.PI / 2 + i * Math.PI / 5; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else { // lieu classique
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.5, 0, 7); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+}
 function drawMap(ctx, size, cx, cz, viewW, full) {
-  const S = mapCanvas.S, scale = size / viewW;
+  const S = mapCanvas.S, N = mapCanvas.N, scale = size / viewW;
   ctx.save(); ctx.clearRect(0, 0, size, size);
-  ctx.fillStyle = '#1b5f8f'; ctx.fillRect(0, 0, size, size);
-  const sx = ((cx - viewW / 2) / S + 0.5) * 512, sz = ((cz - viewW / 2) / S + 0.5) * 512, sw = viewW / S * 512;
+  ctx.fillStyle = '#12406b'; ctx.fillRect(0, 0, size, size);
+  const sx = ((cx - viewW / 2) / S + 0.5) * N, sz = ((cz - viewW / 2) / S + 0.5) * N, sw = viewW / S * N;
+  ctx.imageSmoothingEnabled = true;
   ctx.drawImage(mapCanvas, sx, sz, sw, sw, 0, 0, size, size);
-  // storm
+  // grille discrète (grande carte : 100 m)
+  if (full) {
+    ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
+    const g0 = Math.ceil(-viewW / 2 / 100) * 100;
+    for (let gx = g0; gx <= viewW / 2; gx += 100) { const [x] = w2m(gx, 0, cx, cz, scale, size); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, size); ctx.stroke(); }
+    for (let gz = g0; gz <= viewW / 2; gz += 100) { const [, z] = w2m(0, gz, cx, cz, scale, size); ctx.beginPath(); ctx.moveTo(0, z); ctx.lineTo(size, z); ctx.stroke(); }
+  }
+  // tempête : dégradé violet + double liseré
   if (storm.phase >= 0) {
     const [scx, scz] = w2m(storm.cx, storm.cz, cx, cz, scale, size);
-    ctx.fillStyle = 'rgba(120,40,220,.45)';
-    ctx.beginPath(); ctx.rect(0, 0, size, size); ctx.arc(scx, scz, Math.max(0, storm.r * scale), 0, Math.PI * 2, true); ctx.fill();
-    ctx.strokeStyle = '#d6b3ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(scx, scz, Math.max(0, storm.r * scale), 0, Math.PI * 2); ctx.stroke();
+    const R = Math.max(0, storm.r * scale);
+    const grd = ctx.createRadialGradient(scx, scz, R * 0.5, scx, scz, Math.max(R, size * 1.6));
+    grd.addColorStop(0, 'rgba(120,40,220,.16)'); grd.addColorStop(0.8, 'rgba(110,30,210,.42)'); grd.addColorStop(1, 'rgba(95,20,195,.55)');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.rect(0, 0, size, size); ctx.arc(scx, scz, R, 0, Math.PI * 2, true); ctx.fill();
+    ctx.strokeStyle = '#d6b3ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(scx, scz, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(214,179,255,.4)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(scx, scz, Math.max(0, R - 4), 0, Math.PI * 2); ctx.stroke();
     if (storm.phase < PHASES.length) {
       const [nx, nz] = w2m(storm.nx, storm.nz, cx, cz, scale, size);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(nx, nz, Math.max(1, storm.nr * scale), 0, Math.PI * 2); ctx.stroke();
@@ -6486,12 +6682,38 @@ function drawMap(ctx, size, cx, cz, viewW, full) {
   if (full) {
     ctx.font = `800 ${Math.round(size / 30)}px "Barlow Condensed", sans-serif`; ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
     ctx.fillText(document.getElementById('stormInfo').dataset.full || '', 14, 30);
-    ctx.font = `700 ${Math.round(size / 40)}px "Barlow Condensed", sans-serif`; ctx.textAlign = 'center';
-    for (const p of POIS) { const [x, z] = w2m(p.x, p.z, cx, cz, scale, size); ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(p.name.toUpperCase(), x + 1, z + 1); ctx.fillStyle = p.spy ? '#ffd23f' : '#fff'; ctx.fillText(p.name.toUpperCase(), x, z); }
-    if (bus.active) {
-      const [a1, b1] = w2m(bus.start.x, bus.start.z, cx, cz, scale, size), [a2, b2] = w2m(bus.end.x, bus.end.z, cx, cz, scale, size);
-      ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.setLineDash([8, 6]); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(a1, b1); ctx.lineTo(a2, b2); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // icônes des POI (toutes les cartes) + noms (grande carte)
+  for (const p of POIS) {
+    const [x, z] = w2m(p.x, p.z, cx, cz, scale, size);
+    if (x < -24 || z < -24 || x > size + 24 || z > size + 24) continue;
+    drawPOIIcon(ctx, p, x, z, full ? 10 : (p.spy ? 5.5 : 3.5));
+    if (full) {
+      ctx.font = `700 ${Math.round(size / 44)}px "Barlow Condensed", sans-serif`; ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(p.name.toUpperCase(), x + 1, z + 15);
+      ctx.fillStyle = p.spy ? '#ffd23f' : '#fff'; ctx.fillText(p.name.toUpperCase(), x, z + 14);
     }
+  }
+  // trajectoire du bus (pointillés) sur toutes les cartes
+  if (bus.active) {
+    const [a1, b1] = w2m(bus.start.x, bus.start.z, cx, cz, scale, size), [a2, b2] = w2m(bus.end.x, bus.end.z, cx, cz, scale, size);
+    ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.setLineDash([8, 6]); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(a1, b1); ctx.lineTo(a2, b2); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // grande carte : nord + échelle
+  if (full) {
+    ctx.font = `800 ${Math.round(size / 26)}px "Barlow Condensed", sans-serif`; ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 3;
+    ctx.strokeText('N', size / 2, size / 26 + 8); ctx.fillStyle = '#fff'; ctx.fillText('N', size / 2, size / 26 + 8);
+    const L = 100 * scale;
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    ctx.fillRect(18, size - 22, L, 3); ctx.fillRect(18, size - 26, 3, 8); ctx.fillRect(18 + L - 3, size - 26, 3, 8);
+    ctx.font = `700 ${Math.round(size / 52)}px "Barlow Condensed", sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText('100 m', 18 + L / 2, size - 30);
+  } else {
+    // mini-carte : rose nord discrète en haut
+    ctx.font = '800 12px "Barlow Condensed", sans-serif'; ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 2.5;
+    ctx.strokeText('N', size / 2, 14); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillText('N', size / 2, 14);
   }
   // ligne bleue pointillée vers le coffre-fort quand on a la carte
   for (const v of vaults) {
@@ -6542,6 +6764,12 @@ function updateGhost() {
   g.visible = !exists || true;
 }
 function updateWorld(dt) {
+  // torchère de La Plateforme : flamme et lumière vivantes
+  if (rigFlare) {
+    rigFlare.light.intensity = 2.3 + Math.sin(gameT * 17) * 0.5 + Math.sin(gameT * 7.3) * 0.4;
+    const s = 1 + Math.sin(gameT * 11) * 0.1 + Math.sin(gameT * 23) * 0.05;
+    rigFlare.flame.scale.set(s, 1 + Math.sin(gameT * 9) * 0.12, s);
+  }
   for (const L of loot) {
     if (!L.alive) continue;
     L.t += dt;

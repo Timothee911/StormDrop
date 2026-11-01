@@ -8,6 +8,8 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 L'Agence a été repensée : marbre clair (plus aucun noir), colonnes gris perle, intérieur lumineux, et deux coffres par étage (1er, 2e, 3e) en plus du hall. Les bots contourne­nt désormais les murs au lieu de s'y bloquer.
 
+La Plateforme flotte désormais EN PLEINE MER (l'îlot dessous a été retiré du terrain) : vraie plate-forme pétrolière avec quatre pieds géants ancrés sur les fonds marins, entretoisements en X, pont 32x24 avec garde-corps jaunes et lignes de sécurité peintes, tour de forage à croisillons, grue rouge, hélipad en porte-à-faux, torchère à flamme vivante, canot de sauvetage et passerelle vers la station de contrôle. La mini-carte a été refaite : pré-rendu 1024px avec relief ombré (lumière nord-ouest), forêts mouchetées, écume sur la ligne de rivage, empreintes de tous les bâtiments (dont les POI espions), icônes dédiées par POI (étoile, aileron, yacht, crâne, derrick), grille et échelle sur la grande carte, rose nord sur la mini-carte.
+
 ## Contenu
 
 - Construction sur grille (bois / pierre / métal) à 5 matériaux, édition 3x3 (toit de la même texture que les murs), tir ADS, 6 raretés d'armes dont la mythique, tempête en phases, bus de combat, planeur, véhicules, trampolines et cheminées d'air.
