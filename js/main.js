@@ -97,7 +97,7 @@ renderer.toneMappingExposure = 1.1;
 
 const scene = new THREE.Scene();
 const FOG_COL = new THREE.Color(0xbfe6ff); // couleur d'horizon (gardée pour le ciel), plus aucun brouillard sur la map
-scene.fog = null; // brouillard retiré : la map reste visible en entier
+scene.fog = new THREE.Fog(0x16608e, 1e8, 2e8); // brouillard « invisible » au-dessus de l'eau : présent en permanence pour éviter toute recompilation de shader, il devient dense et bleu dès que la caméra plonge
 const camera = new THREE.PerspectiveCamera(SET.fov, window.innerWidth / window.innerHeight, 0.1, 30000); // portée très longue : la mer et les décors lointains vont jusqu'à l'horizon
 // cartoon outlines (post-process, one extra full-screen pass)
 function syncLin() { const l = outline.linear ? 1 : 0; if (skyMat) skyMat.uniforms.lin.value = l; if (storm.mesh) storm.mesh.material.uniforms.lin.value = l; }
@@ -250,9 +250,10 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   // darker steep slopes and an animated foam line where the island meets the sea
   tmat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterT;
+    sh.uniforms.uNight = WSKY.night;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vWP; uniform float uT;
+      varying vec3 vWP; uniform float uT; uniform float uNight;
       float th(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float tn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(th(i), th(i + vec2(1.0, 0.0)), f.x), mix(th(i + vec2(0.0, 1.0)), th(i + vec2(1.0, 1.0)), f.x), f.y); }`)
@@ -267,28 +268,83 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
         diffuseColor.rgb *= mix(0.84, 1.0, smoothstep(0.62, 0.92, abs(fn.y)));
         float wl = -0.08 + 0.12 * sin(uT * 1.3 + vWP.x * 0.07 + vWP.z * 0.05);
         float foam = smoothstep(0.32, 0.04, abs(vWP.y - wl)) * (0.75 + 0.25 * tn(vWP.xz * 1.3 + uT * 0.6));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.97, 0.99, 1.0), foam * 0.8);`);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.97, 0.99, 1.0), foam * 0.8);
+        // caustiques : la lumière ondoie sur le sol sous l'eau (rivage, grotte)
+        float uwF = smoothstep(-0.05, -0.4, vWP.y);
+        if (uwF > 0.001) {
+          float ca = pow(0.5 + 0.5 * sin(vWP.x * 0.42 + uT * 0.9 + sin(vWP.z * 0.37 - uT * 0.7) * 1.8), 6.0)
+                   + pow(0.5 + 0.5 * sin(vWP.z * 0.35 - uT * 0.8 + sin(vWP.x * 0.31 + uT * 0.6) * 1.8), 6.0)
+                   + pow(0.5 + 0.5 * sin((vWP.x + vWP.z) * 0.21 + uT * 0.5 + sin((vWP.x - vWP.z) * 0.26 - uT * 0.45) * 1.6), 6.0);
+          diffuseColor.rgb += vec3(0.8, 0.93, 1.0) * ca * 0.2 * uwF * (1.0 - uNight);
+        }`);
   };
   const terrain = new THREE.Mesh(geo, tmat);
   terrain.receiveShadow = true;
   terrainMeshRef = terrain;
   scene.add(terrain);
 
-  const wg = new THREE.PlaneGeometry(80000, 80000, 1, 1); wg.rotateX(-Math.PI / 2); // la mer s'étend à perte de vue
+  // la mer : plan détaillé autour de l'île — houle animée sommet par sommet et
+  // profondeur réelle par sommet (turquoise au rivage, bleu profond au large) —
+  // prolongé par 4 bandes lointaines jusqu'à l'horizon
+  const WSIZE = 1600, WSEG = 160, WOUT = 40000;
+  const wg = new THREE.PlaneGeometry(WSIZE, WSIZE, WSEG, WSEG); wg.rotateX(-Math.PI / 2);
+  {
+    // distance au rivage : la côte plonge vite sous l'eau (quelques mètres de turquoise
+    // seulement), on précalcule donc le rayon de côte par angle (recherche
+    // dichotomique sur terrainH) puis la distance de chaque sommet à ce rivage.
+    // Résultat : un lagon turquoise large qui suit la vraie forme de l'île.
+    const COAST_A = 360;
+    const coastR = new Float32Array(COAST_A);
+    for (let a = 0; a < COAST_A; a++) {
+      const th = a / COAST_A * Math.PI * 2;
+      let lo = 200, hi = 700;
+      for (let i = 0; i < 16; i++) { const m = (lo + hi) / 2; if (terrainH(Math.cos(th) * m, Math.sin(th) * m) > 0) lo = m; else hi = m; }
+      coastR[a] = (lo + hi) / 2;
+    }
+    const p = wg.attributes.position, dep = new Float32Array(p.count), sho = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), z = p.getZ(i);
+      dep[i] = Math.min(8, Math.max(0, -terrainH(x, z)));
+      const th = Math.atan2(z, x);
+      const ci = ((th / (Math.PI * 2) * COAST_A) + COAST_A) % COAST_A;
+      sho[i] = Math.min(280, Math.abs(Math.hypot(x, z) - coastR[ci | 0]));
+    }
+    wg.setAttribute('aDepth', new THREE.BufferAttribute(dep, 1));
+    wg.setAttribute('aShore', new THREE.BufferAttribute(sho, 1));
+  }
   // « vraie eau » : houle multi-échelles animée, reflet du ciel par fresnel,
   // tache du soleil qui scintille, turquoise près du rivage -> bleu profond au large.
   // WSKY : les couleurs du ciel y sont copiées à chaque tick du cycle jour/nuit —
   // l'eau reflète le ciel réel (nuit, aube, crépuscule) au lieu d'un midi figé.
-  const wmat = new THREE.MeshStandardMaterial({ color: 0x1e9fd8, roughness: 0.1, metalness: 0.28, transparent: true, opacity: 0.88 });
+  // DoubleSide : la surface se voit aussi d'en dessous (fenêtre de Snell en plongée).
+  // depthWrite: false — l'eau n'écrit pas dans le depth buffer, sinon le post-traitement
+  // de contour dessinerait un trait noir sur la ligne de flottaison vue d'en dessous.
+  const wmat = new THREE.MeshStandardMaterial({ color: 0x1e9fd8, roughness: 0.1, metalness: 0.28, transparent: true, opacity: 0.88, side: THREE.DoubleSide, depthWrite: false });
   wmat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterT;
     sh.uniforms.uTop = { value: WSKY.top };
     sh.uniforms.uMid = { value: WSKY.mid };
     sh.uniforms.uSun = { value: WSKY.sun };
     sh.uniforms.uNight = WSKY.night; // objet partagé : la valeur se propage à chaque tick jour/nuit
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vWP; varying float vDepth; varying float vShore; uniform float uT; attribute float aDepth; attribute float aShore;
+        // houle : les sommets sont réellement déplacés (4 trains de vagues croisés)
+        float waveH(vec2 p, float t) {
+          return sin(p.x * 0.105 + t * 1.15) * 0.13 + sin(p.y * 0.082 - t * 0.93) * 0.11
+               + sin((p.x + p.y) * 0.052 + t * 0.72) * 0.10 + sin((p.x - p.y) * 0.066 + t * 1.02) * 0.07;
+        }`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vDepth = aDepth; vShore = aShore;
+        // vagues plus molles près du rivage pour ne pas percer la plage
+        transformed.y += waveH(transformed.xz, uT) * clamp(aDepth / 1.6, 0.12, 1.0);`)
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vWP; uniform float uT; uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uSun; uniform float uNight;
+      varying vec3 vWP; varying float vDepth; varying float vShore; uniform float uT; uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uSun; uniform float uNight;
+      // bruit doux pour l'écume animée du rivage
+      float wth(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float wtn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(wth(i), wth(i + vec2(1.0, 0.0)), f.x), mix(wth(i + vec2(0.0, 1.0)), wth(i + vec2(1.0, 1.0)), f.x), f.y); }
       // petit ciel procédural (mêmes teintes que le dôme, mises à jour par le cycle
       // jour/nuit) pour le reflet de l'eau
       vec3 skyCol(vec3 dir) {
@@ -308,35 +364,78 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
         float w3 = sin(vWP.x * 1.7 + uT * 2.6) + sin(vWP.z * 1.9 - uT * 2.2);
         normal = normalize(normal + (viewMatrix * vec4(w1 * 0.045 + w3 * 0.012, 0.0, w2 * 0.045 + w3 * 0.012, 0.0)).xyz);`)
       .replace('#include <opaque_fragment>', `
-        // reflet du ciel (fresnel) + chemin du soleil sur l'eau
         vec3 V = normalize(cameraPosition - vWP);
-        vec3 R = reflect(-V, normalize(normal));
-        R.y = abs(R.y);
-        vec3 refl = skyCol(R);
-        float fres = mix(0.06, 0.9, pow(1.0 - max(dot(V, normalize(normal)), 0.0), 3.0));
-        vec3 sunDir = normalize(uSun);
-        float sg2 = max(dot(R, sunDir), 0.0);
-        float glint = (pow(sg2, 640.0) * 3.0 + pow(sg2, 64.0) * 0.35) * (1.0 - uNight * 0.85);
-        // turquoise près du rivage, bleu profond au large ; la nuit, la mer s'assombrit
-        float shore = smoothstep(1.18, 0.72, length(vWP.xz / vec2(440.0, 360.0)));
-        vec3 base = mix(vec3(0.02, 0.28, 0.55), vec3(0.16, 0.78, 0.72), shore) * (1.0 - uNight * 0.62);
-        outgoingLight = mix(outgoingLight, base * 0.75, 0.55);
-        outgoingLight = mix(outgoingLight, refl, fres * 0.75);
-        outgoingLight += vec3(1.0, 0.92, 0.7) * glint;
-        float distF = clamp(length(vWP.xz) / 230.0, 0.0, 1.0);
-        outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.55, 0.75, 1.0), smoothstep(0.75, 1.0, distF));
+        if (gl_FrontFacing) {
+          // vue de dessus : reflet du ciel (fresnel) + chemin du soleil sur l'eau
+          vec3 R = reflect(-V, normalize(normal));
+          R.y = abs(R.y);
+          vec3 refl = skyCol(R);
+          float fres = mix(0.06, 0.9, pow(1.0 - max(dot(V, normalize(normal)), 0.0), 3.0));
+          vec3 sunDir = normalize(uSun);
+          float sg2 = max(dot(R, sunDir), 0.0);
+          float glint = (pow(sg2, 640.0) * 3.0 + pow(sg2, 64.0) * 0.35) * (1.0 - uNight * 0.85);
+          // couleur : lagon turquoise large le long du rivage (distance à la côte),
+          // bleu profond au large ; la nuit, la mer s'assombrit
+          vec3 base = mix(vec3(0.20, 0.80, 0.70), vec3(0.015, 0.17, 0.38), smoothstep(20.0, 200.0, vShore)) * (1.0 - uNight * 0.62);
+          outgoingLight = mix(outgoingLight, base * 0.75, 0.7);
+          outgoingLight = mix(outgoingLight, refl, fres * 0.65);
+          outgoingLight += vec3(1.0, 0.92, 0.7) * glint;
+          // écume animée le long du rivage (côté eau)
+          float foamW = smoothstep(16.0, 2.0, vShore) * (0.5 + 0.5 * wtn(vWP.xz * 0.85 + vec2(uT * 0.45, -uT * 0.3)));
+          outgoingLight = mix(outgoingLight, vec3(0.95, 0.98, 1.0), foamW * 0.65);
+          float distF = clamp(length(vWP.xz) / 230.0, 0.0, 1.0);
+          outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.55, 0.75, 1.0), smoothstep(0.75, 1.0, distF));
+        } else {
+          // vue du dessous (plongée) : la surface est un miroir bleu-vert ; en levant
+          // les yeux, une fenêtre de Snell laisse voir le ciel plus clair, et le soleil
+          // y imprime une tache douce qui ondole avec la houle
+          vec3 vd = normalize(vWP - cameraPosition);
+          float up = clamp(vd.y, 0.0, 1.0);
+          float snell = smoothstep(0.35, 0.90, up);
+          vec3 under = mix(vec3(0.08, 0.30, 0.42), skyCol(normalize(vec3(vd.x, 0.45, vd.z))) * 0.85 + vec3(0.04), snell);
+          float sg3 = max(dot(normalize(vec3(vd.x, 0.25, vd.z)), normalize(uSun)), 0.0);
+          under += vec3(1.0, 0.95, 0.8) * pow(sg3, 20.0) * 0.45 * (1.0 - uNight * 0.9);
+          under *= 0.86 + 0.14 * 0.5 * (sin(vWP.x * 0.31 + uT * 1.35) + sin(vWP.z * 0.27 - uT * 1.1));
+          outgoingLight = under;
+        }
         #include <opaque_fragment>`);
   };
   const water = new THREE.Mesh(wg, wmat);
   waterMatRef = wmat;
-  water.position.y = 0; scene.add(water);
+  scene.add(water);
+  // 4 bandes lointaines (profondeur « océan » constante) prolongent la mer jusqu'à l'horizon ;
+  // géométries translatées pour que coordonnées locales = coordonnées monde (houle continue)
+  {
+    const half = WSIZE / 2, len = WOUT - half;
+    const strip = (w, h, x, z) => {
+      const g = new THREE.PlaneGeometry(w, h, 1, 1); g.rotateX(-Math.PI / 2); g.translate(x, 0, z);
+      g.setAttribute('aDepth', new THREE.BufferAttribute(new Float32Array(4).fill(8), 1));
+      g.setAttribute('aShore', new THREE.BufferAttribute(new Float32Array(4).fill(280), 1));
+      scene.add(new THREE.Mesh(g, wmat));
+    };
+    strip(WOUT, len, 0, -(half + len / 2)); strip(WOUT, len, 0, half + len / 2);
+    strip(len, WSIZE, -(half + len / 2), 0); strip(len, WSIZE, half + len / 2, 0);
+  }
   // fond marin opaque sous toute la mer : sans lui, l'eau translucide laissait voir le ciel au-delà du
   // carré de terrain et formait une bande bleu clair. Même teinte que le fond du terrain => mer uniforme.
   const sg = new THREE.PlaneGeometry(80000, 80000, 1, 1); sg.rotateX(-Math.PI / 2);
-  const seabed = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0xd2bf86, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: 6, polygonOffsetUnits: 6 }));
+  const sbedMat = new THREE.MeshStandardMaterial({ color: 0xd2bf86, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: 6, polygonOffsetUnits: 6 });
+  // caustiques : la lumière ondoie sur le fond marin (visible en plongée et à travers l'eau)
+  sbedMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uT = waterT; sh.uniforms.uNight = WSKY.night;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      varying vec3 vWP; uniform float uT; uniform float uNight;
+      float caustic(vec3 p) {
+        return pow(0.5 + 0.5 * sin(p.x * 0.42 + uT * 0.9 + sin(p.z * 0.37 - uT * 0.7) * 1.8), 6.0)
+             + pow(0.5 + 0.5 * sin(p.z * 0.35 - uT * 0.8 + sin(p.x * 0.31 + uT * 0.6) * 1.8), 6.0)
+             + pow(0.5 + 0.5 * sin((p.x + p.z) * 0.21 + uT * 0.5 + sin((p.x - p.z) * 0.26 - uT * 0.45) * 1.6), 6.0);
+      }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        diffuseColor.rgb += vec3(0.8, 0.93, 1.0) * caustic(vWP) * 0.22 * (1.0 - uNight);`);
+  };
+  const seabed = new THREE.Mesh(sg, sbedMat);
   seabed.position.y = -6.6; scene.add(seabed);
-  // foam ring
-  const fg = new THREE.RingGeometry(0.98, 1.02, 128); fg.rotateX(-Math.PI / 2);
 }
 
 // =====================================================================
@@ -2904,7 +3003,7 @@ function openGameSettings() {
   const box = $('gameSettings'); box.classList.remove('hidden');
   settingsForm($('gsForm'), SET, (st, k) => {
     setVolumes(st.volume, st.music);
-    if (k === 'viewDist' && scene.fog) { scene.fog.near = 140 * st.viewDist; scene.fog.far = 520 * st.viewDist; }
+    if (k === 'viewDist' && scene.fog && camUnderwater) { scene.fog.near = 0.5; scene.fog.far = 34; } // l'eau n'est pas affectée par la distance de vue ; le brouillard de plongée garde sa densité
     if (k === 'binds') refreshBindLabels();
     if (k === 'outline') outline.enabled = !!st.outline;
     if (k === 'outlineW') outline.width = st.outlineW;
@@ -6495,9 +6594,16 @@ function updateCamera(dt) {
   if (shake > 0) { shake = Math.max(0, shake - dt * 3); camera.position.x += (MR() - 0.5) * shake * 0.3; camera.position.y += (MR() - 0.5) * shake * 0.3; }
   // teinte sous-marine : la caméra passe sous la surface (mer ou eau de la Grotte)
   const uw = camera.position.y < -0.08 && (terrainH(camera.position.x, camera.position.z) < -0.35 || inGrotto(camera.position.x, camera.position.z));
-  if (uw !== camUnderwater) { camUnderwater = uw; $('uwTint').style.opacity = uw ? 0.55 : 0; }
+  if (uw !== camUnderwater) camUnderwater = uw;
+  $('uwTint').style.opacity = camUnderwater ? 0.45 : 0;
+  // brouillard de plongée : présent en permanence (pas de recompilation de shader) mais
+  // invisible au-dessus de l'eau — il devient bleu et dense dès qu'on est immergé,
+  // on voit alors de l'eau tout autour, y compris sous la surface
+  if (camUnderwater) { scene.fog.near = 0.5; scene.fog.far = 34; scene.fog.color.copy(UW_FOG_DAY).lerp(UW_FOG_NIGHT, nightF); }
+  else { scene.fog.near = 1e8; scene.fog.far = 2e8; }
 }
 let camUnderwater = false;
+const UW_FOG_DAY = new THREE.Color(0x16608e), UW_FOG_NIGHT = new THREE.Color(0x03101c);
 
 // =====================================================================
 // HUD
@@ -7317,7 +7423,7 @@ function updateDayNight(dt) {
   let i = 0; while (i < TOD_KEYS.length - 2 && TOD_KEYS[i + 1][0] <= tod) i++;
   const A = TOD_KEYS[i], B = TOD_KEYS[i + 1], t = (tod - A[0]) / (B[0] - A[0]);
   if (skyMat) { lerpHex(A[1], B[1], t, skyMat.uniforms.top.value); lerpHex(A[2], B[2], t, skyMat.uniforms.mid.value); }
-  lerpHex(A[3], B[3], t, FOG_COL); if (scene.fog) scene.fog.color.copy(FOG_COL); if (skyMat) skyMat.uniforms.bot.value.copy(FOG_COL);
+  lerpHex(A[3], B[3], t, FOG_COL); if (skyMat) skyMat.uniforms.bot.value.copy(FOG_COL);
   lerpHex(A[4], B[4], t, sunLight.color); sunLight.intensity = lerp(A[5], B[5], t); hemi.intensity = lerp(A[6], B[6], t);
   const night = clamp(1 - sunLight.intensity / 1.2, 0, 1);
   nightF = night;

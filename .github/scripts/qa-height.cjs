@@ -4,7 +4,7 @@
 //  - placeBuild accepte un mur à y=60 (sommet 64) et refuse au-delà de 64 m
 //  - les matériaux ne sont pas déduits quand la construction est refusée
 //  - le cône (1,6 m) suit la même limite
-//  - scene.fog est null (brouillard retiré)
+//  - le brouillard existe mais est invisible au-dessus de l'eau (plongée : bleu dense)
 //  - des nuages sprites existent en altitude (y > 250)
 //  - le texte de vie est entièrement visible : dans son parent, son ancêtre et l'écran,
 //    et aucun élément ne le recouvre (elementsFromPoint)
@@ -69,9 +69,11 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
   const cost = 5; // BUILD_COST
   check('matériaux déduits uniquement pour les placements acceptés', res.matsAfter === 500 - 4 * cost, `mats=${res.matsAfter}, attendu=${500 - 4 * cost}`);
 
-  // --- brouillard retiré ---
+  // --- brouillard de plongée : permanent mais invisible au-dessus de l'eau ---
+  // (présent en permanence pour éviter toute recompilation de shader ; il devient
+  // bleu et dense dès que la caméra plonge sous la surface)
   const fog = await page.evaluate(() => ({ fog: window.__game.scene.fog }));
-  check('scene.fog est null (brouillard retiré)', fog.fog === null, 'fog=' + JSON.stringify(fog.fog));
+  check('brouillard invisible au-dessus de l\'eau (near/far immenses)', !!fog.fog && fog.fog.near >= 1e8 && fog.fog.far > fog.fog.near, 'fog=' + JSON.stringify(fog.fog));
 
   // --- nuages hauts et gros (sprites en altitude) ---
   const clouds = await page.evaluate(() => {
