@@ -15,7 +15,7 @@ function xpNeeded() { return XP_PER_LEVEL; }
 // Player profile (kept in memory for this page session)
 // ---------------------------------------------------------------------------
 const S = {
-  name: 'Tim', eclats: 1200, level: 1, xp: 0, passOwned: false, sens: 1, diff: 'normal', mode: 'solo', players: 50, party: [],
+  name: 'Tim', eclats: 1200, level: 1, xp: 0, passOwned: false, sens: 1, diff: 'normal', mode: 'solo', players: 50,
   settings: loadSettings(),
   owned: new Set(['skin:recrue', 'skin:recrue2', 'backpack:none', 'backpack:sac', 'pickaxe:default', 'glider:default', 'emote:danse', 'emote:salut']),
   fresh: new Set(),
@@ -500,53 +500,29 @@ $('setSave').onclick = () => { S.name = ($('setName').value.trim() || 'Tim').sli
 setVolumes(S.settings.volume, S.settings.music); S.sens = S.settings.sens;
 
 // ---------------------------------------------------------------------------
-// Game modes, party and friends (friends play as AI teammates)
+// Game modes and party (coéquipiers IA selon le mode choisi : SOLO / DUO / ESCOUADE)
 // ---------------------------------------------------------------------------
 const MODES = { solo: { name: 'SOLO', size: 1, desc: 'Chacun pour soi' }, duo: { name: 'DUO', size: 2, desc: '1 coéquipier' }, escouade: { name: 'ESCOUADE', size: 4, desc: '3 coéquipiers' } };
-const FRIENDS = [
-  { name: 'Lina_Storm', st: 'online', lvl: 42, skin: 'neon' }, { name: 'KevBuild', st: 'online', lvl: 17 }, { name: 'Sacha.exe', st: 'online', lvl: 63 },
-  { name: 'Noa', st: 'game', lvl: 8 }, { name: 'MaxRampe', st: 'online', lvl: 29 }, { name: 'Ines_Gold', st: 'game', lvl: 55 },
-  { name: 'Yanis', st: 'off', lvl: 12 }, { name: 'Chloé', st: 'off', lvl: 31 },
-];
 const AI_MATES = ['Bot Écho', 'Bot Nova', 'Bot Pixel'];
 function partySize() { return MODES[S.mode].size; }
-function matesList() { const n = partySize() - 1, out = []; for (let i = 0; i < n; i++) out.push(S.party[i] ? { name: S.party[i], friend: true } : { name: AI_MATES[i], friend: false }); return out; }
+function matesList() { const n = partySize() - 1, out = []; for (let i = 0; i < n; i++) out.push({ name: AI_MATES[i], friend: false }); return out; }
 function renderParty() {
   const mates = matesList(), pos = ['s1', 's2', 's3'];
   let html = '';
   for (let i = 0; i < 3; i++) {
     const m = mates[i];
     if (m) html += `<div class="slot member ${pos[i]}"><div class="sl-fig ${m.friend ? 'fr' : 'ai'}"></div><b>${m.name}</b><em>${m.friend ? 'AMI · PRÊT' : 'COÉQUIPIER IA'}</em></div>`;
-    else html += `<div class="slot invite ${pos[i]}" data-inv="1"><span>+</span><em>Inviter</em></div>`;
   }
   $('party').innerHTML = html;
-  $('party').querySelectorAll('[data-inv]').forEach((el) => el.onclick = () => openFriends());
-  $('party').querySelectorAll('.sl-kick').forEach((el) => el.onclick = (e) => { e.stopPropagation(); S.party.splice(+el.dataset.k, 1); renderParty(); renderFriends(); });
   $('modeName').textContent = MODES[S.mode].name;
   $('playersLabel').textContent = S.players;
-  const fn = $('friendsN'); if (fn) fn.textContent = FRIENDS.filter((f) => f.st === 'online').length;
 }
-function renderFriends() {
-  const stL = { online: 'En ligne', game: 'En partie', off: 'Hors ligne' };
-  $('partyList').innerHTML = `<div class="fr-sub">GROUPE (${1 + S.party.length}/${Math.max(partySize(), 1 + S.party.length)})</div><div class="fr-row me"><i class="dot online"></i><b>${S.name}</b></div>`;
-  $('friendsList').innerHTML = FRIENDS.map((f) => { const inP = S.party.includes(f.name); return `<div class="fr-row"><i class="dot ${f.st}"></i><b>${f.name}</b><span>Niv. ${f.lvl} · ${stL[f.st]}</span>${inP ? '' : `<button data-n="${f.name}">INVITER</button>`}</div>`; }).join('');
-  $('friendsList').querySelectorAll('button[data-n]').forEach((b) => b.onclick = () => {
-    if (S.party.length >= 3) { toast('Le groupe est complet'); return; }
-    S.party.push(b.dataset.n);
-    if (partySize() < 1 + S.party.length) { S.mode = S.party.length >= 2 ? 'escouade' : 'duo'; toast('Mode ' + MODES[S.mode].name + ' sélectionné'); }
-    else toast(b.dataset.n + ' a rejoint le groupe');
-    sfx('pickup', 0.6); renderParty(); renderFriends();
-  });
-}
-function openFriends() { renderFriends(); $('friendsPanel').classList.remove('hidden'); }
-$('friendsBtn').onclick = () => $('friendsPanel').classList.contains('hidden') ? openFriends() : $('friendsPanel').classList.add('hidden');
-$('friendsClose').onclick = () => $('friendsPanel').classList.add('hidden');
 function renderModePick() {
   $('mpModes').innerHTML = Object.entries(MODES).map(([k, m]) => `<button class="mp-opt ${S.mode === k ? 'on' : ''}" data-m="${k}"><b>${m.name}</b><span>${m.desc}</span></button>`).join('');
   $('mpPlayers').innerHTML = [50, 100].map((n) => `<button class="mp-opt ${S.players === n ? 'on' : ''}" data-p="${n}"><b>${n}</b></button>`).join('');
   $('mpDiff').innerHTML = [['facile', 'Facile'], ['normal', 'Normal'], ['difficile', 'Difficile']].map(([k, n]) => `<button class="mp-opt ${S.diff === k ? 'on' : ''}" data-d="${k}"><b>${n}</b></button>`).join('');
   document.querySelectorAll('#modeModal .mp-opt').forEach((b) => b.onclick = () => {
-    if (b.dataset.m) { S.mode = b.dataset.m; if (S.party.length > partySize() - 1) S.party.length = partySize() - 1; }
+    if (b.dataset.m) { S.mode = b.dataset.m; }
     if (b.dataset.p) S.players = +b.dataset.p;
     if (b.dataset.d) S.diff = b.dataset.d;
     renderModePick();
