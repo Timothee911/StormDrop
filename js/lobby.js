@@ -12,10 +12,12 @@ const MAX_TIER = 30;
 function xpNeeded() { return XP_PER_LEVEL; }
 
 // ---------------------------------------------------------------------------
-// Player profile (kept in memory for this page session)
+// Player profile (name persisted in localStorage, rest kept in memory)
 // ---------------------------------------------------------------------------
+const NAME_KEY = 'stormdrop-name';
+const savedName = (() => { try { return (localStorage.getItem(NAME_KEY) || '').slice(0, 16); } catch (e) { return ''; } })();
 const S = {
-  name: 'Tim', eclats: 1200, level: 1, xp: 0, passOwned: false, sens: 1, diff: 'normal', mode: 'solo', players: 50,
+  name: savedName, eclats: 1200, level: 1, xp: 0, passOwned: false, sens: 1, diff: 'normal', mode: 'solo', players: 50,
   settings: loadSettings(),
   owned: new Set(['skin:recrue', 'skin:recrue2', 'backpack:none', 'backpack:sac', 'pickaxe:default', 'glider:default', 'emote:danse', 'emote:salut']),
   fresh: new Set(),
@@ -271,7 +273,7 @@ function addXP(n) {
 }
 function updateTopbar() {
   $('curVal').textContent = fmt(S.eclats);
-  $('lvlNum').textContent = S.level; $('npLvl').textContent = S.level; $('npName').textContent = S.name;
+  $('lvlNum').textContent = S.level; $('npLvl').textContent = S.level; $('npName').textContent = S.name || 'PSEUDO ?';
   $('lvlFill').style.width = (S.xp / xpNeeded(S.level) * 100) + '%';
   const lockerTab = document.querySelector('[data-tab=locker]');
   lockerTab.querySelector('.dot')?.remove();
@@ -380,7 +382,7 @@ function renderCareer() {
   const perMatch = (v) => C.matches ? (Math.round(v / C.matches * 10) / 10).toLocaleString('fr-FR') : '—';
   const pct = (v) => C.matches ? Math.round(v / C.matches * 100) + ' %' : '—';
   const deaths = Math.max(0, C.matches - C.wins);
-  $('crLvl').textContent = S.level; $('crName').textContent = S.name; $('crWins').textContent = C.wins;
+  $('crLvl').textContent = S.level; $('crName').textContent = S.name || 'PSEUDO ?'; $('crWins').textContent = C.wins;
   const put = (id, rows) => { const el = $(id); if (el) el.innerHTML = rows.map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join(''); };
   put('careerStats', [
     ['Parties jouées', C.matches], ['Victoires royales', C.wins], ['Taux de victoire', pct(C.wins)],
@@ -492,11 +494,13 @@ $('bmBuy').onclick = () => {
 };
 
 // SETTINGS -------------------------------------------------------------------
+function saveName() { S.name = $('setName').value.trim().slice(0, 16); try { localStorage.setItem(NAME_KEY, S.name); } catch (e) {} updateTopbar(); }
 $('settingsBtn').onclick = () => {
   $('setName').value = S.name; $('setDiff').value = S.diff; $('settingsModal').classList.remove('hidden');
   settingsForm($('setForm'), S.settings, (st) => { S.sens = st.sens; setVolumes(st.volume, st.music); });
 };
-$('setSave').onclick = () => { S.name = ($('setName').value.trim() || 'Tim').slice(0, 16); S.diff = $('setDiff').value; S.sens = S.settings.sens; saveSettings(S.settings); $('settingsModal').classList.add('hidden'); updateTopbar(); };
+$('setName').addEventListener('input', saveName);
+$('setSave').onclick = () => { saveName(); S.diff = $('setDiff').value; S.sens = S.settings.sens; saveSettings(S.settings); $('settingsModal').classList.add('hidden'); updateTopbar(); };
 setVolumes(S.settings.volume, S.settings.music); S.sens = S.settings.sens;
 
 // ---------------------------------------------------------------------------
@@ -553,6 +557,12 @@ let mmTimer = 0, inMatch = false, mmTimeout = 0;
 function bindPlay() {
   $('playBtn').onclick = () => {
     if (inMatch) { cancelMM2(); toast('Recherche annulée'); return; }
+    if (!S.name) { // pas de pseudo par défaut : on en demande un avant de jouer
+      $('setName').value = ''; $('setDiff').value = S.diff; $('settingsModal').classList.remove('hidden');
+      settingsForm($('setForm'), S.settings, (st) => { S.sens = st.sens; setVolumes(st.volume, st.music); });
+      $('setName').focus(); toast('Choisis un pseudo pour lancer une partie');
+      return;
+    }
     inMatch = true; if (lockMod && lockMod.onPlay) lockMod.onPlay();
     $('playBtn').querySelector('span').textContent = 'ANNULE'; $('matchmaking').classList.remove('hidden');
     let t = 0; $('mmTime').textContent = '0:00';

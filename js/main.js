@@ -51,7 +51,7 @@ const BOT_DMG = 0.28;
 const BOT_NAMES_X = ['Zorro', 'Crêpe', 'Pistache', 'Nuage', 'Biscotte', 'Flan', 'Gaufre', 'Merlin', 'Praline', 'Cactus', 'Pingouin', 'Tornade', 'Écureuil', 'Kiwi', 'Mango', 'Comète', 'Fennec', 'Loutre', 'Galette', 'Orage'];
 const BOT_NAMES = ['Zéphyr', 'LaCrevette', 'Bastien_77', 'Croissant2Feu', 'NinjaDuDimanche', 'Mamie_Sniper', 'Kévin_TTV', 'Baguette', 'Raclette', 'ToxicTom', 'Luna', 'PixelPaul', 'Gégé', 'Sniperella', 'Choucroute', 'Mistral', 'Tartiflette', 'Chouquette', 'Le_Boss', 'Yasmine', 'Brioche', 'Hugo_Build', 'Noa', 'Flambeur', 'Cassoulet', 'Sardine', 'Léon', 'Ratatouille', 'Inès_GG', 'Patate', 'Moustache'];
 
-let LOAD = { ...DEFAULT_LOADOUT, name: 'Tim' };
+let LOAD = { ...DEFAULT_LOADOUT, name: 'Joueur' };
 try { const h = decodeURIComponent(location.hash.slice(1)); if (h) Object.assign(LOAD, JSON.parse(h)); } catch (e) {}
 const SET = loadSettings();
 if (LOAD.settings) { const b = { ...SET.binds, ...(LOAD.settings.binds || {}) }; Object.assign(SET, LOAD.settings); SET.binds = b; }
@@ -5734,7 +5734,7 @@ function startGame() {
   document.getElementById('hud').classList.remove('hidden');
   state = 'playing'; gameT = 0;
   top1Pending = false; victoryCam = false; // reset de la séquence TOP 1
-  player = new Char(LOAD.name || 'Tim', true, LOAD);
+  player = new Char(LOAD.name || 'Joueur', true, LOAD);
   player.team = 0;
   player.keycards = {};
   player.mats.wood = 60;
@@ -5891,7 +5891,7 @@ function endGame(won) {
   es.classList.remove('hidden'); es.classList.toggle('lose', !won); es.classList.toggle('win', won);
   document.getElementById('endPlace').textContent = won ? 'TOP 1' : '#' + placement;
   document.getElementById('endTitle').textContent = won ? 'VICTOIRE ROYALE' : 'ÉLIMINÉ';
-  document.getElementById('endSub').textContent = won ? "Tu es le dernier survivant de l'île. Bien joué, " + (LOAD.name || 'Tim') + "." : `Éliminé par ${elimBy}`;
+  document.getElementById('endSub').textContent = won ? "Tu es le dernier survivant de l'île. Bien joué" + (LOAD.name ? ', ' + LOAD.name : '') + "." : `Éliminé par ${elimBy}`;
   const m = Math.floor(gameT / 60), s = Math.floor(gameT % 60);
   const nTeams = Math.ceil(PLAYER_TOTAL / TEAM_SIZE);
   document.getElementById('endStats').innerHTML = `<div><b>${player.kills}</b>Éliminations</div><div><b>${m}:${String(s).padStart(2, '0')}</b>Temps survécu</div><div><b>${won ? 1 : placement}/${nTeams}</b>Classement</div><div><b>${Math.round(stats.damage)}</b>Dégâts</div>`;
@@ -6895,9 +6895,52 @@ const mapCanvas = document.createElement('canvas'); mapCanvas.width = mapCanvas.
   mapCanvas.S = S; mapCanvas.N = N;
 }
 const mm = $('minimap').getContext('2d');
-$('bigmapCanvas').addEventListener('mousedown', (e) => {
-  const r = e.target.getBoundingClientRect(); const viewW = WORLD_R * 2 + 30;
-  const x = ((e.clientX - r.left) / r.width - 0.5) * viewW, z = ((e.clientY - r.top) / r.height - 0.5) * viewW;
+// Grande carte zoomable : la molette grossit la carte (centrée sur le curseur),
+// le glisser-déplacer la fait défiler, le clic place un marqueur.
+const bigView = { cx: 0, cz: 0, w: WORLD_R * 2 + 30 };
+function clampBigView() {
+  const lim = WORLD_R + 20;
+  bigView.cx = Math.max(-lim, Math.min(lim, bigView.cx));
+  bigView.cz = Math.max(-lim, Math.min(lim, bigView.cz));
+}
+const bigmapCanvas = $('bigmapCanvas');
+let bmDrag = null;
+bigmapCanvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const r = bigmapCanvas.getBoundingClientRect();
+  const oldW = bigView.w;
+  const mx = ((e.clientX - r.left) / r.width - 0.5) * oldW + bigView.cx;
+  const mz = ((e.clientY - r.top) / r.height - 0.5) * oldW + bigView.cz;
+  const nw = Math.max(140, Math.min(WORLD_R * 2 + 30, oldW * Math.exp(e.deltaY * 0.0014)));
+  bigView.cx = mx - (mx - bigView.cx) * (nw / oldW);
+  bigView.cz = mz - (mz - bigView.cz) * (nw / oldW);
+  bigView.w = nw;
+  clampBigView();
+  if (bigmapOpen) drawMap(bm, 720, bigView.cx, bigView.cz, bigView.w, true);
+}, { passive: false });
+bigmapCanvas.addEventListener('mousedown', (e) => {
+  bmDrag = { x: e.clientX, y: e.clientY, cx: bigView.cx, cz: bigView.cz, moved: false };
+});
+window.addEventListener('mousemove', (e) => {
+  if (!bmDrag || !bigmapOpen) return;
+  const dx = e.clientX - bmDrag.x, dy = e.clientY - bmDrag.y;
+  if (Math.hypot(dx, dy) > 4) bmDrag.moved = true;
+  if (bmDrag.moved) {
+    const r = bigmapCanvas.getBoundingClientRect();
+    const s = r.width / bigView.w;
+    bigView.cx = bmDrag.cx - dx / s;
+    bigView.cz = bmDrag.cz - dy / s;
+    clampBigView();
+    drawMap(bm, 720, bigView.cx, bigView.cz, bigView.w, true);
+  }
+});
+window.addEventListener('mouseup', (e) => {
+  if (!bmDrag) return;
+  const drag = bmDrag; bmDrag = null;
+  if (drag.moved || !bigmapOpen) return;
+  const r = bigmapCanvas.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width - 0.5) * bigView.w + bigView.cx;
+  const z = ((e.clientY - r.top) / r.height - 0.5) * bigView.w + bigView.cz;
   setMarker(x, z);
 });
 const bm = $('bigmapCanvas').getContext('2d');
@@ -6952,11 +6995,18 @@ function drawMap(ctx, size, cx, cz, viewW, full) {
     grd.addColorStop(0, 'rgba(120,40,220,.16)'); grd.addColorStop(0.8, 'rgba(110,30,210,.42)'); grd.addColorStop(1, 'rgba(95,20,195,.55)');
     ctx.fillStyle = grd;
     ctx.beginPath(); ctx.rect(0, 0, size, size); ctx.arc(scx, scz, R, 0, Math.PI * 2, true); ctx.fill();
-    ctx.strokeStyle = '#d6b3ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(scx, scz, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#d6b3ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(scx, scz, R, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = 'rgba(214,179,255,.4)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(scx, scz, Math.max(0, R - 4), 0, Math.PI * 2); ctx.stroke();
     if (storm.phase < PHASES.length) {
       const [nx, nz] = w2m(storm.nx, storm.nz, cx, cz, scale, size);
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(nx, nz, Math.max(1, storm.nr * scale), 0, Math.PI * 2); ctx.stroke();
+      // zone sûre suivante : anneau blanc net + halo pour bien la marquer
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,255,255,.95)'; ctx.shadowBlur = 14;
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.arc(nx, nz, Math.max(2, storm.nr * scale), 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.arc(nx, nz, Math.max(2, storm.nr * scale), 0, Math.PI * 2); ctx.stroke();
       if (player.alive && Math.hypot(player.pos.x - storm.nx, player.pos.z - storm.nz) > storm.nr) {
         const [px, pz] = w2m(player.pos.x, player.pos.z, cx, cz, scale, size);
         ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.moveTo(px, pz); ctx.lineTo(nx, nz); ctx.stroke(); ctx.setLineDash([]);
@@ -7028,7 +7078,7 @@ function updateMaps(dt) {
   mapAcc += dt; if (mapAcc < 0.066) return; mapAcc = 0;
   const pp = player.mode === 'bus' ? bus.pos : player.pos;
   drawMap(mm, 200, pp.x, pp.z, player.mode === 'bus' ? 260 : 120, false);
-  if (bigmapOpen) drawMap(bm, 720, 0, 0, WORLD_R * 2 + 30, true);
+  if (bigmapOpen) drawMap(bm, 720, bigView.cx, bigView.cz, bigView.w, true);
 }
 
 // =====================================================================
