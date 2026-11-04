@@ -68,15 +68,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // --- 2bis. Ombres : nom, spawn sur le circuit (jamais dans le bassin) ---
   // Les ombres patrouillent : elles peuvent être entre deux points de passage à l'instant
-  // de la mesure. On sonde quelques secondes : le circuit est suivi si chacune repasse
-  // régulièrement sur un point (sinon, échec avec le dernier relevé).
+  // de la mesure. On sonde en petits pas de simulation : le circuit est suivi si
+  // chacune repasse sur un point pendant la fenêtre (sinon, échec avec le relevé).
   let ombres = null;
   // Chaque ombre doit repasser sur un point de son circuit pendant la fenêtre
   // de sondage (pas les 5 en même temps : elles se décalent naturellement).
   const vues = new Set();
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 30; i++) {
     ombres = await frame.evaluate(() => {
       const G = window.__game;
+      // patrouille avancée en pas fins (1/60 s), déterministe : la position des
+      // ombres évolue sans dépendre du rythme des frames rAF du runner headless.
+      window.advanceTime(250);
       const ag = G.POIS.find((p) => p.key === 'agency');
       const team = G.henchmen.filter((c) => c.alive && c.henchPoi.key === 'agency');
       // le bassin de l'atrium (solide, agrandi x1,5 : ~4,65 x 3,9) : personne ne doit y spawn
@@ -85,13 +88,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         names: G.henchmen.filter((c) => c.alive && !c.boss).every((c) => c.name === 'Ombre'),
         spawnClear: inBasin.length === 0,
         team: team.length,
-        // par ombre : est-elle sur un point du circuit à cet instant ?
-        surPoint: team.map((c) => !!(c.route && c.route.some((w) => Math.hypot(w.x - c.pos.x, w.z - c.pos.z) < 1.5))),
+        // par ombre : est-elle SUR SON CIRCUIT à cet instant ? On mesure la
+        // distance à la POLYLIGNE du circuit (les segments entre points de
+        // passage), pas aux points eux-mêmes : une ombre qui vise un point
+        // bascule vers le suivant à 3 m du but (logique de patrouille du jeu)
+        // et peut ne jamais entrer dans les 1,5 m autour du point selon
+        // l'angle d'arrivée — ce qui rendait l'ancien test aléatoire.
+        // Être à moins de 3,5 m du trajet = suivre le circuit.
+        surPoint: team.map((c) => {
+          if (!c.route || !c.route.length) return false;
+          const px = c.pos.x, pz = c.pos.z;
+          let dMin = Infinity;
+          for (let k = 0; k < c.route.length; k++) {
+            const a = c.route[k], b = c.route[(k + 1) % c.route.length];
+            const abx = b.x - a.x, abz = b.z - a.z;
+            const t = Math.max(0, Math.min(1, ((px - a.x) * abx + (pz - a.z) * abz) / (abx * abx + abz * abz || 1)));
+            const dx = px - (a.x + abx * t), dz = pz - (a.z + abz * t);
+            dMin = Math.min(dMin, Math.hypot(dx, dz));
+          }
+          return dMin < 3.5;
+        }),
       };
     });
     ombres.surPoint.forEach((ok, j) => { if (ok) vues.add(j); });
     if (ombres.spawnClear === true && vues.size >= ombres.team) break;
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 300)); // la progression vient du advanceTime, pas du temps réel
   }
   ombres.vues = vues.size;
   check('PNJ nommés « Ombre »', ombres.names === true);
