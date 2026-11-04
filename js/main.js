@@ -7682,7 +7682,14 @@ function frame() {
 requestAnimationFrame(frame);
 
 // Testing hooks
-window.advanceTime = (ms) => { const n = Math.ceil(ms / 16.67); for (let i = 0; i < n; i++) { step(1 / 60); updateCamera(1 / 60); } updateGhost(); updateHUD(0.2); updateMaps(0.2); syncLin(); outline.render(scene, camera); };
+// advanceTime : hook d'avance rapide POUR LES TESTS UNIQUEMENT. Les scripts QA
+// (qa-c2s2, qa-anim) l'appellent des milliers de fois et ne lisent que l'état du
+// jeu (positions, modes, DOM) — jamais les pixels. Le rendu complet de la scène
+// coûtait plusieurs secondes par appel sur les runners CI en headless (1 seule
+// frame = 1 à 6 s en logiciel) : un evaluate pouvait dépasser les 30 min du
+// protocolTimeout et tuer le workflow. On simule donc sans rendre ; la boucle
+// rAF normale continue de rendre la scène en temps réel de son côté.
+window.advanceTime = (ms) => { const n = Math.ceil(ms / 16.67); for (let i = 0; i < n; i++) { step(1 / 60); updateCamera(1 / 60); } updateGhost(); updateHUD(0.2); updateMaps(0.2); syncLin(); scene.updateMatrixWorld(); };
 window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
