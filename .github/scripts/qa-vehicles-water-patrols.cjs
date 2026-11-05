@@ -188,8 +188,8 @@ const puppeteer = require('puppeteer');
     check('explosion : carrosserie endommagée et vitrage soufflé',blast.hp<blast.before&&blast.glass,blast);
     await page.setViewport({width:375,height:812});
     await page.evaluate(()=>{const g=__game,v=g.vehicles.find(v=>v.kind==='car'&&!v.destroyed);g.enterVehicle(g.player,v);window.advanceTime(30);});
-    const fit = await page.evaluate(()=>{const r=document.getElementById('vehicleRow').getBoundingClientRect();return{left:r.left,right:r.right,top:r.top,bottom:r.bottom,w:innerWidth,h:innerHeight};});
-    check('barre orange lisible sans dépassement à 375px',fit.left>=0&&fit.right<=fit.w&&fit.top>=0&&fit.bottom<=fit.h,fit);
+    const fit = await page.evaluate(()=>{const r=document.getElementById('vehicleRow').getBoundingClientRect(),bars=document.getElementById('bars').getBoundingClientRect(),m=document.getElementById('mats').getBoundingClientRect(),slots=[...document.querySelectorAll('#hotbar .slot')].map(e=>e.getBoundingClientRect());return{left:r.left,right:r.right,top:r.top,bottom:r.bottom,w:innerWidth,h:innerHeight,separate:bars.bottom<m.top,slots:slots.every(r=>r.left>=0&&r.right<=innerWidth)};});
+    check('barre orange lisible sans dépassement ni chevauchement à 375px',fit.left>=0&&fit.right<=fit.w&&fit.top>=0&&fit.bottom<=fit.h&&fit.separate&&fit.slots,fit);
     check('aucune nouvelle erreur JavaScript', errors.length === 0, errors);
     console.log(`${count} contrôles validés.`);
   } finally { await browser.close(); }

@@ -442,3 +442,21 @@ body.touch #buildbar { display: none; }
 #ammoInfo { min-width: 150px; display: flex; flex-direction: column; align-items: flex-end; padding-bottom: 6px; }
 #ammoInfo .wn { font-size: 15px; margin-bottom: 0; }
 body.touch #hotrow { gap: 6px; }
+
+/* Réserver trois lignes de vie sans recouvrir les matériaux ni les objets
+   quand la fenêtre desktop devient aussi étroite qu'un téléphone. */
+@media (max-width: 560px) {
+  body:not(.touch) #bottomleft { bottom: 150px; }
+  #bars { width: 230px; }
+  #hotbar { gap: 4px; }
+  .slot { width: 44px; height: 52px; }
+  .slot svg { max-width: 36px; max-height: 26px; }
+  #hotrow { gap: 6px; }
+  #ammoInfo { min-width: 0; width: 52px; font-size: 25px; }
+  #ammoInfo .wn { width: 60px; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #centerMsg { top: 29%; max-width: calc(100% - 24px); font-size: 28px; text-align: center; }
+  #centerMsg small { font-size: 14px; white-space: normal; }
+  #disguiseTag { top: 215px; max-width: calc(100% - 24px); width: max-content; font-size: 12px; }
+  body.touch .bar.vehicle span { font-size: 10px; }
+  body.touch .bar.vehicle span small { font-size: 9px; }
+}
