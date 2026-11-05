@@ -10,6 +10,7 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
   const errors = [], missingAssets = [], notReady = [];
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('stormdrop-name', 'QA'); } catch (e) {} }); // pseudo présent : le bouton JOUER lance la partie
   page.on('pageerror', e => errors.push({ type: 'pageerror', message: e.message }));
   page.on('requestfailed', req => {
     if (req.url().includes('localhost') && !req.url().endsWith('/favicon.ico')) missingAssets.push(req.url());

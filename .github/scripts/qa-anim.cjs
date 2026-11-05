@@ -19,6 +19,7 @@ const launch = () => puppeteer.launch({ headless: true, protocolTimeout: 600000,
 async function gameTests() {
   const browser = await launch();
   const page = await browser.newPage();
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('stormdrop-name', 'QA'); } catch (e) {} }); // pseudo présent : le bouton JOUER lance la partie
   const errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
@@ -307,6 +308,7 @@ async function gameTests() {
 async function stormTests() {
   const browser = await launch();
   const page = await browser.newPage();
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('stormdrop-name', 'QA'); } catch (e) {} }); // pseudo présent : le bouton JOUER lance la partie
   const errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
@@ -383,6 +385,7 @@ async function playerCountTests() {
   const out = [];
   for (const [h, want] of [['#%7B%22players%22%3A30%7D', 50], ['#%7B%22players%22%3A100%7D', 100]]) {
     const page = await browser.newPage();
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('stormdrop-name', 'QA'); } catch (e) {} }); // pseudo présent : le bouton JOUER lance la partie
     const errs = [];
     page.on('pageerror', (e) => errs.push(e.message));
     await page.goto('http://localhost:8090/game.html' + h, { waitUntil: 'domcontentloaded' });
@@ -401,6 +404,7 @@ async function playerCountTests() {
 async function lobbyTests() {
   const browser = await launch();
   const page = await browser.newPage();
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('stormdrop-name', 'QA'); } catch (e) {} }); // pseudo présent : le bouton JOUER lance la partie
   const errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });

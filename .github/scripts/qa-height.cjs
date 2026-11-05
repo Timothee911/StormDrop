@@ -20,6 +20,7 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
 
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('stormdrop-name', 'QA'); } catch (e) {} }); // pseudo présent : le bouton JOUER lance la partie
   await page.setViewport({ width: 1347, height: 841 });
   const jsErrors = [];
   page.on('pageerror', e => jsErrors.push(e.message + '\n' + (e.stack || '').split('\n').slice(0, 4).join('\n')));

@@ -14,6 +14,7 @@ const fail = (m) => { console.error('ECHEC:', m); process.exitCode = 1; };
 (async () => {
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('stormdrop-name', 'QA'); } catch (e) {} }); // pseudo présent : le bouton JOUER lance la partie
   await page.setViewport({ width: 1600, height: 900 });
   page.on('pageerror', (e) => fail('erreur page: ' + e.message));
   await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded', timeout: 60000 });
