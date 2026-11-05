@@ -177,7 +177,7 @@ jobs:
           echo "| Passe de combat (DOM, badges) | ${{ steps.passe.outcome == 'success' && 'OK' || (steps.passe.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
 
   coherence:
-    name: Cohérence Requin et Agence
+    name: Cohérence POI, rondes, voitures et nage
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -204,13 +204,14 @@ jobs:
             if curl -fsS http://localhost:8090/game.html > /dev/null; then break; fi
           done
           node .github/scripts/qa-poi-coherence.cjs
+          node .github/scripts/qa-vehicles-water-patrols.cjs
 
       - name: Rapport de cohérence
         if: always()
         run: |
           echo "### Cohérence Requin et Agence" >> "$GITHUB_STEP_SUMMARY"
           echo "Commit \`${GITHUB_SHA::7}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "20 contrôles de géométrie, déplacements clavier, collisions et éléments de gameplay." >> "$GITHUB_STEP_SUMMARY"
+          echo "Contrôles de géométrie, déplacements clavier, circuits des 22 agents, B1, vitres cassables, vie des voitures et poses de nage." >> "$GITHUB_STEP_SUMMARY"
           echo "Résultat : ${{ steps.coherence.outcome == 'success' && 'OK' || (steps.coherence.outcome == 'failure' && 'Échec' || 'Non exécuté') }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_Non couvert : gameplay reel, multijoueur, audio en jeu, fonctionnalites avancees._" >> $GITHUB_STEP_SUMMARY

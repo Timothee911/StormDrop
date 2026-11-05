@@ -309,6 +309,11 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .barrow { display: flex; align-items: center; gap: 8px; }
 .bar-ico { width: 22px; height: 22px; flex: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
 .bar-ico.shield { fill: #6fd0ff; } .bar-ico.hp { fill: #7dea6e; }
+.barrow[hidden] { display: none; }
+.bar-ico.vehicle { fill: #ffa63e; }
+.bar.vehicle .fill { background: linear-gradient(180deg, #ffbf61, #ee791a); }
+.bar.vehicle { border-color: #ffa63eaa; }
+.bar.vehicle span { font-size: 15px; font-variant-numeric: tabular-nums; }
 .bar { flex: 1; height: 24px; border-radius: 3px; border: 2px solid rgba(255, 255, 255, .3); background: rgba(5, 8, 22, .6); box-shadow: var(--hud-shadow); }
 .bar .fill, .bar .trail { position: absolute; left: 0; top: 0; bottom: 0; }
 .bar .fill { transition: width .12s ease-out; }

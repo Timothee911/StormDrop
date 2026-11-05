@@ -4,7 +4,16 @@ Battle royale web complet en Three.js, jouable dans le navigateur et installable
 
 ## Saison Espions (v4)
 
-Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Requin, Le Yacht, La Grotte, La Plateforme) patrouillés par des Ombres et cinq boss mythiques (Midas, Skye, Meowscles, Brutus, TNTina). Quand personne n'est détecté, Ombres et boss rejouent leur routine de patrouille fixe (toujours les mêmes endroits). Les boss lâchent une arme mythique et une carte d'accès qui ouvre le coffre-fort de leur POI (ligne bleue guide sur la carte). Les cabines téléphoniques rouges donnent un déguisement d'Ombre — tirer ou être touché le casse.
+Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Requin, Le Yacht, La Grotte, La Plateforme) patrouillés par des Ombres et cinq boss mythiques (Midas, Skye, Meowscles, Brutus, TNTina). Chaque boss et chaque Ombre possède désormais son circuit propre : 22 rondes spatialement distinctes, avec des secteurs et des vitesses différents. Les boss lâchent une arme mythique et une carte d'accès qui ouvre le coffre-fort de leur POI (ligne bleue guide sur la carte). Les cabines téléphoniques rouges donnent un déguisement d'Ombre ; tirer ou être touché le casse.
+
+## Agence, voitures et eau
+
+- **Sous-sol B1** : archives et local technique séparés, couloir vers le coffre, poteaux, conduites, éclairage, signalétique et garde-corps d'escalier. Les deux pièces, le scanner et la remontée au hall sont accessibles sans saut.
+- **Vie des voitures** : 800 PV, affichés immédiatement dans une barre orange au-dessus du bouclier et de la vie. Tirs, explosions et chocs importants endommagent le véhicule ; une épave éjecte son conducteur et ne peut plus être conduite.
+- **Vitrage** : six panneaux transparents par voiture, habitacle visible et vitres cassables sous les tirs du joueur comme des bots. La voiture de service GHOST de l'Agence utilise aussi le modèle conduisible.
+- **Dans l'eau** : maintien vertical à l'arrêt ou pendant le tir, arme visible en visée et battements de jambes continus. Le crawl en déplacement et la plongée restent disponibles.
+
+Les scripts `.github/scripts/qa-poi-coherence.cjs` et `.github/scripts/qa-vehicles-water-patrols.cjs` couvrent ces modifications : 49 contrôles ciblés, dont des déplacements au clavier, des tirs, des dégâts de collision et d'explosion, et l'affichage à 375 px. Ils complètent les autres suites de tests du projet.
 
 L'Agence a été repensée : marbre clair (plus aucun noir), colonnes gris perle, intérieur lumineux, et deux coffres par étage (1er, 2e, 3e) en plus du hall. Les bots contourne­nt désormais les murs au lieu de s'y bloquer.
 

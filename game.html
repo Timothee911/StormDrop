@@ -43,6 +43,10 @@
   <div id="bottomleft">
     <div id="teamHud"></div>
     <div id="bars">
+      <div class="barrow" id="vehicleRow" hidden role="progressbar" aria-label="Vie de la voiture" aria-valuemin="0" aria-valuemax="800" aria-valuenow="800">
+        <svg class="bar-ico vehicle" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14l3 8v7h-3v-3H5v3H2v-7zm1.4 2L5 11h14l-1.4-5zM5 12v2h3v-2zm11 0v2h3v-2z"/></svg>
+        <div class="bar vehicle"><div class="trail" id="vehicleTrail"></div><div class="fill" id="vehicleFill"></div><span id="vehicleTxt">VOITURE 800<small>/800</small></span></div>
+      </div>
       <div class="barrow"><svg class="bar-ico shield" viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>
         <div class="bar shield"><div class="trail" id="shieldTrail"></div><div class="fill" id="shieldFill"></div><span id="shieldTxt">0</span></div></div>
       <div class="barrow"><svg class="bar-ico hp" viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>

@@ -43,7 +43,8 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules/puppeteer'))
         glass: panes.length,
         transparent: panes.every((m) => m.material.transparent && m.material.opacity < 0.5),
         carScale: car.scale.toArray(),
-        carWheels: car.children.filter((m) => m.geometry.type === 'CylinderGeometry').map((m) => m.rotation.x),
+        carWheels: g.vehicles.find((v) => v.mesh === car).wheels.length,
+        carFunctional: g.vehicles.some((v) => v.mesh === car && v.col.vehicle === v && v.windows.length === 6),
         pierStep: pier && pier.maxY - p.h,
         pierPosts: pier && pier.house.deco.filter((e) => e.geo.type === 'CylinderGeometry' && Math.abs(e.m.elements[12] - (p.x - 12)) > 1 && Math.abs(e.m.elements[12] - (p.x - 12)) < 1.3 && e.m.elements[13] < p.h).length,
         floorChests: counts,
@@ -51,8 +52,8 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules/puppeteer'))
     });
     check('5 POI, boss, coffres-forts et cabines conservés', ['spies', 'bosses', 'vaults', 'booths'].every((k) => initial[k] === 5), initial);
     check('14 vraies baies transparentes', initial.glass === 14 && initial.transparent, initial.glass);
-    check('voiture et collisions à la même échelle horizontale', initial.carScale.join(',') === '1.5,1,1.5', initial.carScale);
-    check('4 roues orientées suivant leur essieu', initial.carWheels.length === 4 && initial.carWheels.every((r) => Math.abs(r - Math.PI / 2) < 0.01));
+    check('voiture GHOST fonctionnelle à l’échelle humaine', initial.carScale.join(',') === '1,1,1' && initial.carFunctional, initial.carScale);
+    check('4 roues du modèle de conduite conservées', initial.carWheels === 4);
     check('ponton accessible sans saut et 10 pieux latéraux', initial.pierStep <= 0.6 && initial.pierPosts === 10, initial);
     check('2 coffres par étage à l’Agence', initial.floorChests.every((n) => n >= 2), initial.floorChests);
 
