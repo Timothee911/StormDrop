@@ -93,6 +93,24 @@ function rarBadge(el, r) { const R = RARITIES[r]; el.textContent = R.name.toUppe
 function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function seeded(seed) { let a = seed; return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function todayKey() { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+// Cadeau : disponible toutes les 6 h, récupéré depuis l'accueil. L'horodatage
+// est persisté pour que le délai survive aux rechargements de page.
+const GIFT_CD = 6 * 3600 * 1000, GIFT_AT = 'stormdrop-gift-at';
+let giftAt = 0; try { giftAt = parseInt(localStorage.getItem(GIFT_AT)) || 0; } catch (e) {}
+const giftReady = () => Date.now() - giftAt >= GIFT_CD;
+function giftLeft() {
+  const s = Math.max(0, Math.ceil((GIFT_CD - (Date.now() - giftAt)) / 1000));
+  return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+function updateGiftBanner() {
+  const el = $('homeGift'); if (!el) return;
+  const ready = giftReady();
+  el.classList.toggle('ready', ready);
+  el.classList.toggle('waiting', !ready);
+  $('giftTitle').textContent = ready ? 'Ton cadeau t\u2019attend' : 'Cadeau récupéré';
+  $('giftSub').textContent = ready ? '+300 Éclats gratuits, toutes les 6 heures' : `Prochain cadeau dans ${giftLeft()}`;
+  $('giftCta').textContent = ready ? 'RÉCUPÉRER ›' : giftLeft();
+}
 function untilMidnight() {
   const d = new Date(), m = new Date(d); m.setHours(24, 0, 0, 0);
   const s = Math.max(0, Math.floor((m - d) / 1000));
@@ -111,8 +129,8 @@ thumbScene.add(new THREE.HemisphereLight(0xffffff, 0x6a6aa0, 1.4));
 const tl = new THREE.DirectionalLight(0xffffff, 1.6); tl.position.set(3, 5, -6); thumbScene.add(tl);
 const thumbCam = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
 const thumbCache = new Map();
-function thumb(cat, id) {
-  const key = cat + ':' + id;
+function thumb(cat, id, big = false) {
+  const key = cat + ':' + id + (big ? ':big' : '');
   if (thumbCache.has(key)) return thumbCache.get(key);
   const g = new THREE.Group();
   let camPos = [0, 1.25, -5.2], look = [0, 1.05, 0];
@@ -122,11 +140,14 @@ function thumb(cat, id) {
     else { const m = makeCharMesh({ skin: 'recrue', backpack: id }); m.group.rotation.y = Math.PI + 0.6; m.group.traverse((o) => { if (o.isMesh && o.parent !== m.torso && !['cristal'].includes(id)) o.castShadow = true; }); g.add(m.group); }
   } else if (cat === 'pickaxe') { const w = new THREE.Group(); const p = makePickaxe(id); p.rotation.x = Math.PI / 2; p.position.y = -0.25; w.add(p); w.rotation.z = 0.6; w.scale.setScalar(1.5); w.position.y = 0.1; g.add(w); }
   else if (cat === 'glider') { const gl = makeParachute(id); gl.rotation.set(-0.35, 0.3, 0); gl.position.set(0, -1.9, 0); g.add(gl); camPos = [0, 3.2, -9.5]; look = [0, 1.7, 0]; }
-  else if (cat === 'emote') { const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1, clap: 0.1, zombie: 0.4, squat: 0.6, boxe: 0.15, pirouette: 0.3, kungfu: 0.5, corde: 0.2, airguitar: 0.2 }[id] || 0.2); m.group.position.y = y; m.group.rotation.y = 0.35; g.add(m.group); }
+  else if (cat === 'emote') { const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1, clap: 0.1, zombie: 0.4, squat: 0.6, boxe: 0.15, pirouette: 0.3, kungfu: 0.5, corde: 0.2, airguitar: 0.2 }[id] || 0.2); m.group.position.y = Math.max(y, -0.3); m.group.rotation.y = 0.35; g.add(m.group); }
   thumbScene.add(g);
   thumbCam.position.set(...camPos); thumbCam.lookAt(...look);
+  // grande vignette pour la fenêtre d'achat : rendu 1024 px (net dans la modale)
+  if (big) { thumbR.setPixelRatio(2); thumbR.setSize(512, 512, false); }
   thumbR.render(thumbScene, thumbCam);
   const url = thumbR.domElement.toDataURL('image/png');
+  if (big) { thumbR.setPixelRatio(1); thumbR.setSize(256, 256, false); }
   thumbScene.remove(g);
   thumbCache.set(key, url);
   return url;
@@ -278,10 +299,10 @@ function updateTopbar() {
   const lockerTab = document.querySelector('#tabs [data-tab=locker]');
   lockerTab.querySelector('.dot')?.remove();
   if (S.fresh.size) lockerTab.insertAdjacentHTML('beforeend', '<i class="dot"></i>');
-  // point cadeau quotidien sur l'onglet boutique : visible partout dans le lobby
-  const shopTab = document.querySelector('#tabs [data-tab=shop]');
-  shopTab.querySelector('.dot')?.remove();
-  if (S.giftDay !== todayKey()) shopTab.insertAdjacentHTML('beforeend', '<i class="dot gift"></i>');
+  // point cadeau sur l'onglet accueil : visible partout dans le lobby
+  const homeTab = document.querySelector('#tabs [data-tab=home]');
+  homeTab.querySelector('.dot')?.remove();
+  if (giftReady()) homeTab.insertAdjacentHTML('beforeend', '<i class="dot gift"></i>');
   $('diffLabel').textContent = { facile: 'Facile', normal: 'Normal', difficile: 'Difficile' }[S.diff];
 }
 
@@ -311,7 +332,7 @@ function chalHTML(c, compact) {
   return `<div class="chal ${done ? 'done' : ''}"><div class="chal-main"><div class="chal-name">${c.name}</div><div class="chal-prog">${fmt(v)} / ${fmt(c.goal)}</div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div></div><div class="chal-xp">${done ? 'TERMINÉ ✓' : '+' + fmt(c.xp) + ' XP'}</div></div>`;
 }
 function renderHome() {
-  $('homeGift').classList.toggle('hidden', S.giftDay === todayKey());
+  updateGiftBanner();
   $('quickChallenges').innerHTML = DAILY.map((c) => chalHTML(c, true)).join('');
   const L = S.last, lm = $('lastMatch');
   if (L) { lm.classList.remove('hidden'); lm.innerHTML = `DERNIÈRE PARTIE<br><b>${L.won ? 'VICTOIRE ROYALE' : 'Top ' + L.placement}</b> · ${L.kills} élim. · +${fmt(L.xp)} XP`; }
@@ -471,19 +492,19 @@ function renderShop() {
   $('shopFeatured').innerHTML = featured.map(shopCard).join('');
   $('shopDaily').innerHTML = daily.map(shopCard).join('');
   document.querySelectorAll('.sitem').forEach((el) => el.onclick = () => openBuy(el.dataset.c, el.dataset.id, +el.dataset.p));
-  const gifted = S.giftDay === todayKey();
-  $('giftBtn').disabled = gifted; $('giftBtn').textContent = gifted ? 'RÉCUPÉRÉ ✓' : 'RÉCUPÉRER';
-  $('giftCard').classList.toggle('claimed', gifted);
-  $('giftCard').classList.toggle('ready', !gifted);
 }
-$('giftBtn').onclick = () => { if (S.giftDay === todayKey()) return; S.giftDay = todayKey(); S.eclats += 300; updateTopbar(); renderShop(); renderHome(); toast('+300 Éclats'); };
-$('homeGift').onclick = () => setTab('shop');
+// cadeau 6 h : claim directement depuis la bannière d'accueil
+$('homeGift').onclick = () => {
+  if (!giftReady()) return;
+  giftAt = Date.now(); try { localStorage.setItem(GIFT_AT, String(giftAt)); } catch (e) {}
+  S.eclats += 300; updateTopbar(); updateGiftBanner(); toast('+300 Éclats');
+};
 let buying = null;
 function openBuy(cat, id, price) {
   buying = { cat, id, price };
   const it = itemOf(cat, id), own = S.owned.has(cat + ':' + id);
   $('bmArt').className = 'bm-art r-' + it.rarity;
-  $('bmArt').innerHTML = `<img alt="" src="${thumb(cat, id)}">`;
+  $('bmArt').innerHTML = `<img alt="" src="${thumb(cat, id, true)}">`;
   rarBadge($('bmRar'), it.rarity);
   $('bmName').textContent = it.name; $('bmType').textContent = TYPE_NAME[cat];
   $('bmDesc').textContent = it.desc || 'Objet cosmétique : ne donne aucun avantage en jeu.';
@@ -671,7 +692,7 @@ $('rsContinue').onclick = () => { $('resultModal').classList.add('hidden'); setT
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
-const tickClocks = () => { const t = untilMidnight(); $('shopTimer').textContent = t; $('dailyReset').textContent = t; const d2 = $('dailyReset2'); if (d2) d2.textContent = 'Réinitialisation dans ' + t; };
+const tickClocks = () => { const t = untilMidnight(); $('shopTimer').textContent = t; $('dailyReset').textContent = t; const d2 = $('dailyReset2'); if (d2) d2.textContent = 'Réinitialisation dans ' + t; updateGiftBanner(); };
 setInterval(tickClocks, 1000);
 tickClocks();
 buildChar(); updateTopbar(); renderHome();

@@ -484,12 +484,17 @@ export function makePickaxe(id = 'default') {
       const b = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), boneM); b.position.set(x, y, z); g.add(b);
     }
   } else if (id === 'banane') {
-    // banane courbée (arc de tore) avec les deux bouts
-    const bn = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.085, 8, 14, 1.9), mat(0xffd23f, { roughness: 0.5 }));
-    bn.rotation.y = Math.PI / 2; bn.rotation.z = -0.5; bn.position.set(0, 0.1, -0.45); g.add(bn);
-    const tipM = mat(0x6b4a2a);
-    const t1 = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 6), tipM); t1.rotation.x = Math.PI / 2; t1.position.set(0, -0.24, -0.02); g.add(t1);
-    const t2 = t1.clone(); t2.rotation.x = -Math.PI / 2; t2.position.set(0, 0.44, -0.82); g.add(t2);
+    // banane : arc de tore courbé comme une lame, à plat dans le plan XZ du
+    // modèle (le plan qui reste de face après la rotation de la vignette)
+    const bg = new THREE.TorusGeometry(0.4, 0.085, 8, 14, 2.2);
+    bg.rotateX(Math.PI / 2); // anneau à plat (plan XZ)
+    bg.rotateY(2.67);        // arc symétrique, ventre vers la tête de l'outil
+    const bn = new THREE.Mesh(bg, mat(0xffd23f, { roughness: 0.5 }));
+    bn.position.set(0, 0.02, -0.42); g.add(bn);
+    for (const sx of [-1, 1]) { // bouts marron aux deux extrémités
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.16, 6), mat(0x6b4a2a));
+      tip.rotation.z = sx * Math.PI / 2; tip.position.set(sx * 0.4, 0.02, -0.6); g.add(tip);
+    }
   } else if (id === 'glace') {
     // piolet : manche bois + pic de glace + cristaux
     box(g, 0.06, 0.06, 0.95, 0, 0, -0.15, mat(0x5a3a20));

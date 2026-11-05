@@ -3682,8 +3682,11 @@ function spyPatrol(p) {
     yacht: [[-18, 0], [-12, 0], [-3, 0], [4, 0], [11, 0], [23, 2], [23, -6.2], [11, -6.2], [-6, -6.1], [-18, -5.5]],
     rig: [[-6, 4], [0, 4.6], [6, 4], [6, -4], [0, -4.6], [-6, -4]],
     grotto: [[-7, 6], [0, 8], [7, 6], [7, -4], [0, -8], [-7, -4]],
-    // Le Requin : tour du manoir en passant devant la terrasse et derrière
-    shark: [[0, 14], [13, 8], [14, -2], [10, -20], [0, -21], [-10, -20], [-14, -2], [-13, 8]],
+    // Le Requin : ronde au sol — plage devant la gueule, hélipad à l'est,
+    // passage étroit entre l'escalier et le coffre-fort (points alignés pour
+    // que les PNJ le traversent sans se coincer), derrière la falaise,
+    // contournement du phare puis retour par la plage ouest
+    shark: [[0, 14], [9, 12], [16, 10], [18, 6], [12.5, 5.5], [12.5, 2], [12.5, -7], [11, -17], [5, -19], [-5, -20], [-14, -17], [-16, -6], [-8, 12]],
   }[p.key];
   if (!rel) return null;
   const cx = p.key === 'grotto' ? GROTTO.cavernX : p.x;
@@ -5094,7 +5097,7 @@ function buildSpyPOI(p) {
       hdeco(BOX, GOLD, CLX + 11.8, h0 + 0.65 + s * 0.4, CLZ + 18 - s * 0.75, 0.12, 0.9, 0.12);
     }
     // rochers gris autour de l'île
-    for (const [rx, rz, rs] of [[-14, -12, 3], [13, -14, 2.4], [22, 16, 2.8], [-16, 13, 2.2]]) {
+    for (const [rx, rz, rs] of [[-14, -12, 3], [13, -14, 2.4], [17, 11, 2.8], [-16, 13, 2.2]]) {
       hdeco(BOX, 0x59606c, p.x + rx, p.h - 0.6, p.z + rz, rs, rs * 1.1, rs, 0.1, 0.4, 0.2);
     }
     // phare rouge et blanc
@@ -5785,7 +5788,9 @@ function buildSpyPOI(p) {
     placePad(p.x + 16, p.z);
     placePad(p.x - 16, p.z);
   }
-  if (p.key !== 'yacht' && p.key !== 'rig' && p.key !== 'grotto' && p.key !== 'agency') { buildVault(p); buildPhoneBooth(p); }
+  if (p.key === 'shark') { // îlot réduit : le coffre-fort reste à l'est, à sa place (sinon vaultSpot le collerait à l'escalier)
+    buildVault(p, { x: p.x + 17, y: 2.45, z: p.z }); buildPhoneBooth(p);
+  } else if (p.key !== 'yacht' && p.key !== 'rig' && p.key !== 'grotto' && p.key !== 'agency') { buildVault(p); buildPhoneBooth(p); }
   if (p.key === 'agency') placePad(p.x - 44, p.z + 12);
 }
 const spySpot0 = lootSpots.length;

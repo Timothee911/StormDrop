@@ -58,7 +58,7 @@ function rawH(x, z) {
 // centre, Le Requin, Le Yacht, La Grotte, La Plateforme) + lieux classiques.
 export const POIS = [
   { name: "L'Agence", key: 'agency', spy: true, x: 0, z: 0, r: 62, style: 'agency' },
-  { name: 'Le Requin', key: 'shark', spy: true, x: -292, z: -246, r: 31, style: 'shark' },
+  { name: 'Le Requin', key: 'shark', spy: true, x: -292, z: -246, r: 24, style: 'shark' },
   { name: 'Le Yacht', key: 'yacht', spy: true, x: 412, z: -82, r: 42, style: 'yacht' },
   // La Grotte est sur la grande île : une caverne SÈCHE cachée sous une
   // montagne rocheuse, entrée par la bouche du crâne géant face à l'océan.
