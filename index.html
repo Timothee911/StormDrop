@@ -82,6 +82,11 @@
   <div class="nameplate"><div class="np-lvl" id="npLvl">1</div><div class="np-name" id="npName">PSEUDO ?</div><div class="np-ready">PRÊT</div></div>
 
   <aside class="home-left">
+    <button class="card gift-banner hidden" id="homeGift">
+      <svg viewBox="0 0 24 24" class="gb-icon" aria-hidden="true"><path fill="currentColor" d="M20 7h-2.6A3.5 3.5 0 0 0 12 3.3 3.5 3.5 0 0 0 6.6 7H4a2 2 0 0 0-2 2v2h9V9h2v2h9V9a2 2 0 0 0-2-2zM9.5 7a1.5 1.5 0 1 1 1.5-1.5V7H9.5zm5 0H13V5.5A1.5 1.5 0 1 1 14.5 7zM3 12v8a2 2 0 0 0 2 2h6v-10H3zm10 10h6a2 2 0 0 0 2-2v-8h-8v10z"/></svg>
+      <div><b>Ton cadeau quotidien t'attend</b><span>+300 Éclats gratuits à récupérer dans la boutique</span></div>
+      <span class="gb-cta">OUVRIR ›</span>
+    </button>
     <div class="card news">
       <div class="news-tag">NOUVEAUTÉ</div>
       <div class="news-title">Saison 2 : Top Secret</div>
@@ -169,18 +174,16 @@
       <div class="shop-timer">Renouvellement dans <b id="shopTimer">--:--:--</b></div>
     </div>
     <div class="shop-scroll">
+      <div class="gift-card" id="giftCard">
+        <svg viewBox="0 0 24 24" class="gc-icon" aria-hidden="true"><path fill="currentColor" d="M20 7h-2.6A3.5 3.5 0 0 0 12 3.3 3.5 3.5 0 0 0 6.6 7H4a2 2 0 0 0-2 2v2h9V9h2v2h9V9a2 2 0 0 0-2-2zM9.5 7a1.5 1.5 0 1 1 1.5-1.5V7H9.5zm5 0H13V5.5A1.5 1.5 0 1 1 14.5 7zM3 12v8a2 2 0 0 0 2 2h6v-10H3zm10 10h6a2 2 0 0 0 2-2v-8h-8v10z"/></svg>
+        <div class="gc-text"><em>CADEAU QUOTIDIEN</em><b>+300 Éclats gratuits</b><span>Un petit cadeau t'attend chaque jour. Reviens demain pour un nouveau.</span></div>
+        <i class="coin big"></i>
+        <button class="buy-btn" id="giftBtn">RÉCUPÉRER</button>
+      </div>
       <h3>À LA UNE</h3>
       <div class="shop-row featured" id="shopFeatured"></div>
       <h3>QUOTIDIEN</h3>
       <div class="shop-row daily" id="shopDaily"></div>
-      <h3>OFFRE DU JOUR</h3>
-      <div class="shop-row gift">
-        <div class="gift-card" id="giftCard">
-          <i class="coin big"></i>
-          <div><b>Cadeau quotidien</b><span>Récupère 300 Éclats gratuitement chaque jour.</span></div>
-          <button class="buy-btn" id="giftBtn">RÉCUPÉRER</button>
-        </div>
-      </div>
     </div>
   </div>
 </section>

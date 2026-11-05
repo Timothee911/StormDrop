@@ -47,6 +47,14 @@ export const BACKPACKS = {
   carapace: { name: 'Carapace', rarity: 'uncommon', color: 0x2f9e5a },
   ailesdragon: { name: 'Ailes de Dragon', rarity: 'legendary', color: 0xb3122e },
   cristal: { name: 'Cristal Flottant', rarity: 'legendary', color: 0x7af0ff },
+  skate: { name: 'Skate Rétro', rarity: 'uncommon', color: 0xff6b3d },
+  lanterne: { name: 'Lanterne de Mineur', rarity: 'uncommon', color: 0xffd23f },
+  tank: { name: 'Bonbonne d’Oxygène', rarity: 'rare', color: 0x3fa9ff },
+  tnt: { name: 'Baril de TNT', rarity: 'rare', color: 0xd94848 },
+  champi: { name: 'Champignon Spot', rarity: 'rare', color: 0xff5a3d },
+  plush: { name: 'Peluche Ours', rarity: 'epic', color: 0xb07a52 },
+  boombox: { name: 'Boombox', rarity: 'epic', color: 0x2b2b3a },
+  aquarium: { name: 'Aquarium Vivant', rarity: 'legendary', color: 0x3fd6ff },
 };
 export const PICKAXES = {
   default: { name: 'Pioche standard', rarity: 'common' },
@@ -55,6 +63,16 @@ export const PICKAXES = {
   epee: { name: 'Lame Néon', rarity: 'epic' },
   marteau: { name: 'Marteau Tonnerre', rarity: 'epic' },
   faux: { name: 'Faux Lunaire', rarity: 'legendary' },
+  os: { name: 'Fémur Brut', rarity: 'uncommon' },
+  banane: { name: 'Banane Explosive', rarity: 'uncommon' },
+  glace: { name: 'Pioche Polaire', rarity: 'rare' },
+  cle: { name: 'Clé à Molette Géante', rarity: 'rare' },
+  flambeau: { name: 'Flambeau Éternel', rarity: 'rare' },
+  pelle: { name: 'Pelle du Roi', rarity: 'epic' },
+  katana: { name: 'Katana Rose Néon', rarity: 'epic' },
+  raquette: { name: 'Raquette de Match', rarity: 'epic' },
+  guitare: { name: 'Guitare Foudre', rarity: 'epic' },
+  trident: { name: 'Trident des Abysses', rarity: 'legendary' },
 };
 export const GLIDERS = {
   default: { name: 'Planeur standard', rarity: 'common', c1: 0xffd23f, c2: 0xff6b3d, shape: 'delta' },
@@ -71,6 +89,14 @@ export const EMOTES = {
   flex: { name: 'Gros bras', rarity: 'rare' },
   disco: { name: 'Disco Fever', rarity: 'epic' },
   fil: { name: 'Fil dentaire', rarity: 'legendary' },
+  clap: { name: 'Ovation', rarity: 'uncommon' },
+  zombie: { name: 'Marche Zombie', rarity: 'uncommon' },
+  squat: { name: 'Squats', rarity: 'uncommon' },
+  boxe: { name: 'Jab-Jab', rarity: 'rare' },
+  pirouette: { name: 'Pirouette', rarity: 'rare' },
+  kungfu: { name: 'Kata du Dragon', rarity: 'epic' },
+  corde: { name: 'Corde à Sauter', rarity: 'epic' },
+  airguitar: { name: 'Air Guitar', rarity: 'legendary' },
 };
 export const CATS = {
   skin: { name: 'Tenue', items: SKINS },
@@ -362,6 +388,73 @@ function buildBackpack(torso, id) {
     const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), mat(0x7af0ff, { emissive: 0x2ad0ff, emissiveIntensity: 0.9, roughness: 0.1, metalness: 0.2 }));
     cr.scale.set(0.8, 1.3, 0.8); cr.position.set(0, 0.55, 0.55); cr.userData.float = true; torso.add(cr);
   }
+  if (id === 'skate') { // planche verticale dans le dos avec roues
+    const deck = rbox(torso, 0.42, 1.0, 0.07, 0, 0.42, 0.3, mat(B.color, { roughness: 0.5 }), 0.05); deck.rotation.z = 0.12;
+    rbox(torso, 0.44, 0.08, 0.09, 0, 0.42, 0.3, mat(0x1a1a22), 0.03);
+    for (const [y, x] of [[0.12, 0.03], [0.72, -0.03]]) for (const sx of [-1, 1])
+      cyl(torso, 0.05, 0.05, 0.05, x + sx * 0.16, y, 0.35, mat(0xffd23f, { roughness: 0.4 }), 10).rotation.x = Math.PI / 2;
+  }
+  if (id === 'lanterne') { // lanterne de mineur à grille + coeur lumineux
+    const frame = mat(0x3a3a44, { metalness: 0.5, roughness: 0.4 });
+    rbox(torso, 0.26, 0.34, 0.18, 0, 0.42, 0.3, frame, 0.03);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), mat(0xfff2b8, { emissive: 0xffd23f, emissiveIntensity: 1.6 }));
+    core.position.set(0, 0.42, 0.3); torso.add(core);
+    for (const x of [-0.09, 0, 0.09]) rbox(torso, 0.025, 0.34, 0.02, x, 0.42, 0.4, frame, 0.008);
+    cyl(torso, 0.05, 0.07, 0.06, 0, 0.62, 0.3, frame, 10);
+  }
+  if (id === 'tank') { // bonbonne d'oxygène avec robinet
+    const tl = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.62, 14), mat(B.color, { metalness: 0.4, roughness: 0.35 }));
+    tl.position.set(0, 0.42, 0.3); tl.castShadow = true; torso.add(tl);
+    cyl(torso, 0.16, 0.16, 0.05, 0, 0.14, 0.3, mat(0xffd23f), 14);
+    cyl(torso, 0.04, 0.04, 0.12, 0, 0.78, 0.3, mat(0xc0c8d0, { metalness: 0.7 }), 8);
+    cyl(torso, 0.02, 0.02, 0.14, 0.06, 0.84, 0.3, mat(0xc0c8d0, { metalness: 0.7 }), 8).rotation.z = Math.PI / 2;
+  }
+  if (id === 'tnt') { // baril de TNT avec mèche et bandes
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.56, 14), mat(0x8a3a2a, { roughness: 0.7 }));
+    bar.position.set(0, 0.42, 0.3); bar.castShadow = true; torso.add(bar);
+    for (const y of [0.28, 0.56]) cyl(torso, 0.21, 0.21, 0.05, 0, y, 0.3, mat(0xd94848), 14);
+    rbox(torso, 0.3, 0.16, 0.02, 0, 0.42, 0.51, mat(0xffe14d), 0.008);
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.16, 6), mat(0x2a2a2a));
+    fuse.rotation.z = 0.4; fuse.position.set(0.06, 0.76, 0.3); torso.add(fuse);
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), mat(0xffb43a, { emissive: 0xff7a1a, emissiveIntensity: 1.8 }));
+    spark.position.set(0.12, 0.83, 0.3); torso.add(spark);
+  }
+  if (id === 'champi') { // gros champignon à pois
+    cyl(torso, 0.11, 0.14, 0.42, 0, 0.28, 0.3, mat(0xf2e1a0), 10);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat(B.color));
+    cap.position.set(0, 0.48, 0.3); cap.castShadow = true; torso.add(cap);
+    for (const [x, y, z] of [[-0.14, 0.62, 0.34], [0.12, 0.66, 0.28], [0, 0.7, 0.44], [-0.05, 0.64, 0.12]])
+      sph(torso, 0.045, x, y, z, mat(0xfff6d0), 1, 0.7, 1);
+  }
+  if (id === 'plush') { // peluche ours accrochée dans le dos
+    const fur = mat(B.color, { roughness: 0.9 });
+    sph(torso, 0.2, 0, 0.5, 0.32, fur); // tête
+    for (const sx of [-1, 1]) sph(torso, 0.08, sx * 0.17, 0.66, 0.32, fur); // oreilles
+    rbox(torso, 0.3, 0.34, 0.2, 0, 0.22, 0.3, fur, 0.08); // corps
+    for (const sx of [-1, 1]) { sph(torso, 0.07, sx * 0.18, 0.1, 0.32, fur); sph(torso, 0.065, sx * 0.15, 0.4, 0.3, fur); } // pattes
+    sph(torso, 0.05, 0, 0.46, 0.5, mat(0xf2d0b0)); // museau
+    for (const sx of [-1, 1]) sph(torso, 0.022, sx * 0.07, 0.55, 0.5, mat(0x1a1a22)); // yeux
+  }
+  if (id === 'boombox') { // boombox avec haut-parleurs et poignée
+    rbox(torso, 0.52, 0.34, 0.18, 0, 0.42, 0.3, mat(B.color, { roughness: 0.6 }), 0.04);
+    for (const x of [-0.14, 0.14]) {
+      cyl(torso, 0.09, 0.09, 0.03, x, 0.42, 0.4, mat(0x111118), 14).rotation.x = Math.PI / 2;
+      cyl(torso, 0.035, 0.035, 0.035, x, 0.42, 0.41, mat(0x39ff88, { emissive: 0x39ff88, emissiveIntensity: 0.8 }), 10).rotation.x = Math.PI / 2;
+    }
+    rbox(torso, 0.4, 0.04, 0.05, 0, 0.63, 0.3, mat(0x111118), 0.02);
+    for (const sx of [-1, 1]) box(torso, 0.05, 0.1, 0.03, sx * 0.2, 0.57, 0.4, mat(0x111118));
+  }
+  if (id === 'aquarium') { // bocal en verre avec poisson rouge qui flotte
+    const glass = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), new THREE.MeshStandardMaterial({ color: 0x9fdfff, transparent: true, opacity: 0.35, roughness: 0.1, metalness: 0.1 }));
+    glass.position.set(0, 0.52, 0.42); torso.add(glass);
+    const water = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), new THREE.MeshStandardMaterial({ color: 0x2a9fd6, transparent: true, opacity: 0.5, roughness: 0.2 }));
+    water.position.set(0, 0.5, 0.42); torso.add(water);
+    const fish = new THREE.Group();
+    const fb = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 6), mat(0xff6b3d)); fb.rotation.z = Math.PI / 2; fish.add(fb);
+    const ft = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.08, 4), mat(0xff6b3d)); ft.rotation.z = -Math.PI / 2; ft.position.x = -0.1; fish.add(ft);
+    fish.position.set(0, 0.52, 0.42); fish.userData.float = true; torso.add(fish);
+    cyl(torso, 0.03, 0.03, 0.1, 0, 0.78, 0.42, mat(0xc0c8d0, { metalness: 0.6 }), 8);
+  }
 }
 export function makePickaxe(id = 'default') {
   const g = new THREE.Group();
@@ -382,6 +475,91 @@ export function makePickaxe(id = 'default') {
   } else if (id === 'faux') {
     box(g, 0.06, 0.06, 1.2, 0, 0, -0.3, mat(0x2a2a3a));
     const bl = box(g, 0.04, 0.12, 0.7, 0, 0.3, -0.75, mat(0xcfe0ff, { emissive: 0x6a8aff, emissiveIntensity: 0.8, metalness: 0.5 })); bl.rotation.x = -1.1;
+  } else if (id === 'os') {
+    // fémur : os blanc avec boules aux extrémités
+    const boneM = mat(0xf2ead8, { roughness: 0.6 });
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.85, 10), boneM);
+    shaft.rotation.x = Math.PI / 2; shaft.position.set(0, 0, -0.45); g.add(shaft);
+    for (const z of [-0.02, -0.88]) for (const [x, y] of [[0.05, 0.05], [-0.05, 0.05], [0.05, -0.05], [-0.05, -0.05]]) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), boneM); b.position.set(x, y, z); g.add(b);
+    }
+  } else if (id === 'banane') {
+    // banane courbée (arc de tore) avec les deux bouts
+    const bn = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.085, 8, 14, 1.9), mat(0xffd23f, { roughness: 0.5 }));
+    bn.rotation.y = Math.PI / 2; bn.rotation.z = -0.5; bn.position.set(0, 0.1, -0.45); g.add(bn);
+    const tipM = mat(0x6b4a2a);
+    const t1 = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 6), tipM); t1.rotation.x = Math.PI / 2; t1.position.set(0, -0.24, -0.02); g.add(t1);
+    const t2 = t1.clone(); t2.rotation.x = -Math.PI / 2; t2.position.set(0, 0.44, -0.82); g.add(t2);
+  } else if (id === 'glace') {
+    // piolet : manche bois + pic de glace + cristaux
+    box(g, 0.06, 0.06, 0.95, 0, 0, -0.15, mat(0x5a3a20));
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.55, 8), mat(0xbfeaff, { emissive: 0x4ab8ff, emissiveIntensity: 0.5, metalness: 0.3, roughness: 0.15 }));
+    spike.rotation.x = -Math.PI / 2; spike.position.set(0, 0.02, -0.85); g.add(spike);
+    for (const [x, y, z, s] of [[0.1, 0.12, -0.55, 1], [-0.09, -0.05, -0.68, 0.7]]) {
+      const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.08 * s, 0), mat(0x9fe3ff, { emissive: 0x3aa8ff, emissiveIntensity: 0.7 })); cr.position.set(x, y, z); g.add(cr);
+    }
+  } else if (id === 'cle') {
+    // clé à molette géante : manche + mâchoires en C
+    const steel = mat(0xb0b8c4, { metalness: 0.8, roughness: 0.25 });
+    box(g, 0.07, 0.07, 0.95, 0, 0, -0.2, steel);
+    box(g, 0.24, 0.16, 0.1, 0, 0.13, -0.72, steel);
+    const jaw = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.055, 8, 12, 4.2), steel);
+    jaw.position.set(0, 0.13, -0.62); jaw.rotation.y = Math.PI / 2; g.add(jaw);
+    box(g, 0.05, 0.22, 0.06, 0, -0.15, -0.25, steel);
+  } else if (id === 'flambeau') {
+    // flambeau : coupe + flamme émissive
+    box(g, 0.06, 0.06, 1.0, 0, 0, -0.2, mat(0x8a5a32));
+    cyl(g, 0.13, 0.16, 0.14, 0, 0.08, -0.72, mat(0xc0c8d0, { metalness: 0.7, roughness: 0.3 }), 12);
+    const fl = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.34, 8), mat(0xffb43a, { emissive: 0xff7a1a, emissiveIntensity: 1.6 }));
+    fl.position.set(0, 0.32, -0.72); g.add(fl);
+    const fl2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 8), mat(0xfff6d0, { emissive: 0xffe98a, emissiveIntensity: 1.8 }));
+    fl2.position.set(0, 0.36, -0.72); g.add(fl2);
+  } else if (id === 'pelle') {
+    // pelle dorée : manche + poignée en T + lame
+    box(g, 0.06, 0.06, 1.0, 0, 0, -0.2, mat(0x8a5a32));
+    box(g, 0.22, 0.05, 0.06, 0, 0.03, 0.3, mat(0x8a5a32));
+    const gold = mat(0xffc400, { metalness: 0.85, roughness: 0.25 });
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.19, 0.42, 4), gold);
+    blade.rotation.x = -Math.PI / 2; blade.rotation.y = Math.PI / 4; blade.scale.y = 1.6; blade.position.set(0, 0, -0.86); g.add(blade);
+    box(g, 0.2, 0.2, 0.05, 0, 0, -0.66, gold);
+  } else if (id === 'katana') {
+    // katana : poignée gainée, garde, lame courbée néon rose
+    box(g, 0.055, 0.055, 0.34, 0, 0, 0.13, mat(0x1a1030));
+    for (let i = 0; i < 5; i++) box(g, 0.06, 0.012, 0.05, 0, i % 2 ? 0.031 : -0.031, 0.02 + i * 0.07, mat(0xff2e7d));
+    box(g, 0.16, 0.045, 0.045, 0, 0, -0.05, mat(0x2a2a3a, { metalness: 0.6 }));
+    const bl = box(g, 0.03, 0.09, 1.05, 0, 0.03, -0.6, mat(0xffd6ec, { emissive: 0xff2e7d, emissiveIntensity: 1.1, metalness: 0.4, roughness: 0.2 }));
+    bl.rotation.x = 0.06;
+    box(g, 0.032, 0.02, 1.05, 0, 0.085, -0.6, mat(0xff2e7d, { emissive: 0xff2e7d, emissiveIntensity: 1.4 }));
+  } else if (id === 'raquette') {
+    // raquette de tennis : manche + cadre ovale + cordes
+    box(g, 0.05, 0.05, 0.62, 0, 0, 0.0, mat(0x2a2a3a));
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 8, 20), mat(0x39ff88, { emissive: 0x1fc46a, emissiveIntensity: 0.5 }));
+    frame.position.set(0, 0.28, -0.34); frame.scale.y = 1.3; g.add(frame);
+    const strM = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.15 });
+    for (let i = -3; i <= 3; i++) { box(g, 0.012, 0.66, 0.012, i * 0.075, 0.28, -0.34, strM); box(g, 0.4, 0.012, 0.012, 0, 0.28 + i * 0.11, -0.34, strM); }
+  } else if (id === 'guitare') {
+    // guitare électrique : caisse + manche + micros + cordes
+    const bodyM = mat(0xb3122e, { roughness: 0.35 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.09, 20), bodyM);
+    body.rotation.x = Math.PI / 2; body.position.set(0, 0.05, -0.52); g.add(body);
+    const cut = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.09, 16), mat(0x1a1a22));
+    cut.rotation.x = Math.PI / 2; cut.position.set(0.1, -0.12, -0.42); g.add(cut);
+    box(g, 0.07, 0.06, 0.72, 0, 0.03, 0.02, mat(0x1a1a22));
+    box(g, 0.11, 0.05, 0.1, 0, 0.03, 0.42, mat(0x1a1a22));
+    for (const z of [-0.38, -0.6]) box(g, 0.18, 0.04, 0.05, 0, 0.08, z, mat(0xc0c8d0, { metalness: 0.7 }));
+    const strM = mat(0xdfe4ee, { metalness: 0.6, roughness: 0.3 });
+    for (const x of [-0.06, -0.02, 0.02, 0.06]) box(g, 0.008, 0.008, 1.05, x, 0.1, -0.08, strM);
+  } else if (id === 'trident') {
+    // trident des abysses : hampe + trois fourches lumineuses
+    box(g, 0.055, 0.055, 1.3, 0, 0, -0.35, mat(0x1f3a5a, { metalness: 0.5, roughness: 0.4 }));
+    const gold = mat(0xffc400, { metalness: 0.8, roughness: 0.3 });
+    cyl(g, 0.09, 0.09, 0.06, 0, 0, -0.95, gold, 12);
+    for (const [x, r] of [[-0.24, 0.35], [0, 0], [0.24, 0.35]]) {
+      box(g, 0.045, 0.045, 0.42, x, 0.05 + r * 0.35, -1.2, mat(0x2a4a6a, { metalness: 0.5 }));
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 6), mat(0x5ad8ff, { emissive: 0x2ab8ff, emissiveIntensity: 1.2, metalness: 0.4 }));
+      tip.rotation.x = -Math.PI / 2; tip.position.set(x, 0.05 + r * 0.35, -1.52); g.add(tip);
+      if (r) box(g, 0.05, 0.05, 0.16, x * 0.55, 0.05 + r * 0.2, -1.05, mat(0x2a4a6a, { metalness: 0.5 }));
+    }
   } else {
     box(g, 0.07, 0.07, 1.0, 0, 0, -0.2, wood);
     box(g, 0.7, 0.12, 0.12, 0, 0, -0.68, mat(0x7d8fa8, { metalness: 0.6, roughness: 0.3 }));
@@ -591,6 +769,79 @@ export function poseEmote(P, id, t) {
       P.elR.rotation.set(0.05, 0, 0); P.elL.rotation.set(0.05, 0, 0);
       P.torso.rotation.y = a * 0.35; P.hipL.rotation.set(0, 0, a * 0.12); P.hipR.rotation.set(0, 0, a * 0.12);
       P.kneeL.rotation.x = P.kneeR.rotation.x = -0.15; y = Math.abs(a) * 0.04; break;
+    }
+    case 'clap': { // ovation : mains qui se rejoignent devant, petit rebond
+      const cl = Math.abs(s(t * 8));
+      P.shR.rotation.set(0.75, 0, 0.2); P.shL.rotation.set(0.75, 0, -0.2);
+      P.elR.rotation.set(1.0 + cl * 0.4, 0, 0.12); P.elL.rotation.set(1.0 + cl * 0.4, 0, -0.12);
+      P.head.rotation.x = 0.12; P.torso.rotation.y = s(t * 8) * 0.06;
+      P.hipL.rotation.set(0, 0, 0); P.hipR.rotation.set(0, 0, 0);
+      P.kneeL.rotation.x = P.kneeR.rotation.x = -0.1; y = cl * 0.02; break;
+    }
+    case 'zombie': { // marche zombie : bras tendus, tête penchée, pas traînants
+      const w = s(t * 2.5);
+      P.shR.rotation.set(1.5, 0, 0.1); P.shL.rotation.set(1.5, 0, -0.1);
+      P.elR.rotation.set(0.04, 0, 0); P.elL.rotation.set(0.04, 0, 0);
+      P.head.rotation.set(0.08, 0.1, 0.25); P.torso.rotation.set(0.08, w * 0.1, 0);
+      P.hipL.rotation.set(Math.max(0, w) * 0.45, 0, 0); P.hipR.rotation.set(Math.max(0, -w) * 0.45, 0, 0);
+      P.kneeL.rotation.x = -0.05 - Math.max(0, w) * 0.7; P.kneeR.rotation.x = -0.05 - Math.max(0, -w) * 0.7;
+      y = Math.abs(w) * 0.02; break;
+    }
+    case 'squat': { // squats : descente sur les talons, bras tendus devant
+      const d = (1 - c(t * 4)) / 2;
+      P.shR.rotation.set(0.55 + d * 0.55, 0, 0.25); P.shL.rotation.set(0.55 + d * 0.55, 0, -0.25);
+      P.elR.rotation.set(1.25, 0, 0); P.elL.rotation.set(1.25, 0, 0);
+      P.torso.rotation.x = d * 0.25; P.head.rotation.x = -d * 0.1;
+      P.hipL.rotation.set(-d * 1.45, 0, 0); P.hipR.rotation.set(-d * 1.45, 0, 0);
+      P.kneeL.rotation.x = P.kneeR.rotation.x = -0.1 - d * 2.1;
+      y = -d * 0.48; break;
+    }
+    case 'boxe': { // jab-jab : coups de poing alternés, garde haute
+      const a = s(t * 10), jr = Math.max(0, a), jl = Math.max(0, -a);
+      P.shR.rotation.set(0.45 + jr * 1.05, 0, 0.15); P.shL.rotation.set(0.45 + jl * 1.05, 0, -0.15);
+      P.elR.rotation.set(1.35 - jr * 1.25, 0, 0); P.elL.rotation.set(1.35 - jl * 1.25, 0, 0);
+      P.torso.rotation.y = a * 0.22; P.head.rotation.y = -a * 0.15;
+      P.hipL.rotation.set(0.05, 0, -0.06); P.hipR.rotation.set(0.05, 0, 0.06);
+      P.kneeL.rotation.x = P.kneeR.rotation.x = -0.18;
+      y = Math.abs(s(t * 20)) * 0.015; break;
+    }
+    case 'pirouette': { // pirouette : bras en couronne, sur les pointes, buste qui tourne
+      const sp = s(t * 6);
+      P.shR.rotation.set(0.3, 0, 2.45); P.shL.rotation.set(0.3, 0, -2.45);
+      P.elR.rotation.set(0, 0, 0.55); P.elL.rotation.set(0, 0, -0.55);
+      P.torso.rotation.y = sp * 0.45; P.head.rotation.y = sp * 0.3;
+      P.hipL.rotation.set(0.15, 0, -0.28); P.hipR.rotation.set(0.15, 0, 0.28);
+      P.kneeL.rotation.x = P.kneeR.rotation.x = -1.35;
+      y = 0.06 + Math.abs(sp) * 0.02; break;
+    }
+    case 'kungfu': { // kata du dragon : blocages et coups tranchants, sur les gardes
+      const k = Math.floor(t * 3) % 4, f = Math.min(1, (t * 3) % 1 * 3);
+      if (k === 0) { P.shR.rotation.set(0.4 + f * 1.2, 0, 0.9); P.elR.rotation.set(1.6 - f * 1.4, 0, 0); P.shL.rotation.set(0.4, 0, -0.35); P.elL.rotation.set(1.3, 0, 0); }
+      else if (k === 1) { P.shL.rotation.set(0.4 + f * 1.2, 0, -0.9); P.elL.rotation.set(1.6 - f * 1.4, 0, 0); P.shR.rotation.set(0.4, 0, 0.35); P.elR.rotation.set(1.3, 0, 0); }
+      else if (k === 2) { P.shR.rotation.set(1.3, 0, 0.2); P.shL.rotation.set(1.3, 0, -0.2); P.elR.rotation.set(0.1, 0, 0); P.elL.rotation.set(0.1, 0, 0); }
+      else { P.shR.rotation.set(0.2, 0, 1.1); P.shL.rotation.set(0.2, 0, -1.1); P.elR.rotation.set(1.7, 0, 0); P.elL.rotation.set(1.7, 0, 0); }
+      P.torso.rotation.y = [0.35, -0.35, 0, 0][k]; P.head.rotation.y = [0.3, -0.3, 0, 0][k];
+      P.hipL.rotation.set(0.12, 0, -0.22); P.hipR.rotation.set(0.12, 0, 0.22);
+      P.kneeL.rotation.x = P.kneeR.rotation.x = -0.4;
+      y = k === 3 ? 0.03 : 0; break;
+    }
+    case 'corde': { // corde à sauter : petits sauts, poignets qui tournent
+      const ph = t * 9, hop = Math.abs(c(ph)), arm = s(ph);
+      P.shR.rotation.set(0.25, 0, 0.85); P.shL.rotation.set(0.25, 0, -0.85);
+      P.elR.rotation.set(0.7, 0, 0.25 + arm * 0.2); P.elL.rotation.set(0.7, 0, -0.25 + arm * 0.2);
+      P.torso.rotation.set(0.12, 0, 0); P.head.rotation.x = 0.05;
+      P.hipL.rotation.set(0.1 + (1 - hop) * 0.5, 0, 0); P.hipR.rotation.set(0.1 + (1 - hop) * 0.5, 0, 0);
+      P.kneeL.rotation.x = P.kneeR.rotation.x = -0.15 - (1 - hop) * 0.9;
+      y = hop * 0.14; break;
+    }
+    case 'airguitar': { // air guitar : gratte frénétique, jambe qui pompe
+      const strum = s(t * 16), lean = 0.35 + s(t * 2) * 0.1;
+      P.shR.rotation.set(0.5 - strum * 0.35, 0, 0.5); P.elR.rotation.set(1.5 + strum * 0.3, 0, 0);
+      P.shL.rotation.set(0.9, 0, -0.75); P.elL.rotation.set(1.35, 0, -0.2);
+      P.torso.rotation.set(0.18, -0.4, -lean * 0.4); P.head.rotation.set(-0.1, -0.3, s(t * 4) * 0.1);
+      P.hipL.rotation.set(0.15, 0, -0.2); P.hipR.rotation.set(0.15, 0, 0.2);
+      P.kneeL.rotation.x = -0.35 + strum * 0.12; P.kneeR.rotation.x = -0.35 - strum * 0.12;
+      y = Math.abs(strum) * 0.02; break;
     }
     default: { // danse : bras levés pliés au coude, genoux montés à tour de rôle
       const a = s(t * 7);

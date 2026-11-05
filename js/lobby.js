@@ -122,7 +122,7 @@ function thumb(cat, id) {
     else { const m = makeCharMesh({ skin: 'recrue', backpack: id }); m.group.rotation.y = Math.PI + 0.6; m.group.traverse((o) => { if (o.isMesh && o.parent !== m.torso && !['cristal'].includes(id)) o.castShadow = true; }); g.add(m.group); }
   } else if (cat === 'pickaxe') { const w = new THREE.Group(); const p = makePickaxe(id); p.rotation.x = Math.PI / 2; p.position.y = -0.25; w.add(p); w.rotation.z = 0.6; w.scale.setScalar(1.5); w.position.y = 0.1; g.add(w); }
   else if (cat === 'glider') { const gl = makeParachute(id); gl.rotation.set(-0.35, 0.3, 0); gl.position.set(0, -1.9, 0); g.add(gl); camPos = [0, 3.2, -9.5]; look = [0, 1.7, 0]; }
-  else if (cat === 'emote') { const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1 }[id] || 0.2); m.group.position.y = y; m.group.rotation.y = 0.35; g.add(m.group); }
+  else if (cat === 'emote') { const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1, clap: 0.1, zombie: 0.4, squat: 0.6, boxe: 0.15, pirouette: 0.3, kungfu: 0.5, corde: 0.2, airguitar: 0.2 }[id] || 0.2); m.group.position.y = y; m.group.rotation.y = 0.35; g.add(m.group); }
   thumbScene.add(g);
   thumbCam.position.set(...camPos); thumbCam.lookAt(...look);
   thumbR.render(thumbScene, thumbCam);
@@ -275,9 +275,13 @@ function updateTopbar() {
   $('curVal').textContent = fmt(S.eclats);
   $('lvlNum').textContent = S.level; $('npLvl').textContent = S.level; $('npName').textContent = S.name || 'PSEUDO ?';
   $('lvlFill').style.width = (S.xp / xpNeeded(S.level) * 100) + '%';
-  const lockerTab = document.querySelector('[data-tab=locker]');
+  const lockerTab = document.querySelector('#tabs [data-tab=locker]');
   lockerTab.querySelector('.dot')?.remove();
   if (S.fresh.size) lockerTab.insertAdjacentHTML('beforeend', '<i class="dot"></i>');
+  // point cadeau quotidien sur l'onglet boutique : visible partout dans le lobby
+  const shopTab = document.querySelector('#tabs [data-tab=shop]');
+  shopTab.querySelector('.dot')?.remove();
+  if (S.giftDay !== todayKey()) shopTab.insertAdjacentHTML('beforeend', '<i class="dot gift"></i>');
   $('diffLabel').textContent = { facile: 'Facile', normal: 'Normal', difficile: 'Difficile' }[S.diff];
 }
 
@@ -307,6 +311,7 @@ function chalHTML(c, compact) {
   return `<div class="chal ${done ? 'done' : ''}"><div class="chal-main"><div class="chal-name">${c.name}</div><div class="chal-prog">${fmt(v)} / ${fmt(c.goal)}</div><div class="bar"><i style="width:${v / c.goal * 100}%"></i></div></div><div class="chal-xp">${done ? 'TERMINÉ ✓' : '+' + fmt(c.xp) + ' XP'}</div></div>`;
 }
 function renderHome() {
+  $('homeGift').classList.toggle('hidden', S.giftDay === todayKey());
   $('quickChallenges').innerHTML = DAILY.map((c) => chalHTML(c, true)).join('');
   const L = S.last, lm = $('lastMatch');
   if (L) { lm.classList.remove('hidden'); lm.innerHTML = `DERNIÈRE PARTIE<br><b>${L.won ? 'VICTOIRE ROYALE' : 'Top ' + L.placement}</b> · ${L.kills} élim. · +${fmt(L.xp)} XP`; }
@@ -443,16 +448,18 @@ function shopToday() {
   const pool = SHOP_POOL.slice();
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   const skins = pool.filter((p) => p.cat === 'skin');
-  const featured = skins.slice(0, 2).map((p) => ({ ...p, featured: true }));
-  // la boutique propose chaque jour au moins un objet de chaque catégorie :
+  const featured = skins.slice(0, 3).map((p) => ({ ...p, featured: true }));
+  // la boutique propose chaque jour au moins deux objets de chaque catégorie :
   // tenues, sacs à dos, pioches, planeurs et emotes
   const used = new Set(featured.map((f) => f.cat + ':' + f.id));
   const daily = [];
   for (const cat of ['skin', 'backpack', 'pickaxe', 'glider', 'emote']) {
-    const pick = pool.find((p) => p.cat === cat && !used.has(p.cat + ':' + p.id));
-    if (pick) { daily.push(pick); used.add(pick.cat + ':' + pick.id); }
+    for (const p of pool) {
+      if (daily.filter((d) => d.cat === cat).length >= 2) break;
+      if (p.cat === cat && !used.has(p.cat + ':' + p.id)) { daily.push(p); used.add(p.cat + ':' + p.id); }
+    }
   }
-  for (const p of pool) { if (daily.length >= 8) break; if (!used.has(p.cat + ':' + p.id)) { daily.push(p); used.add(p.cat + ':' + p.id); } }
+  for (const p of pool) { if (daily.length >= 14) break; if (!used.has(p.cat + ':' + p.id)) { daily.push(p); used.add(p.cat + ':' + p.id); } }
   return { featured, daily };
 }
 function shopCard(p) {
@@ -465,9 +472,12 @@ function renderShop() {
   $('shopDaily').innerHTML = daily.map(shopCard).join('');
   document.querySelectorAll('.sitem').forEach((el) => el.onclick = () => openBuy(el.dataset.c, el.dataset.id, +el.dataset.p));
   const gifted = S.giftDay === todayKey();
-  $('giftBtn').disabled = gifted; $('giftBtn').textContent = gifted ? 'RÉCUPÉRÉ' : 'RÉCUPÉRER';
+  $('giftBtn').disabled = gifted; $('giftBtn').textContent = gifted ? 'RÉCUPÉRÉ ✓' : 'RÉCUPÉRER';
+  $('giftCard').classList.toggle('claimed', gifted);
+  $('giftCard').classList.toggle('ready', !gifted);
 }
-$('giftBtn').onclick = () => { if (S.giftDay === todayKey()) return; S.giftDay = todayKey(); S.eclats += 300; updateTopbar(); renderShop(); toast('+300 Éclats'); };
+$('giftBtn').onclick = () => { if (S.giftDay === todayKey()) return; S.giftDay = todayKey(); S.eclats += 300; updateTopbar(); renderShop(); renderHome(); toast('+300 Éclats'); };
+$('homeGift').onclick = () => setTab('shop');
 let buying = null;
 function openBuy(cat, id, price) {
   buying = { cat, id, price };
