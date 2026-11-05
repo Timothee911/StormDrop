@@ -158,6 +158,18 @@ jobs:
           pkill -f "http.server 8090" 2>/dev/null || true
           exit $STATUS
 
+      - name: Test cohérence du Requin et de l'Agence
+        id: coherence
+        run: |
+          set -e
+          python3 -m http.server 8090 > /tmp/server-coherence.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8090/game.html > /dev/null; then break; fi
+          done
+          node .github/scripts/qa-poi-coherence.cjs
+
       - name: Rapport QA
         if: always()
         run: |
@@ -175,5 +187,6 @@ jobs:
           echo "| Animations (toit, chute, parachute) | ${{ steps.anim.outcome == 'success' && 'OK' || (steps.anim.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Hauteur max + brouillard + nuages + HUD vie | ${{ steps.hauteur.outcome == 'success' && 'OK' || (steps.hauteur.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Passe de combat (DOM, badges) | ${{ steps.passe.outcome == 'success' && 'OK' || (steps.passe.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cohérence Requin + Agence (accès, garde-corps, supports) | ${{ steps.coherence.outcome == 'success' && 'OK' || (steps.coherence.outcome == 'failure' && 'Echec' || 'Non execute') }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "_Non couvert : gameplay reel, multijoueur, audio en jeu, fonctionnalites avancees._" >> $GITHUB_STEP_SUMMARY

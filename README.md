@@ -8,6 +8,14 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 L'Agence a été repensée : marbre clair (plus aucun noir), colonnes gris perle, intérieur lumineux, et deux coffres par étage (1er, 2e, 3e) en plus du hall. Les bots contourne­nt désormais les murs au lieu de s'y bloquer.
 
+### Cohérence des lieux : Le Requin et L'Agence
+
+- Le Requin : tête et falaise rocheuses facettées, passage libre entre les dents, villa avec 14 vraies baies transparentes et encadrements, balcon raccordé au plancher, garde-corps solides sur le balcon et le toit.
+- Circulation : promenade dallée entre les accès, ponton accessible sans saut avec dix pieux latéraux ancrés, hélipad soutenu, coffre-fort intégré à un affleurement sans condamner sa porte.
+- Ambiance : coin plage sablé, cascade avec source aménagée et bassin bordé de pierre. Les volumes restent stylisés pour s'intégrer au jeu existant.
+- L'Agence : garde-corps de l'atrium fixés aux dalles jusqu'au toit, jardinières sur les podiums, stationnement de service et voiture à la même échelle que ses collisions, roues réorientées et faisceaux de projecteurs plus discrets le jour.
+- QA dédiée : `node .github/scripts/qa-poi-coherence.cjs` (serveur local sur le port 8090, ou variable `QA_URL`) vérifie les accès au clavier, les collisions, les vitrages et les éléments de gameplay conservés.
+
 La Plateforme flotte désormais EN PLEINE MER (l'îlot dessous a été retiré du terrain) : vraie plate-forme pétrolière avec quatre pieds géants ancrés sur les fonds marins, entretoisements en X, pont 32x24 avec garde-corps jaunes et lignes de sécurité peintes, tour de forage à croisillons, grue rouge, hélipad en porte-à-faux, torchère à flamme vivante, canot de sauvetage et passerelle vers la station de contrôle. La mini-carte a été refaite : pré-rendu 1024px avec relief ombré (lumière nord-ouest), forêts mouchetées, écume sur la ligne de rivage, empreintes de tous les bâtiments (dont les POI espions), icônes dédiées par POI (étoile, aileron, yacht, crâne, derrick), grille et échelle sur la grande carte, rose nord sur la mini-carte.
 
 ## Contenu

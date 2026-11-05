@@ -4295,11 +4295,15 @@ function buildSpyPOI(p) {
     flight(-10.5, 1, 1);  // 1er -> 2e, à l'ouest, monte vers le nord
     flight(10.5, -1, 2);  // 2e -> 3e, à l'est, monte vers le sud
     flight(-10.5, 1, 3);  // 3e -> toit, à l'ouest, monte vers le nord
-    // garde-corps du bord de l'atrium (niveaux 1-3) : barres claires + liseré or
-    for (let f = 1; f <= 3; f++) {
-      for (const [hx, hz, w, d] of [[0, -4.18, 8.36, 0.1], [0, 4.18, 8.36, 0.1], [-4.18, 0, 0.1, 8.36], [4.18, 0, 0.1, 8.36]]) {
-        hdeco(BOX, 0x9aa0a8, BX + hx, LV[f] + 0.5, BZ + hz, w, 0.1, d);
-        hdeco(BOX, GOLD, BX + hx, LV[f] + 0.62, BZ + hz, w === 0.1 ? 0.14 : w, 0.06, d === 0.1 ? 0.14 : d);
+    // Garde-corps ancrés SUR les dalles, pas dans le vide de l'atrium.
+    // Le remplissage est solide ; le toit est protégé lui aussi.
+    for (let f = 1; f <= 4; f++) {
+      for (const [hx, hz, w, d] of [[0, -4.65, 9.4, 0.12], [0, 4.65, 9.4, 0.12], [-4.65, 0, 0.12, 9.4], [4.65, 0, 0.12, 9.4]]) {
+        makeStructBox(BX + hx, LV[f], BZ + hz, w, 0.88, d, matC(0xaeb8c2), { indestructible: true });
+        hdeco(BOX, GOLD, BX + hx, LV[f] + 1.02, BZ + hz, w === 0.12 ? 0.16 : w, 0.09, d === 0.12 ? 0.16 : d);
+        for (let i = -2; i <= 2; i++) {
+          hdeco(BOX, 0xe6e9ed, BX + hx + (w > d ? i * 2.15 : 0), LV[f] + 0.53, BZ + hz + (d > w ? i * 2.15 : 0), 0.14, 1.06, 0.14);
+        }
       }
     }
 
@@ -4905,6 +4909,7 @@ function buildSpyPOI(p) {
     {
       const cx = BX + 14, cz = BZ + 26.8, cy = p.h;
       const car = new THREE.Group();
+      car.name = 'agency-service-car';
       addBox(car, 4.2, 0.5, 1.9, 0, 0.55, 0, matC(0x1c2740, { metalness: 0.5, roughness: 0.35 }));
       addBox(car, 2.1, 0.45, 1.7, -0.25, 1.02, 0, matC(0x223154, { metalness: 0.4, roughness: 0.3 }));
       addBox(car, 2.0, 0.3, 1.72, -0.25, 1.35, 0, matC(0x27313f, { metalness: 0.2, roughness: 0.15 }));
@@ -4917,11 +4922,28 @@ function buildSpyPOI(p) {
       }
       for (const [wx, wz] of [[-1.35, -0.95], [1.35, -0.95], [-1.35, 0.95], [1.35, 0.95]]) {
         const wh = new THREE.Mesh(CYL_GEO, matC(0x14161c, { roughness: 0.85 }));
-        wh.scale.set(0.56, 0.32, 0.56); wh.rotation.z = Math.PI / 2; wh.position.set(wx, 0.32, wz); car.add(wh);
+        wh.scale.set(0.56, 0.32, 0.56); wh.rotation.x = Math.PI / 2; wh.position.set(wx, 0.28, wz); car.add(wh);
       }
       scene.add(car);
-      car.position.set(X(cx), cy, Z(cz));
+      // Même transformation que propBox : l'ancien modèle restait à l'échelle
+      // 1 devant un volume de collision agrandi de 50 %.
+      car.scale.set(K, 1, K);
+      car.position.set(X(cx), cy + 0.04, Z(cz));
       propBox(cx, cy, cz, 2.2, 1.1, 1.1);
+    }
+
+    // Deux places de service lisibles, sans barrer l'allée centrale ni les
+    // escaliers du quai. Peinture et butées reposent sur le dallage existant.
+    for (const cx of [BX + 14, BX + 20]) {
+      for (const dz of [-1.35, 1.35]) hdeco(BOX, TRIML, cx, p.h + 0.09, BZ + 26.8 + dz, 5, 0.025, 0.07);
+      hdeco(BOX, TRIML, cx - 2.5, p.h + 0.09, BZ + 26.8, 0.07, 0.025, 2.7);
+      makeStructBox(cx - 2.1, p.h + 0.07, BZ + 26.8, 0.18, 0.16, 1.6, matC(CORN), { indestructible: true });
+    }
+    // Jardinières maçonnées sur les podiums, à l'écart des trajets des agents.
+    for (const sx of [-1, 1]) {
+      makeStructBox(BX + sx * 18.2, 15.15, BZ + 17.0, 5.8, 0.5, 1.2, stoneM(), { indestructible: true });
+      hdeco(BOX, 0x584d3c, BX + sx * 18.2, 15.67, BZ + 17.0, 5.5, 0.06, 0.95);
+      for (let i = -2; i <= 2; i++) hdeco(SPH_GEO, 0x426943, BX + sx * 18.2 + i, 15.95, BZ + 17.0, 1.25, 0.75, 1.0);
     }
 
     // ---- PARABOLE RADAR sur le toit (angle nord-ouest) : disque incliné
@@ -4950,7 +4972,11 @@ function buildSpyPOI(p) {
       lens.scale.set(0.5, 0.5, 0.5); head.add(lens);
       head.rotation.z = 0.32;
       head.position.set(X(bx), 27.7, Z(bz)); scene.add(head);
-      spyFx.push((dt, t) => { head.rotation.y = t * sp; });
+      spyFx.push((dt, t) => {
+        head.rotation.y = t * sp;
+        beam.material.opacity = 0.012 + nightF * 0.095;
+        lens.material.emissiveIntensity = 0.3 + nightF * 0.9;
+      });
     }
 
     // ---- EMBLÈME GHOST PEINT SUR LE TOIT : médaillon bleu à l'effigie du
@@ -5027,6 +5053,37 @@ function buildSpyPOI(p) {
     const CT = h0 + 5;                     // sommet de la falaise = plancher de la maison
     const HX = CLX, HZ = CLZ;              // maison centrée sur la falaise
     const wallM = matC(M, { roughness: 0.5 });
+    const cragGeo = new THREE.IcosahedronGeometry(0.5, 1);
+    // Même format indexé que BOX/CYL pour le batch des bâtiments.
+    cragGeo.setIndex(Array.from({ length: cragGeo.attributes.position.count }, (_, i) => i));
+    // Toutes les barrières suivent les dimensions des dalles et possèdent
+    // un remplissage solide. Les lisses décoratives restent batchées.
+    const villaRail = (x, z, w, d, y) => {
+      makeStructBox(x, y, z, w, 0.9, d, matC(0x80939c), { indestructible: true });
+      hdeco(BOX, GOLD, x, y + 1.02, z, w > d ? w : 0.14, 0.08, d > w ? d : 0.14);
+      const n = Math.max(1, Math.ceil(Math.max(w, d) / 2));
+      for (let i = 0; i <= n; i++) hdeco(BOX, DK, x + (w > d ? (i / n - 0.5) * w : 0), y + 0.52, z + (d > w ? (i / n - 0.5) * d : 0), 0.12, 1.04, 0.12);
+    };
+    // Vraies baies : murs percés, allèges, linteaux, verre transparent et
+    // meneaux. Le vitrage et sa collision disparaissent avec leur support.
+    const glassM = matC(0x91bbc8, { transparent: true, opacity: 0.34, roughness: 0.18, metalness: 0.12, depthWrite: false });
+    const villaWall = (ax, x, z, len, ly, height, ops) => {
+      const side = { ax, x, z, len, out: 1 };
+      wallWithOpenings(side, ly, height, 0.4, ops, M, { hp: 380, mat: 'metal' });
+      for (const op of ops.filter((o) => o.kind === 'window')) {
+        const px = x + (ax === 'x' ? op.u : 0), pz = z + (ax === 'z' ? op.u : 0);
+        const gh = op.y1 - op.y0, support = op.lintel;
+        const pane = new THREE.Mesh(BOX, glassM);
+        pane.name = 'shark-villa-glass';
+        pane.scale.set(ax === 'x' ? op.w : 0.08, gh, ax === 'z' ? op.w : 0.08);
+        pane.position.set(px, ly + op.y0 + gh / 2, pz);
+        scene.add(pane);
+        const col = propBox(px, ly + op.y0, pz, ax === 'x' ? op.w / 2 : 0.04, ax === 'z' ? op.w / 2 : 0.04, gh);
+        for (const v of [-0.5, 0, 0.5]) hdeco(BOX, GL, px + (ax === 'x' ? v * op.w : 0), ly + op.y0 + gh / 2, pz + (ax === 'z' ? v * op.w : 0), 0.1, gh, 0.1, 0, 0, 0, support);
+        for (const y of [op.y0, op.y1]) hdeco(BOX, GL, px, ly + y, pz, ax === 'x' ? op.w + 0.12 : 0.16, 0.12, ax === 'z' ? op.w + 0.12 : 0.16, 0, 0, 0, support);
+        spyFx.push(() => { if (!support.alive && pane.visible) { pane.visible = false; removePropCol(col); } });
+      }
+    };
 
     // ============ FALAISE DU REQUIN (coquille rocheuse + grotte) ============
     // murs de la coquille (indestructibles) : la grotte est DANS le rocher,
@@ -5050,13 +5107,17 @@ function buildSpyPOI(p) {
     // mâchoire inférieure praticable (petit marchepied devant la bouche)
     makeStructBox(CLX, h0 - 0.25, CLZ + 10.75, 12, 0.7, 5.5, matC(R1, { roughness: 0.95 }), { indestructible: true });
     // mâchoire supérieure relevée, béante (déco au-dessus de l'entrée)
-    hdeco(BOX, R1, CLX, CT + 0.8, CLZ + 11, 13, 1.1, 7, -0.5, 0, 0);
+    hdeco(cragGeo, R1, CLX, CT + 0.2, CLZ + 12, 13, 1.6, 5.5, -0.12, 0, 0);
     // dents du haut (pointes en bas, accrochées à la mâchoire supérieure)
     for (let t = -3; t <= 3; t++)
       hdeco(PRISM_GEO, 0xfafcff, CLX + t * 1.35, h0 + 4.35 + (1 - Math.abs(t) / 3.6) * 1.15, CLZ + 13.6, 0.9, 1.6, 0.9, Math.PI, 0, 0);
     // dents du bas (plantées sur la mâchoire inférieure)
-    for (let t = -2; t <= 2; t++)
+    // Une vraie entrée piétonne au milieu : plus de dent traversée par le
+    // joueur. Les dents latérales sont solides, hors du couloir central.
+    for (const t of [-3, -2, 2, 3]) {
       hdeco(PRISM_GEO, 0xfafcff, CLX + t * 1.5, h0 + 0.45, CLZ + 12.6, 0.85, 1.4, 0.85, 0, 0, 0);
+      propBox(CLX + t * 1.5, h0 + 0.45, CLZ + 12.6, 0.33, 0.33, 1.1);
+    }
     // yeux dorés furieux + narines + ouïes gravées sur les flancs
     hdeco(BOX, 0x111318, CLX - 6.3, h0 + 3.1, CLZ + 8.1, 1.1, 0.7, 1.3, 0, 0.3, 0);
     hdeco(BOX, 0x111318, CLX + 6.3, h0 + 3.1, CLZ + 8.1, 1.1, 0.7, 1.3, 0, -0.3, 0);
@@ -5066,6 +5127,20 @@ function buildSpyPOI(p) {
     hdeco(BOX, RD, CLX + 1.4, h0 + 3.7, CLZ + 8.15, 0.5, 0.3, 0.5, 0, 0, -0.2);
     for (const sgn of [-1, 1]) for (let g = 0; g < 3; g++)
       hdeco(BOX, RD, CLX + sgn * 8.15, h0 + 1.6 + g * 0.15, CLZ + 1 + g * 1.1, 0.15, 2.3, 0.7, 0, 0, sgn * 0.5);
+
+    // Massif facetté : les joues et l'arrière relient la tête au terrain.
+    // Les volumes n'empiètent ni sur la bouche centrale ni sur l'escalier est.
+    for (const [dx, dz, sx, sy, sz] of [[-8.4, -3, 6, 6, 9], [8.4, -3, 5, 5.8, 8], [-7.6, 6, 4.3, 4.9, 5], [7.6, 6, 3.5, 4.9, 5], [-3, -6, 10, 5.4, 5], [4, -6, 9, 5, 5]]) {
+      hdeco(cragGeo, R1, CLX + dx, h0 + sy * 0.4, CLZ + dz, sx, sy, sz, 0, dx * 0.07, 0);
+    }
+    // Sourcils et nez prolongent la silhouette plutôt que de laisser deux
+    // yeux plaqués sous une dalle rectangulaire.
+    for (const s of [-1, 1]) {
+      hdeco(cragGeo, R3, CLX + s * 5.5, h0 + 4.1, CLZ + 9.3, 4.8, 2.0, 5.8, 0.08, s * 0.15, s * 0.15);
+      hdeco(cragGeo, R1, CLX + s * 3.4, h0 + 5.3, CLZ + 11, 7, 1.6, 4, -0.15, s * 0.1, 0);
+      hdeco(BOX, 0x20252b, CLX + s * 5.6, h0 + 3.15, CLZ + 10.6, 1.3, 0.55, 0.15, 0, s * 0.15, s * 0.13);
+      hdeco(BOX, 0xd4a44b, CLX + s * 5.6, h0 + 3.15, CLZ + 10.71, 0.55, 0.24, 0.06);
+    }
 
     // ============ MINI GROTTE (l'intérieur de la gueule) ============
     makeStructBox(CLX, h0 - 0.1, CLZ + 1, 12.4, 0.16, 10.2, matC(RD, { roughness: 0.95 }), { indestructible: true }); // sol de pierre
@@ -5085,18 +5160,10 @@ function buildSpyPOI(p) {
     // ============ GRANDE MAISON (villa blanche sur le dos du requin) ============
     curHouse = { boxes: [], deco: [], mesh: null };
     // ---- RDC (grand salon) : porte pleine hauteur au sud, baies vitrées
-    makeStructBox(HX, CT, HZ - 5.1, 15, 4.2, 0.4, wallM, { hp: 380, mat: 'metal' }); // nord
-    makeStructBox(HX - 4.35, CT, HZ + 5.1, 6.3, 4.2, 0.4, wallM, { hp: 380, mat: 'metal' }); // sud, porte au centre
-    makeStructBox(HX + 4.35, CT, HZ + 5.1, 6.3, 4.2, 0.4, wallM, { hp: 380, mat: 'metal' });
-    makeStructBox(HX, CT + 3.4, HZ + 5.1, 2.4, 0.8, 0.4, wallM, { hp: 380, mat: 'metal' }); // linteau
-    makeStructBox(HX - 7.3, CT, HZ, 0.4, 4.2, 10.2, wallM, { hp: 380, mat: 'metal' }); // ouest
-    makeStructBox(HX + 7.3, CT, HZ, 0.4, 4.2, 10.2, wallM, { hp: 380, mat: 'metal' }); // est
-    hdeco(BOX, GL, HX - 4.35, CT + 1.5, HZ + 5.3, 5, 2.8, 0.1);
-    hdeco(BOX, GL, HX + 4.35, CT + 1.5, HZ + 5.3, 5, 2.8, 0.1);
-    hdeco(BOX, GL, HX - 7.6, CT + 1.5, HZ, 0.1, 2.8, 8);
-    hdeco(BOX, GL, HX + 7.6, CT + 1.5, HZ, 0.1, 2.8, 8);
-    hdeco(BOX, GL, HX - 3.5, CT + 1.5, HZ - 5.3, 4, 2.8, 0.1);
-    hdeco(BOX, GL, HX + 3.5, CT + 1.5, HZ - 5.3, 4, 2.8, 0.1);
+    const bay = (u, w, y0 = 0.65, y1 = 3.35) => ({ u, w, y0, y1, kind: 'window' });
+    villaWall('x', HX, HZ - 5.1, 15, CT, 4.2, [bay(-3.5, 4), bay(3.5, 4)]);
+    villaWall('x', HX, HZ + 5.1, 15, CT, 4.2, [bay(-4.35, 4.8), { u: 0, w: 2.4, y0: 0, y1: 3.4, kind: 'door' }, bay(4.35, 4.8)]);
+    for (const s of [-1, 1]) villaWall('z', HX + s * 7.3, HZ, 10.2, CT, 4.2, [bay(-2.4, 3.2), bay(2.4, 3.2)]);
     hdeco(BOX, GOLD, HX, CT + 4.25, HZ - 5.1, 15, 0.16, 0.16);
     // ---- dalle du 1er avec trémie d'escalier : la trémie couvre TOUTE la
     // montée de l'escalier ouest (z HZ-4.5 .. HZ+3.6), sinon les marches
@@ -5109,23 +5176,14 @@ function buildSpyPOI(p) {
     for (let s = 0; s < 11; s++)
       makeStructBox(HX - 5.2, CT, HZ + 3.2 - s * 0.68, 2.4, 0.2 + s * 0.4, 0.75, matC(0xc9c2b4, { roughness: 0.6 }), { indestructible: true });
     // ---- 1er (chambre + bureau) : porte-fenêtre au sud sur le balcon
-    makeStructBox(HX, CT + 4.6, HZ - 4.3, 13, 3.4, 0.4, wallM, { hp: 380, mat: 'metal' }); // nord
-    makeStructBox(HX - 3.85, CT + 4.6, HZ + 4.3, 5.3, 3.4, 0.4, wallM, { hp: 380, mat: 'metal' }); // sud
-    makeStructBox(HX + 3.85, CT + 4.6, HZ + 4.3, 5.3, 3.4, 0.4, wallM, { hp: 380, mat: 'metal' });
-    makeStructBox(HX, CT + 7.2, HZ + 4.3, 2.4, 0.8, 0.4, wallM, { hp: 380, mat: 'metal' }); // linteau balcon
-    makeStructBox(HX - 6.3, CT + 4.6, HZ, 0.4, 3.4, 8.6, wallM, { hp: 380, mat: 'metal' }); // ouest
-    makeStructBox(HX + 6.3, CT + 4.6, HZ, 0.4, 3.4, 8.6, wallM, { hp: 380, mat: 'metal' }); // est
-    hdeco(BOX, GL, HX - 3.85, CT + 6, HZ + 4.5, 4.2, 2.2, 0.1);
-    hdeco(BOX, GL, HX + 3.85, CT + 6, HZ + 4.5, 4.2, 2.2, 0.1);
-    hdeco(BOX, GL, HX - 6.6, CT + 6, HZ, 0.1, 2.2, 6.5);
-    hdeco(BOX, GL, HX + 6.6, CT + 6, HZ, 0.1, 2.2, 6.5);
-    hdeco(BOX, GL, HX - 3.2, CT + 6, HZ - 4.5, 3.6, 2.2, 0.1);
-    hdeco(BOX, GL, HX + 3.2, CT + 6, HZ - 4.5, 3.6, 2.2, 0.1);
+    villaWall('x', HX, HZ - 4.3, 13, CT + 4.6, 3.4, [bay(-3.2, 3.6, 0.6, 2.8), bay(3.2, 3.6, 0.6, 2.8)]);
+    villaWall('x', HX, HZ + 4.3, 13, CT + 4.6, 3.4, [bay(-3.85, 4.1, 0.6, 2.8), { u: 0, w: 2.4, y0: 0, y1: 2.6, kind: 'door' }, bay(3.85, 4.1, 0.6, 2.8)]);
+    for (const s of [-1, 1]) villaWall('z', HX + s * 6.3, HZ, 8.6, CT + 4.6, 3.4, [bay(0, 6.4, 0.6, 2.8)]);
     hdeco(BOX, GOLD, HX, CT + 8.05, HZ - 4.3, 13, 0.16, 0.16);
     // ---- balcon en surplomb au sud du 1er
-    makeStructBox(HX, CT + 4.2, HZ + 6.3, 13, 0.4, 2, matC(DK), { indestructible: true });
-    for (let i = 0; i < 7; i++) hdeco(BOX, GOLD, HX - 6 + i * 2, CT + 5.05, HZ + 7.15, 0.12, 0.8, 0.12);
-    hdeco(BOX, GOLD, HX, CT + 5.45, HZ + 7.15, 12.4, 0.1, 0.1);
+    makeStructBox(HX, CT + 4.2, HZ + 5.8, 13, 0.4, 3, matC(DK), { indestructible: true });
+    villaRail(HX, HZ + 7.2, 12.8, 0.12, CT + 4.6);
+    for (const s of [-1, 1]) villaRail(HX + s * 6.4, HZ + 5.8, 0.12, 2.8, CT + 4.6);
     // ---- escalier intérieur 1er -> toit : le long du mur EST (il ne peut pas
     // rester empilé au-dessus de l'escalier du RDC : la superposition des deux
     // montées laisserait 1,6 m de plafond et coincerait la tête du joueur)
@@ -5147,13 +5205,9 @@ function buildSpyPOI(p) {
     hdeco(BOX, GL, HX - 1, CT + 11.95, HZ + 4.9, 6.5, 1.5, 0.1);
     hdeco(BOX, 0x2c3a4a, HX - 2.5, CT + 8.5, HZ + 2.4, 0.8, 0.35, 1.9, 0, 0.3, 0);
     hdeco(BOX, 0x2c3a4a, HX - 0.5, CT + 8.5, HZ + 2.4, 0.8, 0.35, 1.9, 0, -0.2, 0);
-    for (let i = 0; i < 8; i++) {
-      hdeco(BOX, GOLD, HX - 7.5 + i * 2.15, CT + 8.8, HZ - 5.15, 0.12, 0.8, 0.12);
-      hdeco(BOX, GOLD, HX - 7.5 + i * 2.15, CT + 8.8, HZ + 5.15, 0.12, 0.8, 0.12);
-    }
-    for (let i = 0; i < 5; i++) {
-      hdeco(BOX, GOLD, HX - 7.65, CT + 8.8, HZ - 4 + i * 2, 0.12, 0.8, 0.12);
-      hdeco(BOX, GOLD, HX + 7.65, CT + 8.8, HZ - 4 + i * 2, 0.12, 0.8, 0.12);
+    for (const s of [-1, 1]) {
+      villaRail(HX, HZ + s * 5.15, 15.1, 0.12, CT + 8.4);
+      villaRail(HX + s * 7.55, HZ, 0.12, 10.3, CT + 8.4);
     }
     // ---- aménagement intérieur : salon (RDC) puis chambre et bureau (1er)
     hdeco(BOX, 0xb99e7a, HX + 1, CT + 0.03, HZ + 1, 11, 0.06, 8);       // parquet RDC
@@ -5197,6 +5251,19 @@ function buildSpyPOI(p) {
       makeStructBox(CLX + 10, h0 - 0.15, CLZ + 18 - s * 0.75, 3.4, 0.35 + s * 0.4, 0.85, matC(M, { roughness: 0.5 }), { indestructible: true });
       hdeco(BOX, GOLD, CLX + 11.8, h0 + 0.65 + s * 0.4, CLZ + 18 - s * 0.75, 0.12, 0.9, 0.12);
     }
+    // Promenade à joints : les trajets bouche/ponton/escalier/hélipad
+    // partagent le même dallage, posé au sol sans marche infranchissable.
+    for (const [dx, dz, w, d] of [[0, 7, 3.2, 10], [-6, 12, 15, 2.6], [7.5, 12, 12, 2.6], [12.5, 9, 2.8, 6]]) {
+      hdeco(BOX, 0xb9b6aa, p.x + dx, h0 + 0.035, p.z + dz, w, 0.07, d);
+      const n = Math.floor(Math.max(w, d) / 1.2);
+      for (let i = 1; i < n; i++) hdeco(BOX, 0x8e938f, p.x + dx + (w > d ? (i / n - 0.5) * w : 0), h0 + 0.073, p.z + dz + (d > w ? (i / n - 0.5) * d : 0), w > d ? 0.035 : w, 0.006, d > w ? 0.035 : d);
+    }
+    // Le bunker reste accessible au sud, mais s'encastre désormais dans un
+    // affleurement plutôt que d'être un cube posé au milieu de la pelouse.
+    for (const [dx, dz, w, h, d] of [[17, -5.3, 9, 4.6, 2.8], [21.5, -0.6, 2.5, 4.1, 7]]) {
+      hdeco(cragGeo, R2, p.x + dx, h0 + h * 0.42, p.z + dz, w, h, d, 0, 0.1, 0);
+      propBox(p.x + dx, h0, p.z + dz, w * 0.32, d * 0.32, h * 0.7);
+    }
     // rochers gris autour de l'île
     for (const [rx, rz, rs] of [[-14, -12, 3], [13, -14, 2.4], [17, 11, 2.8], [-16, 13, 2.2]]) {
       hdeco(BOX, 0x59606c, p.x + rx, p.h - 0.6, p.z + rz, rs, rs * 1.1, rs, 0.1, 0.4, 0.2);
@@ -5214,6 +5281,11 @@ function buildSpyPOI(p) {
     {
       const hx = p.x + 17, hz = p.z + 10;
       makeStructBox(hx, p.h - 0.4, hz, 6, 0.5, 6, matC(0x3a3f47), { indestructible: true });
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        const x = hx + sx * 2.5, z = hz + sz * 2.5, foot = Math.min(p.h - 0.8, terrainH(x, z) - 0.3);
+        makeStructBox(x, foot, z, 0.32, p.h - 0.4 - foot, 0.32, matC(0x8a8f98), { indestructible: true });
+        hdeco(BOX, 0x8a8f98, x, p.h - 0.62, hz, 0.16, 0.16, 5.3);
+      }
       hdeco(CYL_GEO, 0x1f2430, hx, p.h + 0.2, hz, 2.2, 0.5, 2.2);
       hdeco(BOX, 0xffd23f, hx - 0.75, p.h + 0.5, hz, 0.45, 0.06, 1.7);
       hdeco(BOX, 0xffd23f, hx + 0.75, p.h + 0.5, hz, 0.45, 0.06, 1.7);
@@ -5225,6 +5297,16 @@ function buildSpyPOI(p) {
     // défilante + embruns, comme la cascade de la Grotte)
     {
       const wfx = CLX - 8.9, wfz = CLZ + 2.5;
+      // Source aménagée alimentée par une conduite, déversoir puis bassin
+      // bordé de pierre : l'eau ne naît plus dans le vide au-dessus du rocher.
+      makeStructBox(wfx, CT - 0.2, wfz, 2.8, 0.18, 2.7, matC(RD), { indestructible: true });
+      hdeco(BOX, 0x73cbd4, wfx, CT + 0.02, wfz, 2.3, 0.06, 2.2);
+      hdeco(CYL_GEO, 0x879ca5, wfx + 0.8, CT + 0.28, wfz - 1.0, 0.24, 1.4, 0.24, 0, 0, Math.PI / 2);
+      for (const s of [-1, 1]) makeStructBox(wfx, CT - 0.1, wfz + s * 1.25, 2.8, 0.45, 0.22, matC(R1), { indestructible: true });
+      for (let i = 0; i < 10; i++) {
+        const a = i / 10 * Math.PI * 2;
+        hdeco(cragGeo, R3, wfx + Math.cos(a) * 1.7, h0 + 0.15, wfz + Math.sin(a) * 2.05, 1, 0.6, 1, 0, a, 0);
+      }
       const wfTex = canvasTex((g, s) => {
         g.fillStyle = 'rgba(190,230,255,0.9)'; g.fillRect(0, 0, s, s);
         for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.5})`; g.fillRect(Math.random() * s, Math.random() * s, 2 + Math.random() * 4, 12 + Math.random() * 30); }
@@ -5267,6 +5349,7 @@ function buildSpyPOI(p) {
     }
 
     // ---- COIN PLAGE (côté ouest) : parasol, transats, serviette et ballon
+    hdeco(CYL_GEO, 0xdac89d, p.x - 6.5, p.h + 0.018, p.z + 17.3, 10.5, 0.03, 7.5);
     hdeco(CYL_GEO, 0xd8d2c4, p.x - 6.2, p.h + 1.15, p.z + 17, 0.09, 2.3, 0.09, 0.22, 0, 0);
     hdeco(SPH_GEO, 0xe8563f, p.x - 6.5, p.h + 2.3, p.z + 17.3, 2.7, 1.0, 2.7);
     hdeco(SPH_GEO, 0xf4f1ea, p.x - 6.5, p.h + 2.85, p.z + 17.3, 0.35, 0.35, 0.35);
@@ -5282,8 +5365,16 @@ function buildSpyPOI(p) {
     // part de la plage et s'avance 20 m au-dessus de l'eau
     {
       const px = p.x - 12, pz0 = p.z + 13, pz1 = p.z + 33;
-      makeStructBox(px, p.h + 0.35, (pz0 + pz1) / 2, 2.8, 0.3, pz1 - pz0, matC(0x8a6a45, { roughness: 0.9 }), { indestructible: true });
-      for (let i = 0; i <= 4; i++) hdeco(CYL_GEO, 0x6b4a2c, px, 0.65, pz0 + i * 5, 0.3, p.h + 1.6, 0.3);
+      const deck = p.h + 0.45;
+      makeStructBox(px, deck - 0.3, (pz0 + pz1) / 2, 2.8, 0.3, pz1 - pz0, matC(0x8a6a45, { roughness: 0.9 }), { indestructible: true });
+      for (let i = 0; i <= 4; i++) for (const s of [-1, 1]) {
+        const x = px + s * 1.18, z = pz0 + i * 5;
+        const foot = Math.min(-0.8, terrainH(x, z) - 0.5), top = deck + 0.35;
+        hdeco(CYL_GEO, 0x6b4a2c, x, (foot + top) / 2, z, 0.28, top - foot, 0.28);
+        propBox(x, deck, z, 0.14, 0.14, 0.35);
+        hdeco(BOX, 0x6b4a2c, px, deck - 0.4, z, 2.8, 0.22, 0.25);
+      }
+      for (let i = 0; i < 40; i++) hdeco(BOX, 0x6b4a2c, px, deck + 0.007, pz0 + 0.25 + i * 0.5, 2.75, 0.014, 0.025);
       hdeco(BOX, 0x6b4a2c, px - 1.45, p.h + 0.62, (pz0 + pz1) / 2, 0.14, 0.1, pz1 - pz0);
       hdeco(BOX, 0x6b4a2c, px + 1.45, p.h + 0.62, (pz0 + pz1) / 2, 0.14, 0.1, pz1 - pz0);
       hdeco(CYL_GEO, 0xffc400, px, p.h + 0.85, pz1 - 0.8, 0.14, 0.6, 0.14);
