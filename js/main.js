@@ -4147,6 +4147,9 @@ function finishGrotto() {
 const RIG_DY = 13.4, RIG_DT = 14.6;
 // torchère de La Plateforme : flamme + lumière (animées dans updateWorld)
 let rigFlare = null;
+// animations vivantes des POI espions (cascade, bateau, bouées, radar,
+// projecteurs…) : fonctions (dt, t) appelées depuis updateWorld
+const spyFx = [];
 function buildSpyPOI(p) {
   if (p.key === 'agency') {
     // ---- L'AGENCE : refonte totale extérieur + intérieur pour coller à
@@ -4872,6 +4875,104 @@ function buildSpyPOI(p) {
       finishHouse(curHouse); curHouse = null;
     }
 
+    // ---- TAPIS ROUGE : du seuil de la porte, sur la terrasse et le quai,
+    // jusqu'à la statue Atlas — bordé de doré (visite officielle de l'Agence)
+    curHouse = { boxes: [], deco: [], mesh: null };
+    hdeco(BOX, 0x8f1d2c, BX, p.h + 0.08, BZ + 16.3, 4, 0.05, 10.7);
+    hdeco(BOX, GOLD, BX - 2.1, p.h + 0.09, BZ + 16.3, 0.12, 0.06, 10.7);
+    hdeco(BOX, GOLD, BX + 2.1, p.h + 0.09, BZ + 16.3, 0.12, 0.06, 10.7);
+    hdeco(BOX, 0x8f1d2c, BX, LV[0] + 0.06, BZ + 6.75, 4, 0.05, 5.5);
+    hdeco(BOX, GOLD, BX - 2.1, LV[0] + 0.07, BZ + 6.75, 0.12, 0.06, 5.5);
+    hdeco(BOX, GOLD, BX + 2.1, LV[0] + 0.07, BZ + 6.75, 0.12, 0.06, 5.5);
+
+    // ---- PALMIERS de part et d'autre de l'allée d'entrée : troncs inclinés
+    // à segments et couronnes de palmes retombantes
+    for (const sx of [-1, 1]) {
+      const tx = BX + sx * 4.6, tz = BZ + 21.5, ty = p.h;
+      hdeco(CYL_GEO, 0x8a6a45, tx, ty + 0.75, tz, 0.24, 1.5, 0.24);
+      hdeco(CYL_GEO, 0x8a6a45, tx + sx * 0.18, ty + 2.1, tz, 0.21, 1.3, 0.21);
+      hdeco(CYL_GEO, 0x8a6a45, tx + sx * 0.42, ty + 3.35, tz, 0.18, 1.1, 0.18);
+      hdeco(CYL_GEO, 0x7a5c3a, tx + sx * 0.42, ty + 3.35, tz, 0.3, 0.25, 0.3);
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + sx * 0.4;
+        hdeco(BOX, 0x3f8f3a, tx + sx * 0.42 + Math.sin(a) * 1.05, ty + 4.15, tz + Math.cos(a) * 1.05, 0.5, 0.07, 2.4, -0.45, a, 0, null, 'YXZ');
+      }
+      propBox(tx, ty, tz, 0.3, 0.3, 3.6);
+    }
+
+    // ---- VOITURE GHOST garée sur le quai : carrosserie bleu nuit, bandes
+    // dorées, plaques GHOST sur les portières et phares allumés
+    {
+      const cx = BX + 14, cz = BZ + 26.8, cy = p.h;
+      const car = new THREE.Group();
+      addBox(car, 4.2, 0.5, 1.9, 0, 0.55, 0, matC(0x1c2740, { metalness: 0.5, roughness: 0.35 }));
+      addBox(car, 2.1, 0.45, 1.7, -0.25, 1.02, 0, matC(0x223154, { metalness: 0.4, roughness: 0.3 }));
+      addBox(car, 2.0, 0.3, 1.72, -0.25, 1.35, 0, matC(0x27313f, { metalness: 0.2, roughness: 0.15 }));
+      addBox(car, 0.1, 0.06, 1.9, 0.55, 0.85, 0, matC(GOLD, { metalness: 0.7, roughness: 0.3 }));
+      addBox(car, 0.1, 0.06, 1.9, -0.55, 0.85, 0, matC(GOLD, { metalness: 0.7, roughness: 0.3 }));
+      for (const s of [-1, 1]) {
+        addBox(car, 0.5, 0.28, 0.12, -0.6, 1.0, s * 0.92, matC(0x1f3a8a));
+        addBox(car, 0.28, 0.28, 0.12, -0.6, 1.0, s * 0.94, matC(0xf2eef0, { emissive: 0xffffff, emissiveIntensity: 0.4 }));
+        addBox(car, 0.2, 0.14, 0.08, 2.0, 0.62, s * 0.62, matC(0xfff6cf, { emissive: 0xfff0c0, emissiveIntensity: 0.9 }));
+      }
+      for (const [wx, wz] of [[-1.35, -0.95], [1.35, -0.95], [-1.35, 0.95], [1.35, 0.95]]) {
+        const wh = new THREE.Mesh(CYL_GEO, matC(0x14161c, { roughness: 0.85 }));
+        wh.scale.set(0.56, 0.32, 0.56); wh.rotation.z = Math.PI / 2; wh.position.set(wx, 0.32, wz); car.add(wh);
+      }
+      scene.add(car);
+      car.position.set(X(cx), cy, Z(cz));
+      propBox(cx, cy, cz, 2.2, 1.1, 1.1);
+    }
+
+    // ---- PARABOLE RADAR sur le toit (angle nord-ouest) : disque incliné
+    // qui tourne lentement sur son mât, comme une base en veille
+    {
+      const rx2 = BX - 10.8, rz2 = BZ - 6.8;
+      hdeco(CYL_GEO, 0x8a8f98, rx2, 27.3, rz2, 0.16, 1.3, 0.16);
+      const dish2 = new THREE.Group();
+      const disc2 = new THREE.Mesh(CYL_GEO, matC(0xe6e8eb, { roughness: 0.35, metalness: 0.35 }));
+      disc2.scale.set(1.9, 0.24, 1.9); disc2.position.y = 0.55; disc2.rotation.x = -0.5; dish2.add(disc2);
+      const arm2 = new THREE.Mesh(BOX, matC(0x8a8f98)); arm2.scale.set(0.1, 0.85, 0.1); arm2.position.set(0, 0.85, 0.4); dish2.add(arm2);
+      dish2.position.set(X(rx2), 28, Z(rz2)); scene.add(dish2);
+      spyFx.push((dt, t) => { dish2.rotation.y = t * 0.5; });
+    }
+
+    // ---- PROJECTEURS DE VEILLE sur le toit : deux faisceaux bleu pâle qui
+    // balaient le ciel en continu, comme une base d'agents en alerte
+    for (const [sx, sz, sp] of [[1, -1, 0.35], [-1, 1, -0.28]]) {
+      const bx = BX + sx * 10.8, bz = BZ + sz * 6.5;
+      hdeco(CYL_GEO, 0x8a8f98, bx, 26.95, bz, 0.5, 0.5, 0.5);
+      hdeco(BOX, 0x6b7584, bx, 27.4, bz, 0.55, 0.45, 0.55);
+      const head = new THREE.Group();
+      const beam = new THREE.Mesh(new THREE.ConeGeometry(2.1, 22, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xbfd8ff, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      beam.position.y = 11; beam.rotation.x = Math.PI; head.add(beam);
+      const lens = new THREE.Mesh(BOX, matC(0xdfe8ff, { emissive: 0x9fc4ff, emissiveIntensity: 1.2 }));
+      lens.scale.set(0.5, 0.5, 0.5); head.add(lens);
+      head.rotation.z = 0.32;
+      head.position.set(X(bx), 27.7, Z(bz)); scene.add(head);
+      spyFx.push((dt, t) => { head.rotation.y = t * sp; });
+    }
+
+    // ---- EMBLÈME GHOST PEINT SUR LE TOIT : médaillon bleu à l'effigie du
+    // spectre, posé sur le gravier au nord (visible en atterrissant)
+    {
+      const gTex = canvasTex((g2, s) => {
+        g2.fillStyle = '#1f3a8a'; g2.beginPath(); g2.arc(s / 2, s / 2, s * 0.48, 0, 7); g2.fill();
+        g2.strokeStyle = '#ffc400'; g2.lineWidth = Math.floor(s * 0.04);
+        g2.beginPath(); g2.arc(s / 2, s / 2, s * 0.42, 0, 7); g2.stroke();
+        g2.fillStyle = '#ffffff';
+        g2.beginPath(); g2.arc(s / 2, s * 0.4, s * 0.2, Math.PI, 0);
+        g2.lineTo(s * 0.7, s * 0.62); g2.lineTo(s * 0.62, s * 0.56); g2.lineTo(s * 0.54, s * 0.62);
+        g2.lineTo(s * 0.46, s * 0.56); g2.lineTo(s * 0.38, s * 0.62); g2.lineTo(s * 0.3, s * 0.62);
+        g2.closePath(); g2.fill();
+        g2.fillStyle = '#1f3a8a';
+        g2.beginPath(); g2.arc(s * 0.44, s * 0.38, s * 0.035, 0, 7); g2.arc(s * 0.56, s * 0.38, s * 0.035, 0, 7); g2.fill();
+      }, 256);
+      const gPl = new THREE.Mesh(new THREE.PlaneGeometry(6.5 * K, 6.5 * K), new THREE.MeshBasicMaterial({ map: gTex, transparent: true, depthWrite: false }));
+      gPl.rotation.x = -Math.PI / 2; gPl.position.set(X(BX - 3), 26.8, Z(BZ - 6.5)); scene.add(gPl);
+    }
+    finishHouse(curHouse); curHouse = null;
+
     // ---- enseigne « THE AGENCY » retirée : la façade reste nue, sans affiche
 
     // ---- éclairage : hall, étages de l'atrium, sous-sol et façade (portée x K)
@@ -5117,6 +5218,94 @@ function buildSpyPOI(p) {
       hdeco(BOX, 0xffd23f, hx - 0.75, p.h + 0.5, hz, 0.45, 0.06, 1.7);
       hdeco(BOX, 0xffd23f, hx + 0.75, p.h + 0.5, hz, 0.45, 0.06, 1.7);
       hdeco(BOX, 0xffd23f, hx, p.h + 0.5, hz, 1.5, 0.06, 0.45);
+    }
+
+    // ---- CASCADE DE LA FALAISE : l'eau déborde du sommet du rocher ouest et
+    // retombe dans un bassin turquoise au pied de la falaise (texture
+    // défilante + embruns, comme la cascade de la Grotte)
+    {
+      const wfx = CLX - 8.9, wfz = CLZ + 2.5;
+      const wfTex = canvasTex((g, s) => {
+        g.fillStyle = 'rgba(190,230,255,0.9)'; g.fillRect(0, 0, s, s);
+        for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.5})`; g.fillRect(Math.random() * s, Math.random() * s, 2 + Math.random() * 4, 12 + Math.random() * 30); }
+      }, 128);
+      wfTex.wrapS = wfTex.wrapT = THREE.RepeatWrapping;
+      const wf = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.35, 5.6, 12, 1, true), new THREE.MeshBasicMaterial({ map: wfTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      wf.position.set(wfx, h0 + 2.6, wfz); scene.add(wf);
+      const pool = new THREE.Mesh(CYL_GEO, matC(0x53d8e8, { transparent: true, opacity: 0.7, roughness: 0.15 }));
+      pool.scale.set(2.2, 0.14, 2.8); pool.position.set(wfx, h0 + 0.07, wfz); scene.add(pool);
+      spyFx.push((dt) => {
+        wfTex.offset.y -= dt * 0.85;
+        if (MR() < dt * 2.5) burst(_v1.set(wfx + (MR() - 0.5) * 2.2, h0 + 0.1, wfz + (MR() - 0.5) * 2.4), 0xbfe8ff, 2, 2.2, 0.09, 0.4, 0.5);
+      });
+    }
+
+    // ---- LANTERNES DE LA BOUCHE : deux mâts lumineux encadrent l'entrée de
+    // la gueule (matériau émissif + point light chaude)
+    for (const s of [-1, 1]) {
+      const lx = CLX + s * 6.8, lz = CLZ + 11.8;
+      hdeco(CYL_GEO, 0x3a3f47, lx, h0 + 1.3, lz, 0.12, 2.6, 0.12);
+      hdeco(BOX, 0x3a3f47, lx, h0 + 3.05, lz, 0.46, 0.12, 0.46);
+      const lamp = new THREE.Mesh(BOX, matC(0xffd9a0, { emissive: 0xff9a2e, emissiveIntensity: 1.6 }));
+      lamp.scale.set(0.34, 0.42, 0.34); lamp.position.set(lx, h0 + 2.75, lz); scene.add(lamp);
+      const ll = new THREE.PointLight(0xffb45e, 2.2, 7); ll.position.set(lx, h0 + 2.8, lz); scene.add(ll);
+    }
+
+    // ---- DRAPEAU GHOST + PARABOLE DE COMMUNICATION sur le toit de la villa
+    hdeco(CYL_GEO, 0xb2b7bd, HX - 6.2, CT + 10.4, HZ - 4.6, 0.1, 4, 0.1);
+    hdeco(BOX, 0x1f3a8a, HX - 5.1, CT + 11.7, HZ - 4.6, 1.9, 1.2, 0.06);
+    hdeco(BOX, 0xffffff, HX - 5.1, CT + 11.7, HZ - 4.54, 0.55, 0.55, 0.02);
+    {
+      const dx = HX - 5.8, dz = HZ + 4.5;
+      hdeco(CYL_GEO, 0x8a8f98, dx, CT + 9.2, dz, 0.14, 1.7, 0.14);
+      const dish = new THREE.Group();
+      const disc = new THREE.Mesh(CYL_GEO, matC(0xe6e8eb, { roughness: 0.4, metalness: 0.3 }));
+      disc.scale.set(1.8, 0.22, 1.8); disc.position.y = 0.55; disc.rotation.x = -0.45; dish.add(disc);
+      const arm = new THREE.Mesh(BOX, matC(0x8a8f98)); arm.scale.set(0.1, 0.8, 0.1); arm.position.set(0, 0.8, 0.35); dish.add(arm);
+      dish.position.set(dx, CT + 10, dz); scene.add(dish);
+      spyFx.push((dt, t) => { dish.rotation.y = t * 0.5; });
+    }
+
+    // ---- COIN PLAGE (côté ouest) : parasol, transats, serviette et ballon
+    hdeco(CYL_GEO, 0xd8d2c4, p.x - 6.2, p.h + 1.15, p.z + 17, 0.09, 2.3, 0.09, 0.22, 0, 0);
+    hdeco(SPH_GEO, 0xe8563f, p.x - 6.5, p.h + 2.3, p.z + 17.3, 2.7, 1.0, 2.7);
+    hdeco(SPH_GEO, 0xf4f1ea, p.x - 6.5, p.h + 2.85, p.z + 17.3, 0.35, 0.35, 0.35);
+    hdeco(BOX, 0x3a4a5c, p.x - 8.8, p.h + 0.28, p.z + 16, 0.8, 0.22, 1.9, 0, 0.35, 0);
+    hdeco(BOX, 0x3a4a5c, p.x - 8.15, p.h + 0.75, p.z + 15.5, 0.8, 0.55, 0.65, -0.4, 0.35, 0);
+    hdeco(BOX, 0x3a4a5c, p.x - 4.4, p.h + 0.28, p.z + 18.7, 0.8, 0.22, 1.9, 0, -0.3, 0);
+    hdeco(BOX, 0x3a4a5c, p.x - 4.75, p.h + 0.75, p.z + 19.25, 0.8, 0.55, 0.65, -0.4, -0.3, 0);
+    hdeco(BOX, 0x3fa9ff, p.x - 5.2, p.h + 0.04, p.z + 19.9, 1.1, 0.05, 2.2, 0, 0.3, 0);
+    hdeco(SPH_GEO, 0xf4f1ea, p.x - 7.6, p.h + 0.35, p.z + 19.2, 0.55, 0.55, 0.55);
+    hdeco(BOX, 0xd2483a, p.x - 7.6, p.h + 0.35, p.z + 19.2, 0.57, 0.18, 0.57);
+
+    // ---- PONTON EN BOIS au sud-ouest + barque amarrée + bouées : le ponton
+    // part de la plage et s'avance 20 m au-dessus de l'eau
+    {
+      const px = p.x - 12, pz0 = p.z + 13, pz1 = p.z + 33;
+      makeStructBox(px, p.h + 0.35, (pz0 + pz1) / 2, 2.8, 0.3, pz1 - pz0, matC(0x8a6a45, { roughness: 0.9 }), { indestructible: true });
+      for (let i = 0; i <= 4; i++) hdeco(CYL_GEO, 0x6b4a2c, px, 0.65, pz0 + i * 5, 0.3, p.h + 1.6, 0.3);
+      hdeco(BOX, 0x6b4a2c, px - 1.45, p.h + 0.62, (pz0 + pz1) / 2, 0.14, 0.1, pz1 - pz0);
+      hdeco(BOX, 0x6b4a2c, px + 1.45, p.h + 0.62, (pz0 + pz1) / 2, 0.14, 0.1, pz1 - pz0);
+      hdeco(CYL_GEO, 0xffc400, px, p.h + 0.85, pz1 - 0.8, 0.14, 0.6, 0.14);
+      // barque amarrée au bout du ponton (flotte, tangue et roule doucement)
+      const boat = new THREE.Group();
+      addBox(boat, 1.6, 0.5, 3.4, 0, 0.25, 0, matC(0x8a6a45, { roughness: 0.85 }));
+      addBox(boat, 1.2, 0.16, 2.6, 0, 0.58, 0, matC(0x9a7a55, { roughness: 0.85 }));
+      addBox(boat, 1.1, 0.1, 0.4, 0, 0.66, 0.4, matC(0x7a5c3a, { roughness: 0.9 }));
+      addBox(boat, 1.1, 0.1, 0.4, 0, 0.66, -0.5, matC(0x7a5c3a, { roughness: 0.9 }));
+      scene.add(boat);
+      boat.position.set(px - 2.7, 0.42, pz1 - 3);
+      spyFx.push((dt, t) => {
+        boat.position.y = 0.42 + Math.sin(t * 1.1) * 0.08;
+        boat.rotation.z = Math.sin(t * 0.9) * 0.04;
+        boat.rotation.x = Math.sin(t * 0.7 + 1) * 0.03;
+      });
+      // deux bouées rouge et blanc qui dansent au large
+      for (const [bx, bz, ph] of [[-7, 37, 0], [-18, 39, 1.7]]) {
+        const bu = new THREE.Mesh(SPH_GEO, matC(0xd2483a)); bu.scale.set(0.78, 0.58, 0.78); bu.position.set(p.x + bx, 0.3, p.z + bz); scene.add(bu);
+        const bt = new THREE.Mesh(SPH_GEO, matC(0xf4f1ea)); bt.scale.setScalar(0.34); bt.position.set(p.x + bx, 0.75, p.z + bz); scene.add(bt);
+        spyFx.push((dt, t) => { const y = 0.3 + Math.sin(t * 1.4 + ph) * 0.12; bu.position.y = y; bt.position.y = y + 0.45; });
+      }
     }
     { const H = curHouse; curHouse = null; finishHouse(H); }
     // aileron dans l'eau au large
@@ -7235,6 +7424,9 @@ function updateWorld(dt) {
     const s = 1 + Math.sin(gameT * 11) * 0.1 + Math.sin(gameT * 23) * 0.05;
     rigFlare.flame.scale.set(s, 1 + Math.sin(gameT * 9) * 0.12, s);
   }
+  // animations des POI espions (cascade du Requin, barque, bouées, radar et
+  // projecteurs de l'Agence)
+  for (const a of spyFx) a(dt, gameT);
   for (const L of loot) {
     if (!L.alive) continue;
     L.t += dt;

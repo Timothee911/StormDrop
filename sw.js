@@ -1,5 +1,5 @@
 // STORMDROP service worker: the game works offline once it has been opened one time.
-const VERSION = 'stormdrop-v66';
+const VERSION = 'stormdrop-v67';
 const CORE = [
   './',
   './game.html',
