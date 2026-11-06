@@ -126,15 +126,16 @@ const base = process.env.QA_URL || 'http://localhost:8090';
       p.cool = p.equipT = p.reloading = 0; advanceTime(20);
     });
     const hitLayout = async () => page.evaluate(() => {
-      const selectors = ['#joyBase', '#bars', '#minimap', '#counts', '#mats', '#hotbar', ...[...document.querySelectorAll('.tbtn')].map(e => '#' + e.id)];
-      const boxes = selectors.map(s => ({ s, r: document.querySelector(s).getBoundingClientRect() }));
+      const selectors = ['#joyBase', '#bars', '#minimap', '#counts', '#mats', '#hotbar', '#ammoInfo', '#tPieces', ...[...document.querySelectorAll('.tbtn')].map(e => '#' + e.id)];
+      const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+      const boxes = selectors.filter(s => visible(document.querySelector(s))).map(s => ({ s, r: document.querySelector(s).getBoundingClientRect() }));
       const outside = boxes.filter(({ r }) => r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1).map(b => b.s);
       const overlap = [];
       for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
         const a = boxes[i], b = boxes[j];
         if (Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left) > 1 && Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top) > 1) overlap.push([a.s, b.s]);
       }
-      return { outside, overlap, targetSize: [...document.querySelectorAll('.tbtn, #hotbar .slot, .mat')].every(e => { const r = e.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; }) };
+      return { outside, overlap, targetSize: [...document.querySelectorAll('.tbtn, #hotbar .slot, .mat')].filter(visible).every(e => { const r = e.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; }) };
     });
     for (const [w, h] of [[667, 375], [667, 320], [844, 390], [932, 430], [844, 390]]) {
       await viewport(w, h);
@@ -218,6 +219,110 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     await page.tap('#tInteract');
     await page.waitForFunction(() => __game.player.mode === 'ground', { polling: 50 });
     check('AGIR : sortir du véhicule au toucher', await page.evaluate(() => __game.player.mode === 'ground'));
+    await page.evaluate(() => {
+      const g = __game, p = g.player;
+      p.mode = 'ground'; p.pos.set(2, 9.05, 30); p.vel.set(0, 0, 0); p.grounded = true;
+      p.mats = { wood: 300, stone: 300, metal: 300 }; p.cur = 1;
+      p.slots[1] = { kind: 'weapon', id: 'ar', rarity: 2, mag: 30 };
+      p.slots[2] = { kind: 'weapon', id: 'shotgun', rarity: 3, mag: 5 };
+      p.slots[3] = { kind: 'consum', id: 'shieldS', count: 3 };
+      g.selectSlot(1); g.setCam(0, -.1); advanceTime(500);
+    });
+    check('photo : carte en haut gauche, vie en bas gauche, objets en bas', await page.evaluate(() => {
+      const r = id => document.getElementById(id).getBoundingClientRect();
+      return r('minimap').left < 30 && r('minimap').top < 30 && r('bars').bottom > innerHeight - 30 &&
+        r('bars').left < 30 && r('hotbar').bottom > innerHeight - 30 && r('tJump').bottom < r('tFire').bottom &&
+        r('tFire').left > innerWidth * .7;
+    }));
+    check('toutes les commandes réelles présentes', await page.evaluate(() => ['tSprint','tMarker','tShoulder','tEmote','tBag','tRotate','tMaterial','tEditReset','tEditCancel'].every(id => document.getElementById(id)?.getAttribute('aria-label'))));
+    await page.tap('#tSprint');
+    check('COURIR : activation explicite', await page.$eval('#tSprint', e => e.getAttribute('aria-pressed') === 'true'));
+    await page.tap('#tSprint');
+    check('COURIR : désactivation sans touche bloquée', await page.$eval('#tSprint', e => e.getAttribute('aria-pressed') === 'false') && await page.evaluate(() => !__game.keys[__game.binds.sprint]));
+    await page.tap('#tMarker');
+    check('MARQUER : vrai repère dans le monde', await page.evaluate(() => JSON.parse(render_game_to_text()).marker.on));
+    await page.tap('#tMarker');
+    check('MARQUER : second toucher retire le repère', await page.evaluate(() => !JSON.parse(render_game_to_text()).marker.on));
+    const shoulder = await page.evaluate(() => JSON.parse(render_game_to_text()).shoulder);
+    await page.tap('#tShoulder');
+    check('ÉPAULE : changement réel de côté', await page.evaluate(v => JSON.parse(render_game_to_text()).shoulder === -v, shoulder));
+    await page.tap('#tShoulder');
+    check('ÉPAULE : retour au côté initial', await page.evaluate(v => JSON.parse(render_game_to_text()).shoulder === v, shoulder));
+    await page.tap('#tEmote');
+    check('EMOTE : lancer une animation', await page.evaluate(() => !!__game.player.emoting));
+    await page.tap('#tEmote');
+    check('EMOTE : arrêter une animation', await page.evaluate(() => !__game.player.emoting));
+    await page.tap('#tBag');
+    check('SAC : six objets, dialogue et commandes de jeu masquées', await page.evaluate(() => !document.getElementById('touchInventory').hidden && document.querySelectorAll('[data-invslot]').length === 6 && document.getElementById('touchUI').classList.contains('hidden')));
+    check('SAC : simulation vraiment en pause', await page.evaluate(() => { const t = __game.gameT; advanceTime(500); return __game.gameT === t; }));
+    await page.tap('[data-invslot="2"]');
+    check('SAC : sélectionner un objet', await page.evaluate(() => __game.player.cur === 2 && document.querySelector('[data-invslot="2"]').getAttribute('aria-pressed') === 'true'));
+    await page.tap('#touchBagEquip');
+    check('SAC : équiper et reprendre', await page.evaluate(() => { const t = __game.gameT; advanceTime(20); return document.getElementById('touchInventory').hidden && __game.gameT > t && __game.player.cur === 2; }));
+    await page.tap('#tBag');
+    const lootCount = await page.evaluate(() => __game.loot.length);
+    await page.tap('#touchBagDrop');
+    check('SAC : dépôt réel au sol sans perdre la pioche', await page.evaluate(n => !__game.player.slots[2] && __game.player.cur === 0 && __game.loot.length === n + 1 && __game.loot.at(-1).item.id === 'shotgun' && __game.player.slots[0].id === 'pickaxe', lootCount));
+    check('SAC : pioche protégée par un bouton désactivé', await page.$eval('#touchBagDrop', e => e.disabled));
+    await page.keyboard.press('Tab');
+    check('SAC : focus clavier reste dans le dialogue', await page.evaluate(() => document.getElementById('touchInventory').contains(document.activeElement)));
+    await page.tap('#touchBagClose');
+    await page.tap('#hotbar .slot:nth-child(2)');
+    check('inventaire rapide : vrais boutons accessibles et sélection', await page.evaluate(() => __game.player.cur === 1 && document.querySelector('#hotbar .slot:nth-child(2)').getAttribute('aria-pressed') === 'true'));
+    await page.focus('#hotbar .slot:first-child'); await page.keyboard.press('Enter');
+    check('inventaire rapide : activation clavier native', await page.evaluate(() => __game.player.cur === 0));
+    await page.tap('#hotbar .slot:nth-child(2)');
+    await page.tap('#tBuild');
+    await page.tap('#tPieces [data-p=ramp]');
+    const rotation = await page.evaluate(() => JSON.parse(render_game_to_text()).build.rotation);
+    await page.tap('#tRotate');
+    check('PIVOT : rotation de la rampe', await page.evaluate(r => JSON.parse(render_game_to_text()).build.rotation === (r + 1) % 4, rotation));
+    for (let i = 0; i < 3; i++) await page.tap('#tRotate');
+    check('PIVOT : cycle complet', await page.evaluate(r => JSON.parse(render_game_to_text()).build.rotation === r, rotation));
+    const material = await page.evaluate(() => __game.player.matSel);
+    await page.tap('#tMaterial');
+    check('MATÉRIAU : changer vraiment de ressource', await page.evaluate(m => __game.player.matSel !== m, material));
+    await page.tap('#tMaterial'); await page.tap('#tMaterial');
+    check('MATÉRIAU : revenir à la ressource initiale', await page.evaluate(m => __game.player.matSel === m, material));
+    for (const [w,h] of [[667,320],[844,390]]) {
+      await viewport(w,h); await page.evaluate(() => advanceTime(20));
+      const boxes = await hitLayout();
+      check(`${w}×${h} : construction sans collision avec les objets ou boutons`, !boxes.outside.length && !boxes.overlap.length && boxes.targetSize, boxes);
+    }
+    await page.tap('#tBuild');
+    await page.evaluate(() => {
+      const g = __game, p = g.player;
+      p.pos.set(2,9.05,20); p.vel.set(0,0,0); p.grounded = true; g.setCam(0,0);
+      g.placeBuild(p,'wall',0,4,8,0,'wood'); advanceTime(1100);
+      window.qaEditCol = [...g.builds.values()].find(c => c.ptype === 'wall' && c.owner === p);
+      // Stage a visible owned wall; all editing actions below use real taps.
+      g.camera.position.set(2,10,20); g.camera.lookAt(2,10,16); g.camera.updateMatrixWorld(); g.scene.updateMatrixWorld(true);
+    });
+    await page.tap('#tEdit');
+    check('MODIF. : ouvrir une vraie construction', await page.evaluate(() => !!__game.editing && document.getElementById('tEdit').textContent.includes('VALIDER')));
+    const editFire = await point('#tFire', 8);
+    await touch('touchStart',[editFire]); await page.evaluate(() => advanceTime(50)); await touch('touchEnd',[]);
+    check('CHOISIR : sélectionner des cases au toucher', await page.evaluate(() => __game.editing.mask > 0));
+    await page.tap('#tEditReset');
+    check('RÉINIT. : effacer les cases sélectionnées', await page.evaluate(() => __game.editing.mask === 0));
+    await page.tap('#tEditCancel');
+    check('ANNULER : sortir sans changer le mur', await page.evaluate(() => !__game.editing && qaEditCol.editMask === 0));
+    await page.evaluate(() => { __game.camera.position.set(2,10,20); __game.camera.lookAt(2,10,16); __game.camera.updateMatrixWorld(); __game.scene.updateMatrixWorld(true); });
+    await page.tap('#tEdit');
+    await touch('touchStart',[editFire]); await page.evaluate(() => advanceTime(50)); await touch('touchEnd',[]);
+    await page.tap('#tEdit');
+    check('VALIDER : modification appliquée au mur', await page.evaluate(() => !__game.editing && qaEditCol.editMask > 0));
+    await viewport(667,320);
+    await page.evaluate(() => {
+      document.body.style.setProperty('--touch-left','47px');
+      document.body.style.setProperty('--touch-right','47px');
+      document.body.style.setProperty('--touch-low','34px');
+      advanceTime(20);
+    });
+    const notched = await hitLayout();
+    check('petit paysage avec encoches : vie, armes et touches séparées', !notched.outside.length && !notched.overlap.length && notched.targetSize, notched);
+    await page.evaluate(() => ['--touch-left','--touch-right','--touch-low'].forEach(k => document.body.style.removeProperty(k)));
+    await viewport(844,390);
     // Exercise the native API contract without pretending this desktop browser
     // is real phone hardware. Only fullscreen/orientation services are stubbed.
     const native = await browser.newPage();

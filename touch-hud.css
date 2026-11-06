@@ -1,0 +1,127 @@
+/* Landscape phone HUD. Photo reference: map left, health low left,
+   inventory low centre, a clear camera region and a right-thumb combat arc. */
+body.touch {
+  --touch-left: max(12px, env(safe-area-inset-left, 0px));
+  --touch-right: max(12px, env(safe-area-inset-right, 0px));
+  --touch-top: max(12px, env(safe-area-inset-top, 0px));
+  --touch-low: max(12px, env(safe-area-inset-bottom, 0px));
+}
+body.touch #touchUI [hidden], #touchInventory[hidden] { display: none !important; }
+body.touch .tbtn {
+  width: 48px; height: 48px; border: 1.5px solid #ffffffa8;
+  background: rgba(12, 23, 39, .72); color: #fff; gap: 2px;
+  font-size: 10px; letter-spacing: .02em; box-shadow: 0 2px 5px #0003;
+  text-shadow: 0 1px 2px #000a;
+}
+body.touch .tbtn svg { width: 24px; height: 24px; stroke-width: 1.9; }
+body.touch .tbtn.small { width: 44px; height: 44px; font-size: 9px; }
+body.touch .tbtn.small svg { width: 22px; height: 22px; }
+body.touch .tbtn.big { width: 70px; height: 70px; background: rgba(12, 23, 39, .66); border-width: 2px; font-size: 12px; }
+body.touch .tbtn.big svg { width: 34px; height: 34px; }
+body.touch .tbtn:disabled { opacity: .5; }
+body.touch .tbtn.pressed, body.touch .tbtn[aria-pressed="true"] { background: #405e42e8; border-color: #c6f5a9; }
+body.touch .tbtn:focus-visible, #touchInventory button:focus-visible, body.touch .tp:focus-visible { outline: 3px solid #ffe24a; outline-offset: 3px; }
+body.touch #tMap { left: calc(var(--touch-left) + 98px); right: auto; top: var(--touch-top); bottom: auto; }
+body.touch #tPause { right: var(--touch-right); top: var(--touch-top); bottom: auto; }
+body.touch #tBag { right: calc(var(--touch-right) + 50px); top: var(--touch-top); }
+body.touch #tEmote { right: calc(var(--touch-right) + 100px); top: var(--touch-top); }
+body.touch #tMarker { right: calc(var(--touch-right) + 150px); top: var(--touch-top); }
+body.touch #tFire { right: calc(var(--touch-right) + 8px); bottom: calc(var(--touch-low) + 76px); }
+body.touch #tJump { right: calc(var(--touch-right) + 8px); bottom: calc(var(--touch-low) + 156px); width: 54px; height: 54px; }
+body.touch #tInteract { right: calc(var(--touch-right) + 76px); bottom: calc(var(--touch-low) + 176px); }
+body.touch #tCrouch { right: calc(var(--touch-right) + 86px); bottom: calc(var(--touch-low) + 118px); }
+body.touch #tAds { right: calc(var(--touch-right) + 136px); bottom: calc(var(--touch-low) + 172px); width: 52px; height: 52px; }
+body.touch #tShoulder { right: calc(var(--touch-right) + 136px); bottom: calc(var(--touch-low) + 116px); }
+body.touch #tReload { right: calc(var(--touch-right) + 8px); bottom: calc(var(--touch-low) + 12px); }
+body.touch #tSprint { left: calc(var(--touch-left) + 134px); top: max(calc(var(--touch-top) + 124px), calc(100dvh - var(--touch-low) - 172px)); bottom: auto; }
+body.touch #tBuild { left: calc(var(--touch-left) + 134px); bottom: calc(var(--touch-low) + 64px); }
+body.touch #tEdit { left: calc(var(--touch-left) + 190px); bottom: calc(var(--touch-low) + 64px); }
+body.touch #tRotate { left: calc(50% + 84px); bottom: calc(var(--touch-low) + 64px); }
+body.touch #tMaterial { left: calc(50% + 28px); bottom: calc(var(--touch-low) + 64px); }
+body.touch #tEditReset { left: calc(50% - 28px); bottom: calc(var(--touch-low) + 64px); }
+body.touch #tEditCancel { left: calc(50% + 28px); bottom: calc(var(--touch-low) + 64px); }
+body.touch #joyBase {
+  left: calc(var(--touch-left) + 8px); bottom: calc(var(--touch-low) + 62px);
+  width: 104px; height: 104px; opacity: .85;
+  background: rgba(12, 23, 39, .3); border: 1.5px solid #ffffff90;
+}
+body.touch #joyKnob { width: 42px; height: 42px; margin: -21px 0 0 -21px; background: #d6dce6a8; border-width: 1px; }
+body.touch #touchBearing {
+  position: absolute; top: var(--touch-top); left: 50%; transform: translateX(-50%);
+  width: 112px; text-align: center; color: #fff; font-size: 16px; font-weight: 700;
+  line-height: 30px; text-shadow: 0 1px 3px #000, 0 2px 7px #000;
+  font-variant-numeric: tabular-nums;
+}
+body.touch #topright { left: var(--touch-left); right: auto; top: var(--touch-top); align-items: flex-start; gap: 6px; }
+body.touch #minimap { width: 92px; height: 92px; border-radius: 3px; border-width: 2px; }
+body.touch #counts { position: static; width: 176px; gap: 3px; }
+body.touch #counts #stormInfo, body.touch #counts .count { font-size: 12px; padding: 3px; }
+body.touch #counts .count span:last-child { font-size: 14px; }
+body.touch #counts .count .lbl svg { width: 12px; height: 12px; }
+body.touch #teamHud { position: fixed; top: var(--touch-top); left: calc(var(--touch-left) + 152px); width: 94px; gap: 3px; margin: 0; }
+body.touch .tm { width: 94px; padding: 2px 4px; gap: 2px; flex-wrap: wrap; border: 0; background: #0c172bbd; box-shadow: none; }
+body.touch .tm .tm-n { width: 100%; font-size: 11px; line-height: 12px; }
+body.touch .tm .tm-bars { flex-basis: 100%; gap: 1px; }
+body.touch .tm .tm-bars i { height: 3px; }
+body.touch #bars { top: auto; bottom: var(--touch-low); left: var(--touch-left); width: clamp(124px, 19vw, 156px); gap: 4px; }
+body.touch .bar { height: 18px; }
+body.touch .bar span { font-size: 12px; }
+body.touch .bar-ico { width: 13px; height: 13px; }
+body.touch .barrow { gap: 5px; }
+body.touch #mats { top: calc(var(--touch-top) + 50px); bottom: auto; left: calc(50% - 70px); right: auto; gap: 4px; }
+body.touch #mats .mat { width: 44px; min-width: 44px; height: 44px; padding: 3px; gap: 1px; font-size: 13px; background: #0c172bbd; box-shadow: none; }
+body.touch #mats .mi { width: 18px; height: 18px; }
+body.touch #bottomright { bottom: var(--touch-low); }
+body.touch #hotbar { gap: 4px; }
+body.touch .slot { width: 44px; height: 48px; padding: 0; color: #fff; font: inherit; border-radius: 4px; background: rgba(12,23,39,.8); }
+body.touch .slot .nm { display: none; }
+body.touch .slot svg { width: 38px; height: 28px; }
+body.touch .slot .cnt { font-size: 11px; }
+body.touch #ammoInfo { position: fixed; bottom: var(--touch-low); top: auto; left: auto; right: calc(var(--touch-right) + 70px); transform: none; width: 96px; min-width: 0; font-size: 26px; align-items: flex-end; text-align: right; padding: 3px; border-radius: 3px; background: #0c172be6; }
+body.touch #ammoInfo:empty { display: none; }
+body.touch #ammoInfo .wn { width: 90px; font-size: 11px; }
+body.touch #ammoInfo small { display: inline; font-size: 12px; }
+body.touch .touch-ammo-values { display: flex; align-items: baseline; gap: 5px; line-height: 1; }
+body.touch #tPieces { left: 50%; transform: translateX(-50%); bottom: var(--touch-low); grid-template-columns: repeat(4, 54px); gap: 6px; }
+body.touch #tPieces .tp { width: 54px; height: 48px; display: flex; flex-direction: column; gap: 2px; font-size: 10px; background: #0c172be6; }
+body.touch #tPieces .tp svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+body.touch.touch-building #hotbar, body.touch.touch-building #ammoInfo { visibility: hidden; }
+body.touch.touch-editing #ammoInfo { visibility: hidden; }
+body.touch #disguiseTag { top: calc(var(--touch-top) + 104px); left: 50%; transform: translateX(-50%); max-width: 220px; font-size: 11px; }
+body.touch #centerMsg { top: 39%; max-width: calc(100% - 460px); font-size: 22px; }
+body.touch #centerMsg small { font-size: 12px; }
+body.touch #prompt { top: 43%; max-width: calc(100% - 460px); font-size: 14px; }
+body.touch #editHint { top: 43%; bottom: auto; left: 50%; width: 210px; max-width: calc(100% - 360px); font-size: 12px; text-align: center; }
+body.touch #busHint { top: 42%; width: 220px; max-width: calc(100% - 360px); font-size: 16px; }
+body.touch #killfeed { top: calc(var(--touch-top) + 135px); left: var(--touch-left); right: auto; max-width: 180px; }
+body.touch #poiBanner { top: 30%; font-size: 24px; }
+body.touch.touch-notice #disguiseTag, body.touch.touch-notice #poiBanner,
+body.touch.touch-disguised #poiBanner { visibility: hidden; }
+#touchInventory { position: fixed; z-index: 85; inset: 0; background: rgba(7, 15, 29, .96); color: #fff; display: grid; place-items: center; padding: max(14px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); overflow: auto; font-family: var(--font-body); }
+.touch-bag-panel { width: min(760px, 100%); }
+.touch-bag-panel header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 14px; }
+.touch-bag-panel h2 { margin: 0; font-family: var(--font-display); font-size: 25px; }
+.touch-bag-panel p { margin: 3px 0 0; font-size: 15px; color: #d6e3f6; }
+#touchInventory button { min-width: 44px; min-height: 44px; color: #fff; background: #203550; border: 1px solid #8cabc7; border-radius: 5px; font: 700 15px var(--font-body); cursor: pointer; touch-action: manipulation; padding: 8px 14px; }
+#touchBagSlots { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+#touchBagSlots button { position: relative; height: 96px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 7px; padding: 6px; }
+#touchBagSlots button svg { width: 52px; height: 30px; fill: currentColor; }
+#touchBagSlots button span { font-size: 12px; line-height: 1.15; text-align: center; }
+#touchBagSlots button b { position: absolute; top: 5px; right: 6px; font-size: 12px; }
+#touchBagSlots button[aria-pressed="true"] { border: 2px solid #ffe24a; background: #37466a; }
+#touchInventory button:disabled { color: #c3cedd; background: #17263c; border-color: #475b72; cursor: default; }
+#touchBagStatus { min-height: 20px; margin: 12px 0; }
+.touch-bag-panel footer { display: flex; gap: 10px; }
+#touchInventory #touchBagEquip { background: #ffe24a; color: #10182d; border-color: #ffe24a; }
+@media (max-height: 360px) {
+  body.touch #joyBase { width: 84px; height: 84px; }
+  body.touch #joyKnob { width: 36px; height: 36px; margin: -18px 0 0 -18px; }
+  body.touch #tSprint { left: calc(var(--touch-left) + 190px); top: auto; bottom: calc(var(--touch-low) + 124px); }
+  .touch-bag-panel header { margin-bottom: 10px; }
+  #touchBagSlots button { height: 80px; }
+  #touchBagStatus { margin: 8px 0; }
+}
+@media (max-width: 740px) {
+  body.touch #ammoInfo { left: calc(50% + 8px); right: auto; transform: translateX(-50%); bottom: calc(var(--touch-low) + 64px); }
+  body.touch #touchBearing { left: calc(50% + 26px); }
+}

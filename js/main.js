@@ -2553,7 +2553,7 @@ function startEdit() {
   layoutEditGrid(hit.col.ptype); hit.col.mesh.add(editGrid);
   document.getElementById('crosshair').classList.add('build'); sfx('edit', 0.5);
   document.getElementById('editHint').style.display = 'block';
-  document.getElementById('editHint').innerHTML = `<b>ÉDITION</b> · clic gauche : sélectionner des cases/pans · clic droit : réinitialiser · <kbd>${keyLabel(BIND.edit)}</kbd> valider`;
+  document.getElementById('editHint').innerHTML = IS_TOUCH ? 'ÉDITION · CHOISIR les cases · RÉINIT. pour repartir · VALIDER ou ANNULER' : `<b>ÉDITION</b> · clic gauche : sélectionner des cases/pans · clic droit : réinitialiser · <kbd>${keyLabel(BIND.edit)}</kbd> valider`;
 }
 function cancelEdit() {
   if (!editing) return;
@@ -2600,6 +2600,9 @@ function applyEdit(col, mask) {
 function updateEdit() {
   if (!editing) return;
   if (!editing.col.alive || !player.alive) { cancelEdit(); return; }
+  // Input can arrive before the next render, especially on a touch screen.
+  // Raycast against this frame's newly attached/edit-scaled tiles, not stale matrices.
+  editGrid.updateWorldMatrix(true, true);
   const d = _v2; camera.getWorldDirection(d);
   raycaster.set(camera.position, d); raycaster.far = 12; raycaster.near = 0;
   const h = raycaster.intersectObjects(editTiles.filter((tile) => tile.visible), false)[0];
@@ -2872,10 +2875,10 @@ const down = (act) => !!keys[BIND[act]];
 // caméra au doigt + aim assist léger comme sur Fortnite mobile).
 // =====================================================================
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-let touchUIRoot = null, touchResetFn = null;
+let touchUIRoot = null, touchResetFn = null, touchSyncFn = null, touchBagOpen = false, touchBagClose = null;
 function syncTouchUI() {
   if (!touchUIRoot) return;
-  const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen && !window.StormLandscape?.blocked;
+  const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen && !touchBagOpen && !window.StormLandscape?.blocked;
   if (!show && !touchUIRoot.classList.contains('hidden')) touchResetFn?.();
   touchUIRoot.classList.toggle('hidden', !show);
 }
@@ -2903,7 +2906,16 @@ function touchInit() {
     tEdit: '<path d="m5 15 10-10 4 4L9 19l-5 1 1-5Zm8-8 4 4"/>',
     tCrouch: '<circle cx="12" cy="4" r="2"/><path d="m7 12 5-4 5 4h4M12 8v7l-6 3 3 3m3-6 6 3v3"/>',
     tMap: '<path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5Zm6-2v16m6-14v16"/>',
-    tPause: '<path d="M8 4v16M16 4v16"/>'
+    tPause: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    tSprint: '<circle cx="15" cy="4" r="2"/><path d="m4 11 5-3 5 2 3 4h4M13 9l-3 6-6 5m6-5 6 2 1 5M2 5h6M1 8h4"/>',
+    tMarker: '<path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/>',
+    tShoulder: '<path d="m7 4-4 4 4 4M3 8h7m7 12 4-4-4-4m4 4h-7"/><circle cx="12" cy="5" r="2"/><path d="M8 21v-7a4 4 0 0 1 8 0v7"/>',
+    tEmote: '<circle cx="12" cy="5" r="2"/><path d="m4 9 5 3h6l5-5M12 12v5m0 0-5 5m5-5 6 4"/>',
+    tBag: '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M5 9a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v12H5V9Z"/><path d="M8 14h8v5H8zM3 11v7m18-7v7"/>',
+    tRotate: '<path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/>',
+    tMaterial: '<path d="m12 3 10 6-10 6L2 9 12 3Zm-10 12 10 6 10-6M2 12l10 6 10-6"/>',
+    tEditReset: '<path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/>',
+    tEditCancel: '<path d="m5 5 14 14M19 5 5 19"/>'
   };
   const control = (id, label, extra = '') => `<button type="button" id="${id}" class="tbtn ${extra}" aria-label="${label}"><svg viewBox="0 0 24 24" aria-hidden="true">${icons[id]}</svg><span>${label}</span></button>`;
   ui.innerHTML = `
@@ -2918,7 +2930,17 @@ function touchInit() {
     ${control('tCrouch', 'ACCROUPI')}
     ${control('tMap', 'CARTE', 'small')}
     ${control('tPause', 'PAUSE', 'small')}
-    <div id="tPieces"><button type="button" class="tp" data-p="wall">MUR</button><button type="button" class="tp" data-p="floor">SOL</button><button type="button" class="tp" data-p="ramp">RAMPE</button><button type="button" class="tp" data-p="cone">TOIT</button></div>`;
+    ${control('tSprint', 'COURIR')}
+    ${control('tMarker', 'MARQUER', 'small')}
+    ${control('tShoulder', 'ÉPAULE', 'small')}
+    ${control('tEmote', 'EMOTE', 'small')}
+    ${control('tBag', 'SAC', 'small')}
+    ${control('tRotate', 'PIVOT')}
+    ${control('tMaterial', 'MATÉRIAU')}
+    ${control('tEditReset', 'RÉINIT.')}
+    ${control('tEditCancel', 'ANNULER')}
+    <div id="touchBearing" aria-hidden="true"></div>
+    <div id="tPieces" role="group" aria-label="Pièces de construction"><button type="button" class="tp" data-p="wall"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16v18H4zM4 9h16M4 15h16M12 3v6M8 9v6m8-6v6m-4 0v6"/></svg>MUR</button><button type="button" class="tp" data-p="floor"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 13 10-7 10 7-10 7-10-7Zm5-3 10 7M7 17l10-7"/></svg>SOL</button><button type="button" class="tp" data-p="ramp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21 21 3v18H3Zm5-5h13m-8-5h8"/></svg>RAMPE</button><button type="button" class="tp" data-p="cone"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 19 10-15 10 15H2Zm10-15v15M2 19l10-5 10 5"/></svg>TOIT</button></div>`;
   document.body.appendChild(ui);
   touchUIRoot = ui;
   for (const [id, label] of Object.entries({ tReload: 'Recharger', tBuild: 'Construction', tEdit: 'Modifier une construction', tInteract: 'Interagir ou entrer et sortir du véhicule' })) {
@@ -2926,8 +2948,92 @@ function touchInit() {
   }
   // l'aide du menu pause parle de raccourcis clavier : version tactile
   const ch = document.querySelector('#pause .ctl-help');
-  if (ch) ch.innerHTML = '<span>TIR : tirer / placer</span><span>VISER : viser</span><span>AGIR : interagir / entrer ou sortir du véhicule</span><span>CONSTR. : construire · MODIF. : modifier</span><span>Joystick : déplacer / conduire, à fond = sprint</span><span>Glisse à droite : caméra</span><span>Tourne le téléphone : la disposition s’adapte</span>';
+  if (ch) ch.innerHTML = '<span>Gauche : joystick et COURIR</span><span>Droite : caméra, TIR, VISER, SAUT, ACCROUPI</span><span>AGIR : ouvrir, ramasser, entrer / sortir du véhicule</span><span>CONSTR. : quatre pièces, PIVOT et MATÉRIAU</span><span>MODIF. : sélectionner au tir, VALIDER, RÉINIT. ou ANNULER</span><span>En haut : CARTE, MARQUER, EMOTE, SAC et PAUSE</span><span>SAC : équiper ou déposer · objets en bas : sélectionner</span>';
   const $t = (id) => document.getElementById(id);
+  let sprintOn = false;
+  const label = (id, text, accessible = text) => {
+    const b = $t(id);
+    if (b.querySelector('span').textContent !== text) b.querySelector('span').textContent = text;
+    b.setAttribute('aria-label', accessible);
+  };
+  // Construction/edit controls are contextual; the camera stays unobstructed.
+  touchSyncFn = () => {
+    if (!player) return;
+    const driving = player.mode === 'drive', grounded = player.mode === 'ground';
+    ui.classList.toggle('building', buildMode);
+    ui.classList.toggle('editing', !!editing);
+    document.body.classList.toggle('touch-building', buildMode);
+    document.body.classList.toggle('touch-editing', !!editing);
+    document.body.classList.toggle('touch-notice', centerT > 0);
+    document.body.classList.toggle('touch-disguised', !!player.disguise);
+    $t('tRotate').hidden = !buildMode || buildPiece !== 'ramp';
+    $t('tMaterial').hidden = !buildMode;
+    $t('tEditReset').hidden = $t('tEditCancel').hidden = !editing;
+    $t('tReload').hidden = buildMode || !!editing;
+    $t('tAds').hidden = buildMode || !!editing || driving;
+    $t('tShoulder').hidden = buildMode || !!editing || driving;
+    $t('tFire').disabled = driving || (!grounded && !editing);
+    $t('tBuild').disabled = !grounded;
+    $t('tEdit').disabled = !grounded;
+    $t('tCrouch').disabled = !grounded;
+    $t('tEmote').disabled = !grounded || buildMode;
+    $t('tInteract').disabled = player.mode === 'bus';
+    label('tJump', driving ? 'KLAXON' : player.mode === 'bus' ? 'SAUTER' : ['fall', 'glide'].includes(player.mode) ? 'PLANEUR' : 'SAUT');
+    label('tFire', editing ? 'CHOISIR' : buildMode ? 'PLACER' : player.item?.kind === 'consum' ? 'UTILISER' : 'TIR');
+    label('tEdit', editing ? 'VALIDER' : 'MODIF.', editing ? 'Valider la modification' : 'Modifier une construction');
+    label('tInteract', driving ? 'SORTIR' : 'AGIR', driving ? 'Sortir du véhicule' : 'Interagir ou entrer dans un véhicule');
+    for (const [id, on] of [['tBuild', buildMode], ['tSprint', sprintOn], ['tAds', mouse.r], ['tCrouch', player.crouchToggle], ['tEmote', !!player.emoting]]) {
+      const value = String(!!on);
+      if ($t(id).getAttribute('aria-pressed') !== value) $t(id).setAttribute('aria-pressed', value);
+    }
+    const heading = ((-camYaw * 180 / Math.PI) % 360 + 360) % 360;
+    const bearing = `${['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(heading / 45) % 8]}  |  ${Math.round(heading)}°`;
+    if ($t('touchBearing').textContent !== bearing) $t('touchBearing').textContent = bearing;
+  };
+  const bag = document.createElement('section');
+  bag.id = 'touchInventory'; bag.hidden = true; bag.setAttribute('role', 'dialog');
+  bag.setAttribute('aria-modal', 'true'); bag.setAttribute('aria-labelledby', 'touchBagTitle');
+  bag.innerHTML = '<div class="touch-bag-panel"><header><div><h2 id="touchBagTitle">SAC À DOS</h2><p>La partie est en pause.</p></div><button type="button" id="touchBagClose">FERMER</button></header><div id="touchBagSlots" role="group" aria-label="Objets du sac"></div><p id="touchBagStatus" role="status"></p><footer><button type="button" id="touchBagEquip">ÉQUIPER</button><button type="button" id="touchBagDrop">DÉPOSER</button></footer></div>';
+  document.body.appendChild(bag);
+  const drawBag = () => {
+    $t('touchBagSlots').innerHTML = player.slots.map((s, i) => {
+      const name = !s ? 'Vide' : s.kind === 'weapon' ? WEAPONS[s.id].name : CONSUM[s.id].name;
+      return `<button type="button" data-invslot="${i}" aria-label="${name}" aria-pressed="${i === player.cur}" ${!s ? 'disabled' : ''}>${s ? ICONS[s.id] || '' : ''}<span>${name}</span>${s?.kind === 'consum' ? `<b>×${s.count}</b>` : ''}</button>`;
+    }).join('');
+    $t('touchBagDrop').disabled = player.cur === 0 || !player.item;
+    $t('touchBagEquip').disabled = !player.item;
+  };
+  touchBagClose = () => {
+    touchBagOpen = false; bag.hidden = true; touchResetFn?.(); syncTouchUI();
+    $t('tBag').focus({ preventScroll: true });
+  };
+  $t('tBag').addEventListener('click', () => {
+    if (state !== 'playing' || paused || !player.alive) return;
+    touchResetFn?.(); touchBagOpen = true; drawBag(); bag.hidden = false;
+    $t('touchBagStatus').textContent = 'Choisis un objet. La pioche ne peut pas être déposée.';
+    syncTouchUI(); $t('touchBagClose').focus({ preventScroll: true });
+  });
+  $t('touchBagSlots').addEventListener('click', e => {
+    const b = e.target.closest('[data-invslot]'); if (!b) return;
+    selectSlot(+b.dataset.invslot); drawBag();
+    $t('touchBagSlots').querySelector(`[data-invslot="${player.cur}"]`).focus({ preventScroll: true });
+  });
+  $t('touchBagClose').onclick = $t('touchBagEquip').onclick = touchBagClose;
+  $t('touchBagDrop').onclick = () => {
+    if (player.cur === 0 || !player.item) return;
+    camera.getWorldDirection(_v1); _v1.y = 0; _v1.normalize();
+    spawnLoot(player.item, player.pos.x + _v1.x * 2, player.pos.y + .4, player.pos.z + _v1.z * 2);
+    player.slots[player.cur] = null; player.using = null; player.reloading = 0;
+    player.cur = 0; updateHotbar(); drawBag();
+    $t('touchBagStatus').textContent = 'Objet déposé devant toi.';
+    $t('touchBagEquip').focus({ preventScroll: true });
+  };
+  bag.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const stops = [...bag.querySelectorAll('button:not(:disabled)')], first = stops[0], last = stops.at(-1);
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
   const joyBase = $t('joyBase'), joyKnob = $t('joyKnob');
   // ---- joystick flottant (moitié gauche de l'écran) ----
   let joyId = null, joyCX = 0, joyCY = 0, joyX = 0, joyY = 0;
@@ -2944,7 +3050,7 @@ function touchInit() {
     const fwd = joyY < -0.3, back = joyY > 0.3, left = joyX < -0.3, right = joyX > 0.3;
     k(fwd, 'forward'); k(back, 'back'); k(left, 'left'); k(right, 'right');
     // joystick à fond = sprint
-    const spr = mag > 0.9;
+    const spr = mag > 0.9 || (sprintOn && mag > dead);
     keys[BIND.sprint] = spr; keys.ShiftRight = spr;
   }
   function joyEnd() {
@@ -2966,12 +3072,27 @@ function touchInit() {
     camPitch = clamp(camPitch, -1.35, 1.25);
   }
   // ---- boutons ----
-  function press(code) { window.dispatchEvent(new KeyboardEvent('keydown', { code })); }
+  function press(code) {
+    window.dispatchEvent(new KeyboardEvent('keydown', { code }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { code }));
+    touchSyncFn?.();
+  }
   const hold = (el, on, off) => {
-    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); el.classList.add('pressed'); on(); }, { passive: false });
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); if (el.disabled) return; el.classList.add('pressed'); on(); }, { passive: false });
     const release = () => { el.classList.remove('pressed'); off && off(); };
     el.addEventListener('touchend', (e) => { e.preventDefault(); if (!e.targetTouches.length) release(); }, { passive: false });
     el.addEventListener('touchcancel', release, { passive: true });
+    el.addEventListener('keydown', e => {
+      if (!['Space', 'Enter'].includes(e.code)) return;
+      e.preventDefault(); e.stopPropagation();
+      if (e.repeat || el.disabled) return;
+      el.classList.add('pressed'); on();
+    });
+    el.addEventListener('keyup', e => {
+      if (!['Space', 'Enter'].includes(e.code)) return;
+      e.preventDefault(); e.stopPropagation(); release();
+    });
+    el.addEventListener('blur', release);
   };
   hold($t('tFire'), () => { mouse.l = true; onFirePress(); }, () => { mouse.l = false; });
   hold($t('tJump'), () => { press(BIND.jump); keys[BIND.jump] = true; }, () => { keys[BIND.jump] = false; });
@@ -2990,30 +3111,51 @@ function touchInit() {
     el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
   };
   aimWhileHeld($t('tFire')); aimWhileHeld($t('tAds'));
-  hold($t('tCrouch'), () => { press(BIND.crouch); }, null);
+  hold($t('tCrouch'), () => { press(BIND.crouch); keys[BIND.crouch] = true; }, () => { keys[BIND.crouch] = false; });
   $t('tInteract').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.interact); }, { passive: false });
   $t('tReload').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.reload); }, { passive: false });
   $t('tBuild').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.buildToggle); }, { passive: false });
   hold($t('tEdit'), () => press(BIND.edit), null);
+  $t('tSprint').addEventListener('click', () => { sprintOn = !sprintOn; joyApply(); touchSyncFn(); });
+  $t('tMarker').addEventListener('click', () => press(BIND.marker));
+  $t('tShoulder').addEventListener('click', () => press(BIND.shoulder));
+  $t('tEmote').addEventListener('click', () => press(BIND.emote));
+  $t('tRotate').addEventListener('click', () => press(BIND.reload));
+  $t('tMaterial').addEventListener('click', () => press(BIND.matCycle));
+  $t('tEditReset').addEventListener('click', () => { if (editing) { editing.mask = 0; editing.paint = null; sfx('click', .4); } });
+  $t('tEditCancel').addEventListener('click', () => { cancelEdit(); touchSyncFn(); });
   // boutons de pièces de construction : gros boutons dédiés au pouce, visibles en mode CONS
   for (const b of ui.querySelectorAll('#tPieces .tp')) {
+    const choose = () => {
+      if (state !== 'playing' || paused) return;
+      cancelEdit(); buildPiece = b.dataset.p; setBuildMode(true); touchSyncFn();
+    };
     b.addEventListener('touchstart', (e) => {
       e.preventDefault(); e.stopPropagation();
-      if (state !== 'playing' || paused) return;
-      cancelEdit(); buildPiece = b.dataset.p; setBuildMode(true);
+      choose();
     }, { passive: false });
+    b.addEventListener('click', choose);
   }
   $t('tMap').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.map); }, { passive: false });
   $t('tPause').addEventListener('touchstart', (e) => { e.preventDefault(); press('Escape'); }, { passive: false });
+  // The touch handler suppresses compatibility clicks; native button activation
+  // still needs its own click path for a keyboard or assistive technology.
+  for (const [id, action] of [['tInteract','interact'],['tReload','reload'],['tBuild','buildToggle'],['tMap','map']]) {
+    $t(id).addEventListener('click', () => press(BIND[action]));
+  }
+  $t('tPause').addEventListener('click', () => press('Escape'));
   // ---- événements tactiles globaux (document) : le calque #touchUI est
   // pointer-events:none, on écoute partout SAUF sur les boutons et le HUD tapable ----
   const skipTarget = (t) => t.closest && t.closest('.tbtn, #tPieces, #hotbar, #buildbar, #mats, #minimap, button, .panel, #bigmap, #pause, #gameSettings, #victory, #endscreen, #spectate, input, select');
   // reset complet des commandes tactiles (pause, carte, onglet caché)
   touchResetFn = () => {
     joyEnd(); lookId = null;
+    sprintOn = false;
     mouse.l = mouse.r = false; keys[BIND.jump] = false; keys[BIND.sprint] = false;
+    keys[BIND.crouch] = false;
     ui.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
     keys.KeyW = keys.KeyS = keys.KeyA = keys.KeyD = false; keys.ShiftRight = false;
+    touchSyncFn?.();
   };
   document.addEventListener('visibilitychange', () => { if (document.hidden) touchResetFn?.(); });
   window.addEventListener('resize', () => touchResetFn?.());
@@ -3025,16 +3167,20 @@ function touchInit() {
     if (bigmapOpen) { bigmapOpen = false; bigmapEl.classList.add('hidden'); syncTouchUI(); tryLock(); }
   }, { passive: false });
   document.addEventListener('touchstart', (e) => {
-    if (state !== 'playing' || paused || bigmapOpen || settingsOpen) return;
+    if (state !== 'playing' || paused || bigmapOpen || settingsOpen || touchBagOpen || window.StormLandscape?.blocked) return;
     for (const t of e.changedTouches) {
       if (skipTarget(t.target)) continue;
       // Lower left is movement. Clamp the floating pad to the safe thumb zone.
       if (t.clientX < window.innerWidth * 0.44 && t.clientY > window.innerHeight * 0.42 && joyId === null) {
         const size = joyBase.offsetWidth, half = size / 2;
+        const base = joyBase.getBoundingClientRect();
+        const minX = base.left + half, maxX = Math.max(minX, $t('tBuild').getBoundingClientRect().left - half - 12);
+        const minY = Math.max(half + 12, $t('counts').getBoundingClientRect().bottom + half + 8);
+        const maxY = Math.max(minY, Math.min(innerHeight - 74, $t('bars').getBoundingClientRect().top - 12) - half);
         JOY_R = size * .32;
         joyId = t.identifier;
-        joyCX = clamp(t.clientX, half + 12, Math.max(half + 12, window.innerWidth * .44 - half));
-        joyCY = clamp(t.clientY, Math.max(half + 12, window.innerHeight * .42), window.innerHeight - half - (innerHeight > innerWidth ? 102 : 14));
+        joyCX = clamp(t.clientX, minX, maxX);
+        joyCY = clamp(t.clientY, minY, maxY);
         joyBase.style.left = (joyCX - half) + 'px'; joyBase.style.top = (joyCY - half) + 'px';
         joyBase.classList.add('on');
       } else if (lookId === null) {
@@ -3068,7 +3214,7 @@ function touchInit() {
   document.addEventListener('touchend', endT);
   document.addEventListener('touchcancel', endT);
   // ---- hotbar / buildbar / mats tapables (utile aussi à la souris) ----
-  document.getElementById('hotbar').addEventListener('pointerdown', (e) => {
+  document.getElementById('hotbar').addEventListener('click', (e) => {
     const s = e.target.closest('.slot'); if (!s || state !== 'playing' || paused) return;
     const i = [...document.getElementById('hotbar').children].indexOf(s);
     if (i >= 0) { cancelEdit(); selectSlot(i); }
@@ -3111,6 +3257,7 @@ function touchAimAssist(dt) {
 }
 function onAction(code) {
   if (window.StormLandscape?.blocked) return;
+  if (touchBagOpen) { if (code === 'Escape') touchBagClose?.(); return; }
   const is = (a) => BIND[a] === code;
   if (state !== 'playing') return;
   if (code === 'Escape' || code === 'KeyP') { if (editing) { cancelEdit(); return; } if (settingsOpen) return; if (paused) { resumeGame(); return; } if (code === 'KeyP' || !locked) togglePause(true); return; }
@@ -3149,6 +3296,7 @@ function onAction(code) {
 }
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
+  if (e.target?.closest?.('button') && ['Space', 'Enter'].includes(e.code)) return;
   keys[e.code] = true;
   if (e.code === 'Tab' || e.code === 'Space' || e.code === 'AltLeft') e.preventDefault();
   if (settingsOpen) return;
@@ -7441,11 +7589,13 @@ function updateHotbar() {
   if (!player) return;
   const hb = $('hotbar');
   hb.innerHTML = player.slots.map((s, i) => {
-    if (!s) return `<div class="slot"><span class="num">${i + 1}</span></div>`;
+    if (!s) return IS_TOUCH ? '<button type="button" class="slot" disabled aria-label="Emplacement vide"></button>' : `<div class="slot"><span class="num">${i + 1}</span></div>`;
     const r = s.kind === 'weapon' ? s.rarity : (s.id === 'shieldL' || s.id === 'medkit') ? 2 : 1;
     const nm = s.kind === 'weapon' ? WEAPONS[s.id].name : CONSUM[s.id].name;
     const cnt = s.kind === 'consum' ? `<span class="cnt">${s.count}</span>` : s.kind === 'weapon' && s.id !== 'pickaxe' ? `<span class="cnt">${s.mag}</span>` : '';
-    return `<div class="slot r${s.id === 'pickaxe' ? 0 : r} ${i === player.cur && !buildMode ? 'sel' : ''}"><span class="num">${i + 1}</span>${cnt}${ICONS[s.id] || ''}<span class="nm">${nm}</span></div>`;
+    const tag = IS_TOUCH ? 'button' : 'div';
+    const attrs = IS_TOUCH ? `type="button" aria-label="${nm}" aria-pressed="${i === player.cur && !buildMode}"` : '';
+    return `<${tag} ${attrs} class="slot r${s.id === 'pickaxe' ? 0 : r} ${i === player.cur && !buildMode ? 'sel' : ''}"><span class="num">${i + 1}</span>${cnt}${ICONS[s.id] || ''}<span class="nm">${nm}</span></${tag}>`;
   }).join('');
 }
 function updateBuildBar() {
@@ -7469,6 +7619,7 @@ function showCenter(title, sub, dur = 2) {
 let hudAcc = 0, lastSlotsSig = '';
 function updateHUD(dt) {
   if (!player) return;
+  touchSyncFn?.();
   if (hmT > 0) { hmT -= dt; if (hmT <= 0) $('hitmarker').style.opacity = 0; }
   if (centerT > 0) { centerT -= dt; if (centerT <= 0) $('centerMsg').style.opacity = 0; }
   hurtFlash = Math.max(0, hurtFlash - dt);
@@ -7502,7 +7653,7 @@ function updateHUD(dt) {
   updateHUDStatic();
   const it = player.item;
   if (buildMode) $('ammoInfo').innerHTML = `${player.mats[player.matSel]} <small>${player.matSel === 'wood' ? 'bois' : player.matSel === 'stone' ? 'pierre' : 'métal'} · ${keyLabel(BIND.matCycle)} changer · clic droit</small>`;
-  else if (it && it.kind === 'weapon' && it.id !== 'pickaxe') { const Wd = WEAPONS[it.id]; $('ammoInfo').innerHTML = `<span class="wn" style="color:${RAR[it.rarity].css}">${Wd.name}</span>` + (player.reloading > 0 ? `<small>Rechargement…</small>` : `${it.mag} <small>/ ${player.ammo[Wd.ammo]}</small>`); }
+  else if (it && it.kind === 'weapon' && it.id !== 'pickaxe') { const Wd = WEAPONS[it.id]; $('ammoInfo').innerHTML = `<span class="wn" style="color:${RAR[it.rarity].css}">${Wd.name}</span>` + (player.reloading > 0 ? `<small>Rechargement…</small>` : IS_TOUCH ? `<span class="touch-ammo-values">${it.mag}<small>/ ${player.ammo[Wd.ammo]}</small></span>` : `${it.mag} <small>/ ${player.ammo[Wd.ammo]}</small>`); }
   else $('ammoInfo').innerHTML = '';
   const sig = player.slots.map((s) => s ? (s.id + (s.mag ?? '') + (s.count ?? '')) : '-').join() + player.cur + buildMode;
   if (sig !== lastSlotsSig) { lastSlotsSig = sig; updateHotbar(); }
@@ -8345,7 +8496,7 @@ function updateImpostors() {
 }
 let fpsAcc = 0, fpsN = 0;
 function step(dt) {
-  if (state === 'menu' || paused || window.StormLandscape?.blocked) return;
+  if (state === 'menu' || paused || touchBagOpen || window.StormLandscape?.blocked) return;
   gameT += dt;
   if (matchOver) {
     // Un top 1 est décidé : la zone et le monde entier sont figés, seul le perso bouge encore.
@@ -8431,6 +8582,7 @@ requestAnimationFrame(frame);
 window.advanceTime = (ms) => { const n = Math.ceil(ms / 16.67); for (let i = 0; i < n; i++) { step(1 / 60); updateCamera(1 / 60); } updateGhost(); updateHUD(0.2); updateMaps(0.2); syncLin(); scene.updateMatrixWorld(); };
 window.render_game_to_text = () => JSON.stringify({
   state, t: Math.round(gameT), player: player && { pos: player.pos.toArray().map((v) => +v.toFixed(1)), mode: player.mode, hp: Math.round(player.hp), shield: player.shield, kills: player.kills, mats: player.mats, slots: player.slots.map((s) => s && (s.id + (s.mag !== undefined ? ':' + s.mag : ''))), cur: player.cur, buildMode },
+  build: { piece: buildPiece, rotation: buildRot, editing: !!editing }, marker: { on: marker.on, pos: marker.pos.toArray() }, shoulder: shoulderSide, inventoryOpen: touchBagOpen,
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
 window.__game = { structs, rebuildHouse, towers, outline,
