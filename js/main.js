@@ -2820,7 +2820,7 @@ try { if (navigator.keyboard && navigator.keyboard.getLayoutMap) navigator.keybo
 refreshLabels();
 
 let lockApi = null;
-function tryLock() { if (lockApi) lockApi.lock(); }
+function tryLock() { if (lockApi && (!IS_TOUCH || matchMedia('(pointer: fine)').matches)) lockApi.lock(); }
 let resumeT = 0;
 import('./lock.js').then((m) => {
   lockApi = m.init(canvas, (l, kind) => {
@@ -2847,6 +2847,7 @@ canvas.addEventListener('mousedown', (e) => {
 window.addEventListener('mouseup', (e) => { if (e.button === 0) mouse.l = false; if (e.button === 2) mouse.r = false; if (e.button === 1) keys.Mouse3 = false; if (e.button === 3) keys.Mouse4 = false; if (e.button === 4) keys.Mouse5 = false; });
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('mousemove', (e) => {
+  if (IS_TOUCH && !matchMedia('(pointer: fine)').matches) return;
   mouse.x = e.clientX; mouse.y = e.clientY;
   if (state !== 'playing' || paused) return;
   if (bigmapOpen) return;
@@ -2872,6 +2873,12 @@ const down = (act) => !!keys[BIND[act]];
 // =====================================================================
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 let touchUIRoot = null, touchResetFn = null;
+function syncTouchUI() {
+  if (!touchUIRoot) return;
+  const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen;
+  if (!show && !touchUIRoot.classList.contains('hidden')) touchResetFn?.();
+  touchUIRoot.classList.toggle('hidden', !show);
+}
 // état du joystick analogique (rempli par touchInit, lu par updatePlayer)
 const touchJoy = { x: 0, y: 0, mag: 0, on: false };
 function touchInit() {
@@ -2881,28 +2888,45 @@ function touchInit() {
   // ---- DOM des contrôles ----
   const ui = document.createElement('div');
   ui.id = 'touchUI';
+  const icons = {
+    tFire: '<circle cx="12" cy="12" r="6"/><path d="M12 2v5m0 10v5M2 12h5m10 0h5"/>',
+    tJump: '<path d="m5 10 7-7 7 7M12 3v16M5 21h14"/>',
+    tAds: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><circle cx="12" cy="12" r="3"/>',
+    tInteract: '<path d="M13 3h7v18h-7M3 12h12m-4-4 4 4-4 4"/>',
+    tReload: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M20 12a8 8 0 0 0-14-5M4 12a8 8 0 0 0 14 5"/>',
+    tBuild: '<path d="m3 10 9-7 9 7M5 9v12h14V9M10 21v-7h4v7"/>',
+    tEdit: '<path d="m5 15 10-10 4 4L9 19l-5 1 1-5Zm8-8 4 4"/>',
+    tCrouch: '<circle cx="12" cy="4" r="2"/><path d="m7 12 5-4 5 4h4M12 8v7l-6 3 3 3m3-6 6 3v3"/>',
+    tMap: '<path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5Zm6-2v16m6-14v16"/>',
+    tPause: '<path d="M8 4v16M16 4v16"/>'
+  };
+  const control = (id, label, extra = '') => `<button type="button" id="${id}" class="tbtn ${extra}" aria-label="${label}"><svg viewBox="0 0 24 24" aria-hidden="true">${icons[id]}</svg><span>${label}</span></button>`;
   ui.innerHTML = `
     <div id="joyBase"><div id="joyKnob"></div></div>
-    <div id="tFire" class="tbtn big">TIR</div>
-    <div id="tJump" class="tbtn">SAUT</div>
-    <div id="tAds" class="tbtn">VISER</div>
-    <div id="tInteract" class="tbtn">E</div>
-    <div id="tReload" class="tbtn">R</div>
-    <div id="tBuild" class="tbtn">CONS</div>
-    <div id="tCrouch" class="tbtn">ACCROUPI</div>
-    <div id="tMap" class="tbtn small">CARTE</div>
-    <div id="tPause" class="tbtn small">PAUSE</div>
-    <div id="tPieces"><div class="tp" data-p="wall">MUR</div><div class="tp" data-p="floor">SOL</div><div class="tp" data-p="ramp">RAMPE</div><div class="tp" data-p="cone">TOIT</div></div>`;
+    ${control('tFire', 'TIR', 'big')}
+    ${control('tJump', 'SAUT')}
+    ${control('tAds', 'VISER')}
+    ${control('tInteract', 'AGIR')}
+    ${control('tReload', 'RECH.')}
+    ${control('tBuild', 'CONSTR.')}
+    ${control('tEdit', 'MODIF.')}
+    ${control('tCrouch', 'ACCROUPI')}
+    ${control('tMap', 'CARTE', 'small')}
+    ${control('tPause', 'PAUSE', 'small')}
+    <div id="tPieces"><button type="button" class="tp" data-p="wall">MUR</button><button type="button" class="tp" data-p="floor">SOL</button><button type="button" class="tp" data-p="ramp">RAMPE</button><button type="button" class="tp" data-p="cone">TOIT</button></div>`;
   document.body.appendChild(ui);
   touchUIRoot = ui;
+  for (const [id, label] of Object.entries({ tReload: 'Recharger', tBuild: 'Construction', tEdit: 'Modifier une construction', tInteract: 'Interagir ou entrer et sortir du véhicule' })) {
+    document.getElementById(id).setAttribute('aria-label', label);
+  }
   // l'aide du menu pause parle de raccourcis clavier : version tactile
   const ch = document.querySelector('#pause .ctl-help');
-  if (ch) ch.innerHTML = '<span>TIR : tirer / placer</span><span>VISER : viser</span><span>E : interagir / véhicule</span><span>CONS : construire (MUR / SOL / RAMPE / TOIT)</span><span>CARTE : carte</span><span>Glisse à droite : caméra</span><span>Joystick : vitesse à l\'inclinaison, à fond = sprint</span>';
+  if (ch) ch.innerHTML = '<span>TIR : tirer / placer</span><span>VISER : viser</span><span>AGIR : interagir / entrer ou sortir du véhicule</span><span>CONSTR. : construire · MODIF. : modifier</span><span>Joystick : déplacer / conduire, à fond = sprint</span><span>Glisse à droite : caméra</span><span>Tourne le téléphone : la disposition s’adapte</span>';
   const $t = (id) => document.getElementById(id);
   const joyBase = $t('joyBase'), joyKnob = $t('joyKnob');
   // ---- joystick flottant (moitié gauche de l'écran) ----
   let joyId = null, joyCX = 0, joyCY = 0, joyX = 0, joyY = 0;
-  const JOY_R = 58;
+  let JOY_R = 38;
   function joyApply() {
     // joystick analogique : amplitude du pouce = vitesse (zone morte 15 %)
     const mag = Math.hypot(joyX, joyY);
@@ -2924,6 +2948,8 @@ function touchInit() {
     for (const a of ['forward', 'back', 'left', 'right', 'sprint']) keys[BIND[a]] = false;
     keys.ShiftRight = false;
     joyBase.classList.remove('on');
+    joyBase.style.left = joyBase.style.top = '';
+    joyKnob.style.transform = '';
   }
   // ---- caméra : glissement du doigt sur la zone de visée ----
   let lookId = null, lookX = 0, lookY = 0;
@@ -2937,17 +2963,33 @@ function touchInit() {
   // ---- boutons ----
   function press(code) { window.dispatchEvent(new KeyboardEvent('keydown', { code })); }
   const hold = (el, on, off) => {
-    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); on(); }, { passive: false });
-    el.addEventListener('touchend', (e) => { e.preventDefault(); off && off(); }, { passive: false });
-    el.addEventListener('touchcancel', () => { off && off(); }, { passive: true });
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); el.classList.add('pressed'); on(); }, { passive: false });
+    const release = () => { el.classList.remove('pressed'); off && off(); };
+    el.addEventListener('touchend', (e) => { e.preventDefault(); if (!e.targetTouches.length) release(); }, { passive: false });
+    el.addEventListener('touchcancel', release, { passive: true });
   };
   hold($t('tFire'), () => { mouse.l = true; onFirePress(); }, () => { mouse.l = false; });
   hold($t('tJump'), () => { press(BIND.jump); keys[BIND.jump] = true; }, () => { keys[BIND.jump] = false; });
   hold($t('tAds'), () => { mouse.r = true; }, () => { mouse.r = false; });
+  // The right thumb can keep aiming while holding fire/ADS, not just tap a
+  // stationary button. The left thumb remains free to move at the same time.
+  const aimWhileHeld = (el) => {
+    let id = null, x = 0, y = 0;
+    el.addEventListener('touchstart', e => { const t = e.changedTouches[0]; id = t.identifier; x = t.clientX; y = t.clientY; }, { passive: true });
+    el.addEventListener('touchmove', e => {
+      const t = [...e.changedTouches].find(t => t.identifier === id);
+      if (!t || !el.classList.contains('pressed')) return;
+      e.preventDefault(); lookApply(t.clientX - x, t.clientY - y); x = t.clientX; y = t.clientY;
+    }, { passive: false });
+    const end = () => { id = null; };
+    el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
+  };
+  aimWhileHeld($t('tFire')); aimWhileHeld($t('tAds'));
   hold($t('tCrouch'), () => { press(BIND.crouch); }, null);
   $t('tInteract').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.interact); }, { passive: false });
   $t('tReload').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.reload); }, { passive: false });
   $t('tBuild').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.buildToggle); }, { passive: false });
+  hold($t('tEdit'), () => press(BIND.edit), null);
   // boutons de pièces de construction : gros boutons dédiés au pouce, visibles en mode CONS
   for (const b of ui.querySelectorAll('#tPieces .tp')) {
     b.addEventListener('touchstart', (e) => {
@@ -2964,24 +3006,30 @@ function touchInit() {
   // reset complet des commandes tactiles (pause, carte, onglet caché)
   touchResetFn = () => {
     joyEnd(); lookId = null;
-    mouse.l = false; keys[BIND.jump] = false; keys[BIND.sprint] = false;
+    mouse.l = mouse.r = false; keys[BIND.jump] = false; keys[BIND.sprint] = false;
+    ui.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
     keys.KeyW = keys.KeyS = keys.KeyA = keys.KeyD = false; keys.ShiftRight = false;
   };
-  document.addEventListener('visibilitychange', () => { if (document.hidden) touchReset(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) touchResetFn?.(); });
+  window.addEventListener('resize', () => touchResetFn?.());
   // fermer la grande carte d'un simple geste sur téléphone
   const bigmapEl = document.getElementById('bigmap');
   if (bigmapEl) bigmapEl.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    if (bigmapOpen) { bigmapOpen = false; bigmapEl.classList.add('hidden'); tryLock(); }
+    if (bigmapOpen) { bigmapOpen = false; bigmapEl.classList.add('hidden'); syncTouchUI(); tryLock(); }
   }, { passive: false });
   document.addEventListener('touchstart', (e) => {
-    if (state !== 'playing' || paused) return;
+    if (state !== 'playing' || paused || bigmapOpen || settingsOpen) return;
     for (const t of e.changedTouches) {
       if (skipTarget(t.target)) continue;
-      // moitié gauche = joystick, le reste = caméra
-      if (t.clientX < window.innerWidth * 0.45 && joyId === null) {
-        joyId = t.identifier; joyCX = t.clientX; joyCY = t.clientY;
-        joyBase.style.left = (joyCX - 70) + 'px'; joyBase.style.top = (joyCY - 70) + 'px';
+      // Lower left is movement. Clamp the floating pad to the safe thumb zone.
+      if (t.clientX < window.innerWidth * 0.44 && t.clientY > window.innerHeight * 0.42 && joyId === null) {
+        const size = joyBase.offsetWidth, half = size / 2;
+        JOY_R = size * .32;
+        joyId = t.identifier;
+        joyCX = clamp(t.clientX, half + 12, Math.max(half + 12, window.innerWidth * .44 - half));
+        joyCY = clamp(t.clientY, Math.max(half + 12, window.innerHeight * .42), window.innerHeight - half - (innerHeight > innerWidth ? 102 : 14));
+        joyBase.style.left = (joyCX - half) + 'px'; joyBase.style.top = (joyCY - half) + 'px';
         joyBase.classList.add('on');
       } else if (lookId === null) {
         lookId = t.identifier; lookX = t.clientX; lookY = t.clientY;
@@ -3028,7 +3076,7 @@ function touchInit() {
     player.matSel = m.dataset.mat; updateHUDStatic(); sfx('click', 0.5);
   });
   // l'audio démarre au premier toucher (comme au premier clic clavier)
-  document.addEventListener('touchstart', () => initAudio(), { once: true });
+  document.addEventListener('touchstart', () => initAudio(), { once: true, passive: true, capture: true });
 }
 touchInit();
 // Aim assist tactile : quand on tire sur téléphone, la caméra est doucement
@@ -3060,7 +3108,7 @@ function onAction(code) {
   if (state !== 'playing') return;
   if (code === 'Escape' || code === 'KeyP') { if (editing) { cancelEdit(); return; } if (settingsOpen) return; if (paused) { resumeGame(); return; } if (code === 'KeyP' || !locked) togglePause(true); return; }
   if (paused) return;
-  if (is('map')) { bigmapOpen = !bigmapOpen; document.getElementById('bigmap').classList.toggle('hidden', !bigmapOpen); if (bigmapOpen && lockApi) lockApi.unlock(); else tryLock(); }
+  if (is('map')) { bigmapOpen = !bigmapOpen; document.getElementById('bigmap').classList.toggle('hidden', !bigmapOpen); syncTouchUI(); if (bigmapOpen && lockApi) lockApi.unlock(); else tryLock(); }
   if (!player.alive) return;
   if (player.mode === 'drive') { if (is('interact')) exitVehicle(player); if (is('jump') && player.vehicle) sfx('horn', 0.6); return; }
   if (is('jump')) {
@@ -3126,14 +3174,16 @@ function togglePause(force) {
   if (state !== 'playing') return;
   paused = force === true ? true : !paused;
   document.getElementById('pause').classList.toggle('hidden', !paused);
-  if (paused) { mouse.l = mouse.r = false; }
+  if (paused) { mouse.l = mouse.r = false; touchResetFn?.(); }
+  syncTouchUI();
 }
-function resumeGame() { paused = false; resumeT = performance.now(); document.getElementById('pause').classList.add('hidden'); mouse.l = mouse.r = false; tryLock(); }
+function resumeGame() { paused = false; resumeT = performance.now(); document.getElementById('pause').classList.add('hidden'); mouse.l = mouse.r = false; syncTouchUI(); tryLock(); }
 document.getElementById('resumeBtn').onclick = (e) => { e.stopPropagation(); resumeGame(); };
 document.getElementById('quitBtn').onclick = () => { placement = aliveTeams().size; finalizeXP(); sendResult('lobby'); };
 document.getElementById('pauseSettings').onclick = () => openGameSettings();
 function openGameSettings() {
   settingsOpen = true;
+  syncTouchUI();
   const box = $('gameSettings'); box.classList.remove('hidden');
   settingsForm($('gsForm'), SET, (st, k) => {
     setVolumes(st.volume, st.music);
@@ -3145,7 +3195,7 @@ function openGameSettings() {
     if (k === 'quality') $('gsNote').textContent = 'La qualité graphique s\'applique à la prochaine partie.';
   });
 }
-document.getElementById('gsClose').onclick = () => { settingsOpen = false; $('gameSettings').classList.add('hidden'); };
+document.getElementById('gsClose').onclick = () => { settingsOpen = false; $('gameSettings').classList.add('hidden'); syncTouchUI(); };
 function refreshBindLabels() { document.querySelectorAll('kbd[data-a]').forEach((k) => { k.textContent = keyLabel(BIND[k.dataset.a]); }); }
 document.getElementById('againBtn').onclick = () => sendResult('replay');
 document.getElementById('lobbyBtn').onclick = () => sendResult('lobby');
@@ -3997,7 +4047,7 @@ function placeVehicleMesh(v, dt) {
 function enterVehicle(ch, v) {
   if (ch.vehicle || v.driver || v.destroyed || v.hp <= 0 || !ch.alive) return false;
   v.driver = ch; ch.vehicle = v; ch.mode = 'drive'; ch.mesh.visible = false; ch.vel.set(0, 0, 0);
-  if (ch.isPlayer) { setBuildModeOff(); cancelEdit(); sfx('horn', 0.4); showCenter('', `<kbd>${keyLabel(BIND.forward)}</kbd>/<kbd>${keyLabel(BIND.back)}</kbd> accélérer/freiner · <kbd>${keyLabel(BIND.interact)}</kbd> descendre`, 2.5); }
+  if (ch.isPlayer) { setBuildModeOff(); cancelEdit(); sfx('horn', 0.4); showCenter('', IS_TOUCH ? 'Joystick : accélérer, freiner et tourner · AGIR : descendre' : `<kbd>${keyLabel(BIND.forward)}</kbd>/<kbd>${keyLabel(BIND.back)}</kbd> accélérer/freiner · <kbd>${keyLabel(BIND.interact)}</kbd> descendre`, 2.5); }
   updateVehicleHUD(); return true;
 }
 function exitVehicle(ch) {
@@ -7394,6 +7444,10 @@ function updateHotbar() {
 function updateBuildBar() {
   $('buildbar').classList.toggle('on', buildMode);
   document.querySelectorAll('.bpiece').forEach((e) => e.classList.toggle('sel', e.dataset.p === buildPiece));
+  document.querySelectorAll('#tPieces .tp').forEach(e => {
+    const selected = e.dataset.p === buildPiece;
+    e.classList.toggle('sel', selected); e.setAttribute('aria-pressed', String(selected));
+  });
 }
 function updateHUDStatic() {
   if (!player) return;
@@ -8340,11 +8394,7 @@ function frame() {
     else sdt = dt * 0.22;
   }
   // sur téléphone, les contrôles tactiles disparaissent devant les menus + reset des commandes
-  if (touchUIRoot) {
-    const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen;
-    if (!show && !touchUIRoot.classList.contains('hidden') && touchResetFn) touchResetFn();
-    touchUIRoot.classList.toggle('hidden', !show);
-  }
+  syncTouchUI();
   step(sdt);
   updateCamera(dt);
   updateUnderwaterFX();

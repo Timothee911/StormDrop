@@ -210,12 +210,24 @@ let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
 window.addEventListener('pointerup', () => { dragging = false; });
+window.addEventListener('pointercancel', () => { dragging = false; });
 window.addEventListener('pointermove', (e) => { if (!dragging) return; const dx = e.clientX - lastX; lastX = e.clientX; charYaw += dx * 0.012; spinV = dx * 0.012; });
 function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
+  // Mobile uses the same live preview, in the page flow rather than behind cards.
+  const compact = matchMedia('(max-width: 900px)').matches;
+  const hostId = { home: 'homeStage', pass: 'passStage', locker: 'lockerStage' }[curTab];
+  const host = compact && hostId && $(hostId);
+  const parent = host || document.body;
+  if (canvas.parentElement !== parent) {
+    if (host) host.appendChild(canvas);
+    else document.body.insertBefore(canvas, $('topbar'));
+  }
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(1, rect.width), h = Math.max(1, rect.height);
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize); resize();
+new ResizeObserver(resize).observe(document.documentElement);
 
 // passPreviewObj: when viewing a battle pass reward we show it on the stage
 let stageItem = null;
@@ -244,7 +256,8 @@ function loop() {
   const now = performance.now(); const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now; clockT += dt;
   // camera
   view.x += (viewT.x - view.x) * Math.min(1, dt * 6); view.d += (viewT.d - view.d) * Math.min(1, dt * 6); view.h += (viewT.h - view.h) * Math.min(1, dt * 6);
-  camera.position.set(-view.x, view.h + 0.35, -view.d); camera.lookAt(-view.x, view.h, 0);
+  const stageX = matchMedia('(max-width: 900px)').matches ? 0 : view.x;
+  camera.position.set(-stageX, view.h + 0.35, -view.d); camera.lookAt(-stageX, view.h, 0);
   plat.position.set(0, 0, 0);
   // character
   if (!dragging) { spinV *= 0.92; charYaw += spinV; }
@@ -322,6 +335,9 @@ function setTab(t) {
   if (t === 'career') renderCareer();
   if (t === 'locker') renderLocker();
   if (t === 'shop') renderShop();
+  resize();
+  const page = $('page-' + t);
+  if (page) page.scrollTop = 0;
 }
 document.querySelectorAll('#tabs button').forEach((b) => b.onclick = () => setTab(b.dataset.tab));
 

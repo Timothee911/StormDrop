@@ -356,67 +356,39 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 
 /* ---------- Version téléphone : contrôles tactiles ---------- */
 body.touch #game { touch-action: none; }
-#touchUI { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
-.tbtn { position: absolute; pointer-events: auto; touch-action: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(16, 20, 48, .55); border: 2px solid rgba(255, 255, 255, .35); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 12px; letter-spacing: .4px; text-transform: uppercase; width: 62px; height: 62px; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-.tbtn:active { background: rgba(255, 226, 74, .45); border-color: #ffe24a; }
-.tbtn.big { width: 92px; height: 92px; font-size: 16px; background: rgba(255, 90, 60, .45); border-color: rgba(255, 150, 100, .85); }
-.tbtn.small { width: 54px; height: 54px; font-size: 10px; }
-#tFire { right: calc(16px + env(safe-area-inset-right)); bottom: 170px; }
-#tAds { right: calc(122px + env(safe-area-inset-right)); bottom: 128px; }
-#tJump { right: calc(122px + env(safe-area-inset-right)); bottom: 208px; }
-#tInteract { right: calc(30px + env(safe-area-inset-right)); bottom: 256px; }
-#tReload { right: calc(122px + env(safe-area-inset-right)); bottom: 288px; }
-#tBuild { right: calc(30px + env(safe-area-inset-right)); bottom: 336px; }
-#tCrouch { right: calc(122px + env(safe-area-inset-right)); bottom: 368px; }
-#tMap { right: calc(14px + env(safe-area-inset-right)); top: 304px; }
-#tPause { right: calc(78px + env(safe-area-inset-right)); top: 304px; }
-#joyBase { position: absolute; left: 20px; bottom: 250px; width: 140px; height: 140px; border-radius: 50%; background: rgba(16, 20, 48, .35); border: 2px solid rgba(255, 255, 255, .3); pointer-events: none; opacity: .55; transition: opacity .15s; }
+#touchUI { position: fixed; inset: 0; pointer-events: none; z-index: 40; --thumb-bottom: env(safe-area-inset-bottom, 0px); --thumb-right: env(safe-area-inset-right, 0px); --thumb-left: env(safe-area-inset-left, 0px); }
+.tbtn { position: absolute; pointer-events: auto; touch-action: none; display: flex; flex-direction: column; gap: 1px; align-items: center; justify-content: center; padding: 0; border-radius: 50%; background: rgba(9, 20, 44, .66); border: 2px solid rgba(224, 237, 255, .5); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 12px; line-height: 1; letter-spacing: 0; width: 52px; height: 52px; box-shadow: 0 2px 8px #0003; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.tbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tbtn:active, .tbtn.pressed { background: rgba(255, 200, 58, .55); border-color: #ffe24a; }
+.tbtn.big { width: 76px; height: 76px; font-size: 15px; background: rgba(176, 62, 27, .67); border-color: rgba(255, 179, 112, .9); }
+.tbtn.big svg { width: 30px; height: 30px; }
+.tbtn.small { width: 44px; height: 44px; font-size: 12px; }
+.tbtn.small svg { width: 18px; height: 18px; }
+#tFire { right: calc(18px + var(--thumb-right)); bottom: calc(146px + var(--thumb-bottom)); }
+#tAds { right: calc(108px + var(--thumb-right)); bottom: calc(156px + var(--thumb-bottom)); }
+#tJump { right: calc(18px + var(--thumb-right)); bottom: calc(236px + var(--thumb-bottom)); }
+#tInteract { right: calc(18px + var(--thumb-right)); bottom: calc(306px + var(--thumb-bottom)); }
+#tReload { right: calc(108px + var(--thumb-right)); bottom: calc(296px + var(--thumb-bottom)); }
+#tCrouch { right: calc(108px + var(--thumb-right)); bottom: calc(226px + var(--thumb-bottom)); }
+#tBuild { left: calc(18px + var(--thumb-left)); bottom: calc(266px + var(--thumb-bottom)); }
+#tEdit { left: calc(80px + var(--thumb-left)); bottom: calc(266px + var(--thumb-bottom)); }
+#tMap { right: calc(116px + var(--thumb-right)); top: max(12px, env(safe-area-inset-top)); }
+#tPause { right: calc(168px + var(--thumb-right)); top: max(12px, env(safe-area-inset-top)); }
+#joyBase { position: absolute; left: calc(20px + var(--thumb-left)); bottom: calc(124px + var(--thumb-bottom)); width: 120px; height: 120px; border-radius: 50%; background: rgba(9, 20, 44, .38); border: 2px solid rgba(224, 237, 255, .45); pointer-events: none; opacity: .65; transition: opacity .15s; }
 #joyBase.on { opacity: 1; }
-#joyKnob { position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 50%; background: rgba(255, 255, 255, .5); border: 2px solid rgba(255, 255, 255, .7); }
+#joyKnob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; background: rgba(230, 241, 255, .65); border: 2px solid rgba(255, 255, 255, .8); }
 /* boutons de pièces de construction (tactile) : grille 2×2 au-dessus du joystick, côté gauche, visibles en mode CONS */
-#tPieces { position: absolute; left: calc(16px + env(safe-area-inset-left)); bottom: 408px; right: auto; display: none; grid-template-columns: 66px 66px; gap: 7px; pointer-events: auto; }
+#tPieces { position: absolute; left: calc(18px + var(--thumb-left)); bottom: calc(330px + var(--thumb-bottom)); display: none; grid-template-columns: 54px 54px; gap: 6px; pointer-events: auto; }
 #tPieces.on { display: grid; }
-#tPieces .tp { width: 66px; height: 40px; border-radius: 12px; background: rgba(16, 20, 48, .55); border: 2px solid rgba(255, 255, 255, .35); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; text-transform: uppercase; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
-#tPieces .tp:active { background: rgba(255, 226, 74, .45); border-color: #ffe24a; }
+#tPieces .tp { width: 54px; height: 44px; border-radius: 8px; padding: 0; background: rgba(9, 20, 44, .75); border: 2px solid rgba(224, 237, 255, .5); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; text-transform: uppercase; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+#tPieces .tp:active, #tPieces .tp.sel { background: rgba(255, 226, 74, .45); border-color: #ffe24a; }
 /* HUD plus compact sur téléphone */
-body.touch #minimap { width: 118px; height: 118px; }
-body.touch .slot { width: 52px; height: 52px; }
+body.touch #minimap { width: 96px; height: 96px; }
+body.touch .slot { width: clamp(44px, calc((100vw - 56px) / 6), 56px); height: 52px; }
 body.touch #perf { display: none; }
 body.touch #ammoInfo { font-size: 28px; }
 /* sur tactile, l'aide clavier (T changer · clic droit) n'a pas de sens */
 body.touch #ammoInfo small { display: none; }
-@media (max-width: 560px) {
-  body.touch .slot { width: 44px; height: 44px; }
-  /* HUD compact tactile : la vie remonte en haut à gauche, la hotbar passe
-     au-dessus des matériaux pour ne plus chevaucher le bas de l'écran */
-  body.touch #bars { position: fixed; left: 14px; top: 14px; bottom: auto; width: 150px; }
-  body.touch #bottomright { bottom: 74px; }
-  /* matériaux déplacés à gauche, sous la zone du joystick */
-  body.touch #mats { position: fixed; right: auto; left: 14px; bottom: 186px; }
-}
-/* téléphone en paysage : boutons en grappe compacte à droite, hors du HUD */
-@media (max-height: 540px) and (pointer: coarse) {
-  .tbtn { width: 50px; height: 50px; font-size: 8px; letter-spacing: 0; }
-  .tbtn.big { width: 74px; height: 74px; font-size: 12px; }
-  .tbtn.small { width: 44px; height: 44px; font-size: 8px; }
-  #tFire { right: 16px; bottom: 40px; }
-  #tAds { right: 100px; bottom: 74px; }
-  #tJump { right: 168px; bottom: 74px; }
-  #tBuild { right: 236px; bottom: 74px; }
-  #tInteract { right: 100px; bottom: 12px; }
-  #tReload { right: 168px; bottom: 12px; }
-  #tCrouch { right: auto; left: 150px; bottom: 180px; }
-  #tMap { right: auto; left: 14px; top: 14px; }
-  #tPause { right: auto; left: 68px; top: 14px; }
-  #joyBase { width: 110px; height: 110px; bottom: 190px; }
-  #joyKnob { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
-  #tPieces { left: 14px; right: auto; bottom: auto; top: 64px; grid-template-columns: repeat(4, 58px); }
-  #tPieces .tp { width: 58px; height: 34px; font-size: 9px; }
-  body.touch #minimap { width: 84px; height: 84px; }
-  body.touch #bars { width: 140px; }
-  body.touch #bottomleft { bottom: 74px; }
-    body.touch #bottomright { right: 18px; bottom: 118px; }
-}
 
 /* sur téléphone, la hotbar / barre de construction / matériaux deviennent tapables */
 body.touch #hotbar, body.touch #mats { pointer-events: auto; }
@@ -459,4 +431,72 @@ body.touch #hotrow { gap: 6px; }
   #disguiseTag { top: 215px; max-width: calc(100% - 24px); width: max-content; font-size: 12px; }
   body.touch .bar.vehicle span { font-size: 10px; }
   body.touch .bar.vehicle span small { font-size: 9px; }
+}
+
+/* Touch HUD has its own anchors; desktop HUD rules above stay unchanged. */
+body.touch #bars { position: fixed; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); bottom: auto; width: 142px; gap: 4px; }
+body.touch .bar { height: 22px; }
+body.touch .bar span { font-size: 15px; }
+body.touch .bar.vehicle span { font-size: 11px; }
+body.touch .bar span small { font-size: 10px; }
+body.touch #topright { top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+body.touch #counts { width: 142px; gap: 3px; }
+body.touch #counts #stormInfo, body.touch #counts .count { padding: 4px; font-size: 14px; gap: 3px; }
+body.touch #counts .count span:last-child { font-size: 17px; }
+body.touch #mats { position: fixed; left: max(12px, env(safe-area-inset-left)); top: calc(94px + env(safe-area-inset-top)); right: auto; bottom: auto; gap: 4px; }
+body.touch .mat { min-width: 44px; min-height: 44px; height: 44px; padding: 4px; gap: 3px; font-size: 15px; justify-content: center; }
+body.touch .mat .mi { width: 20px; height: 20px; }
+body.touch .mat .sw { width: 12px; height: 12px; }
+body.touch #bottomright { position: fixed; left: 0; right: 0; bottom: calc(14px + env(safe-area-inset-bottom)); transform: none; gap: 0; align-items: center; }
+body.touch #hotrow { position: relative; gap: 0; width: max-content; }
+body.touch #hotbar { gap: 4px; }
+body.touch #ammoInfo { position: absolute; bottom: 66px; left: 50%; transform: translateX(-50%); width: 110px; min-width: 0; padding: 0; align-items: center; text-align: center; font-size: 25px; }
+body.touch #ammoInfo .wn { width: 110px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.touch .slot .num { display: none; }
+body.touch .slot .nm { font-size: 12px; }
+body.touch .slot svg { width: 36px; height: 26px; }
+body.touch #disguiseTag { top: calc(152px + env(safe-area-inset-top)); max-width: calc(100% - 24px); }
+body.touch #prompt { top: 36%; font-size: 15px; max-width: calc(100% - 32px); white-space: normal; text-align: center; }
+body.touch #prompt kbd, body.touch #busHint kbd { display: none; }
+body.touch #busHint { top: 27%; bottom: auto; font-size: 18px; width: max-content; max-width: calc(100% - 32px); text-align: center; }
+body.touch #useBar { top: 42%; max-width: 200px; }
+body.touch #bigmap { padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+body.touch #bigmap canvas { max-width: 90vw; max-height: 78dvh; width: auto; height: auto; object-fit: contain; }
+body.touch #pause .panel, body.touch #gameSettings .panel { max-width: calc(100vw - 28px); max-height: calc(100dvh - 28px); overflow: auto; }
+body.touch:has(#tPieces.on) #prompt { visibility: hidden; }
+@media (orientation: landscape) and (pointer: coarse) {
+  .tbtn { width: 48px; height: 48px; }
+  .tbtn.small { width: 44px; height: 44px; }
+  #tFire { bottom: calc(22px + var(--thumb-bottom)); width: 72px; height: 72px; }
+  #tAds { right: calc(102px + var(--thumb-right)); bottom: calc(32px + var(--thumb-bottom)); }
+  #tJump { bottom: calc(104px + var(--thumb-bottom)); }
+  #tInteract { bottom: calc(160px + var(--thumb-bottom)); }
+  #tReload { right: calc(102px + var(--thumb-right)); bottom: calc(160px + var(--thumb-bottom)); }
+  #tCrouch { right: calc(102px + var(--thumb-right)); bottom: calc(96px + var(--thumb-bottom)); }
+  #tBuild { left: calc(148px + var(--thumb-left)); bottom: calc(22px + var(--thumb-bottom)); width: 48px; height: 48px; }
+  #tEdit { left: calc(148px + var(--thumb-left)); bottom: calc(82px + var(--thumb-bottom)); width: 48px; height: 48px; }
+  #tMap { right: calc(116px + var(--thumb-right)); }
+  #tPause { right: calc(168px + var(--thumb-right)); }
+  #joyBase { width: 110px; height: 110px; bottom: calc(24px + var(--thumb-bottom)); }
+  #tPieces { left: 50%; transform: translateX(-50%); bottom: calc(84px + var(--thumb-bottom)); grid-template-columns: repeat(4, 54px); }
+  body.touch .slot { width: 44px; height: 48px; }
+  body.touch #ammoInfo { bottom: 62px; }
+  body.touch:has(#tPieces.on) #ammoInfo { visibility: hidden; }
+  body.touch #centerMsg { top: 38%; width: max-content; max-width: calc(100% - 320px); font-size: 26px; line-height: 1.15; text-align: center; }
+  body.touch #centerMsg small { margin-top: 4px; font-size: 13px; line-height: 1.2; white-space: normal; }
+  body.touch:has(#centerMsg:not(.hidden)) #prompt { visibility: hidden; }
+  body.touch #disguiseTag { top: max(12px, env(safe-area-inset-top)); font-size: 13px; max-width: calc(100% - 450px); white-space: normal; }
+  body.touch #prompt { top: 36%; }
+}
+@media (orientation: landscape) and (max-width: 740px) and (pointer: coarse) {
+  body.touch .slot { width: 44px; height: 48px; }
+  body.touch #hotbar { gap: 3px; }
+  #tAds, #tReload, #tCrouch { right: calc(98px + var(--thumb-right)); }
+  #tBuild { left: calc(20px + var(--thumb-left)); bottom: calc(144px + var(--thumb-bottom)); width: 48px; }
+  #tEdit { left: calc(80px + var(--thumb-left)); bottom: calc(144px + var(--thumb-bottom)); width: 48px; }
+}
+@media (orientation: landscape) and (max-height: 360px) and (pointer: coarse) {
+  body.touch #minimap { width: 72px; height: 72px; }
+  body.touch #counts { position: absolute; top: 52px; right: 104px; }
+  body.touch #mats { top: max(64px, env(safe-area-inset-top)); left: calc(174px + env(safe-area-inset-left)); }
 }
