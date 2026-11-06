@@ -17,6 +17,7 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     // Keep real touch events, but don't aim at a button while it is moving.
     const touchTap = page.tap.bind(page);
     page.tap = async selector => {
+      await page.$eval(selector, e => e.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
       await page.evaluate(() => Promise.all(document.getAnimations()
         .filter(a => Number.isFinite(a.effect?.getComputedTiming().iterations))
         .map(a => a.finished.catch(() => {}))));
@@ -28,12 +29,18 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__lobby, { polling: 50 });
     await page.evaluate(() => document.fonts.ready);
+    check('portrait : écran paysage obligatoire dans le lobby', await page.evaluate(() => StormLandscape.blocked && !document.getElementById('landscapeGate').hidden));
+    await page.tap('#landscapeActivate');
+    await page.waitForFunction(() => !document.getElementById('landscapeActivate').disabled, { polling: 50 });
+    check('activation native : refus ou absence pris en charge sans erreur', await page.$eval('#landscapeStatus', e => /Tourne|prêt/.test(e.textContent)));
+    await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen().catch(() => {}); });
     const tabTo = async tab => {
       await page.tap(`#tabs [data-tab="${tab}"]`);
       await page.waitForFunction(tab => document.getElementById(`page-${tab}`).classList.contains('on'), { polling: 50 }, tab);
     };
-    for (const [w, h] of [[375, 812], [390, 844], [667, 375], [844, 390]]) {
+    for (const [w, h] of [[667, 320], [667, 375], [844, 390], [932, 430]]) {
       await viewport(w, h);
+      await page.waitForFunction(() => !StormLandscape.blocked, { polling: 50 });
       for (const tab of ['home', 'pass', 'career', 'locker', 'shop']) {
         await tabTo(tab);
         const layout = await page.evaluate(tab => {
@@ -45,10 +52,12 @@ const base = process.env.QA_URL || 'http://localhost:8090';
             settings: (() => { const r = document.getElementById('settingsBtn').getBoundingClientRect(); return r.right <= innerWidth; })()
           };
         }, tab);
-        check(`${w}×${h} ${tab} : contenu et navigation sans débordement`, layout.fits && layout.nav && layout.settings, layout);
+        const host = { home: 'homeStage', pass: 'passStage', locker: 'lockerStage' }[tab];
+        check(`${w}×${h} ${tab} : contenu et navigation sans débordement`, layout.fits && layout.nav && layout.settings && (!host || layout.parent === host), layout);
+        if (tab === 'home') check(`${w}×${h} : JOUER visible sans défiler`, await page.$eval('#playBtn', e => e.getBoundingClientRect().bottom <= innerHeight));
       }
     }
-    await viewport(375, 812);
+    await viewport(667, 375);
     await tabTo('locker');
     const skin = await page.$$eval('#lkGrid .lk-item:not(.locked)', es => es[1].dataset.id);
     await page.$eval(`#lkGrid [data-id="${skin}"]`, e => e.scrollIntoView({ block: 'center' }));
@@ -86,7 +95,7 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     await page.$eval('#page-home', e => e.scrollTop = 0);
     await page.waitForFunction(() => {
       const r = document.getElementById('diffBtn').getBoundingClientRect();
-      return r.width > 0 && r.top >= 108 && r.bottom <= innerHeight;
+      return r.width > 0 && r.top >= document.getElementById('topbar').getBoundingClientRect().bottom && r.bottom <= innerHeight;
     }, { polling: 50 }).catch(async e => {
       console.error('Mode layout', await page.$eval('#page-home', el => ({ page: el.getBoundingClientRect().toJSON(), scroll: el.scrollTop, active: el.className, button: document.getElementById('diffBtn').getBoundingClientRect().toJSON() })));
       throw e;
@@ -101,7 +110,7 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     check('retour bureau : scène plein écran restaurée', await page.$eval('#stage', e => e.parentElement === document.body && e.getBoundingClientRect().width === innerWidth));
 
     // One game instance; rAF is frozen for deterministic software-WebGL CI.
-    await viewport(390, 844);
+    await viewport(844, 390);
     await page.goto(`${base}/game.html?lowq`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__game?.player?.mode === 'bus', { polling: 200, timeout: 90000 });
     await page.evaluate(() => advanceTime(20));
@@ -127,7 +136,7 @@ const base = process.env.QA_URL || 'http://localhost:8090';
       }
       return { outside, overlap, targetSize: [...document.querySelectorAll('.tbtn, #hotbar .slot, .mat')].every(e => { const r = e.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; }) };
     });
-    for (const [w, h] of [[375, 812], [390, 844], [667, 375], [667, 320], [844, 390], [390, 844]]) {
+    for (const [w, h] of [[667, 375], [667, 320], [844, 390], [932, 430], [844, 390]]) {
       await viewport(w, h);
       const boxes = await hitLayout();
       check(`${w}×${h} : touches, vie, carte et inventaire séparés`, !boxes.outside.length && !boxes.overlap.length && boxes.targetSize, boxes);
@@ -135,7 +144,7 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     const cdp = await page.createCDPSession();
     const point = async (selector, id) => page.$eval(selector, (e, id) => { const r = e.getBoundingClientRect(); return { id, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; }, id);
     const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
-    const joy = await point('#joyBase', 1), aim = { id: 2, x: 195, y: 400 }, fire = await point('#tFire', 3);
+    const joy = await point('#joyBase', 1), aim = { id: 2, x: 422, y: 164 }, fire = await point('#tFire', 3);
     const initial = await page.evaluate(() => ({ pos: __game.player.pos.toArray(), camera: __game.camera.rotation.y }));
     await touch('touchStart', [joy, aim, fire]);
     await touch('touchMove', [{ ...joy, y: joy.y - 38 }, { ...aim, x: aim.x + 28 }, fire]);
@@ -160,10 +169,17 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     await touch('touchStart', [ads]);
     await page.waitForFunction(() => __game.mouse.r, { polling: 50 });
     check('visée maintenue au toucher', await page.evaluate(() => __game.mouse.r));
-    await viewport(844, 390);
+    await viewport(390, 844);
+    await page.waitForFunction(() => StormLandscape.blocked, { polling: 50 });
     await page.waitForFunction(() => !__game.mouse.r && !__game.mouse.l && !__game.keys[__game.binds.forward], { polling: 50 });
     check('rotation : aucune visée ni touche coincée', await page.evaluate(() => !__game.mouse.r && !__game.mouse.l && !__game.keys[__game.binds.forward]));
     await touch('touchCancel', []);
+    const frozen = await page.evaluate(() => { const t = __game.gameT; advanceTime(500); return t === __game.gameT; });
+    check('portrait en partie : simulation suspendue derrière la consigne', frozen);
+    await viewport(844, 390);
+    await page.waitForFunction(() => !StormLandscape.blocked, { polling: 50 });
+    const resumed = await page.evaluate(() => { const t = __game.gameT; advanceTime(20); return __game.gameT > t; });
+    check('retour paysage : reprise de la simulation', resumed);
     await page.tap('#tBuild');
     await page.waitForFunction(() => document.getElementById('tPieces').classList.contains('on'), { polling: 50 });
     check('construction : les quatre pièces accessibles', await page.$eval('#tPieces', e => e.classList.contains('on') && e.children.length === 4));
@@ -177,7 +193,7 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     await page.tap('#tMap');
     await page.waitForFunction(() => !document.getElementById('bigmap').classList.contains('hidden'), { polling: 50 });
     check('carte : contrôles masqués et lisibles', await page.$eval('#bigmap', e => !e.classList.contains('hidden')) && await page.$eval('#touchUI', e => e.classList.contains('hidden')));
-    await page.touchscreen.tap(400, 180);
+    await page.touchscreen.tap(10, 180);
     await page.waitForFunction(() => document.getElementById('bigmap').classList.contains('hidden'), { polling: 50 });
     check('fermer la carte restaure les touches', await page.$eval('#bigmap', e => e.classList.contains('hidden')) && await page.$eval('#touchUI', e => !e.classList.contains('hidden')));
     await page.tap('#tPause');
@@ -202,6 +218,29 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     await page.tap('#tInteract');
     await page.waitForFunction(() => __game.player.mode === 'ground', { polling: 50 });
     check('AGIR : sortir du véhicule au toucher', await page.evaluate(() => __game.player.mode === 'ground'));
+    // Exercise the native API contract without pretending this desktop browser
+    // is real phone hardware. Only fullscreen/orientation services are stubbed.
+    const native = await browser.newPage();
+    native.on('pageerror', e => errors.push(e.message));
+    await native.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await native.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><body></body>');
+    await native.evaluate(() => {
+      window.calls = [];
+      document.documentElement.requestFullscreen = async () => { calls.push('fullscreen'); };
+      Object.defineProperty(screen.orientation, 'lock', { configurable: true, writable: true, value: async mode => { calls.push(mode); } });
+    });
+    await native.addScriptTag({ url: base + '/js/landscape.js' });
+    await native.tap('#landscapeActivate');
+    await native.waitForFunction(() => calls.length === 2, { polling: 50 });
+    check('API native : plein écran demandé avant verrouillage paysage', await native.evaluate(() => calls.join(',') === 'fullscreen,landscape'));
+    await native.evaluate(() => {
+      document.documentElement.requestFullscreen = async () => { throw new Error('Fullscreen refused'); };
+      screen.orientation.lock = async () => { throw new Error('Orientation refused'); };
+    });
+    await native.tap('#landscapeActivate');
+    await native.waitForFunction(() => !document.getElementById('landscapeActivate').disabled, { polling: 50 });
+    check('API refusée : consigne manuelle et bouton toujours utilisable', await native.evaluate(() => StormLandscape.blocked && document.getElementById('landscapeStatus').textContent.includes('verrouillage')));
+    await native.close();
     check('aucune nouvelle erreur JavaScript', errors.length === 0, errors);
     console.log(`\n${count} contrôles mobiles réussis.`);
   } finally { await browser.close(); }

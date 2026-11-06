@@ -1,0 +1,22 @@
+/* Shared by the lobby, direct game URL and installed app. */
+#landscapeGate[hidden], [data-landscape-request][hidden] { display: none !important; }
+#landscapeGate { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; overflow: auto; padding: max(24px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left)); background: radial-gradient(ellipse at 50% 30%, #302878, #101536 68%); color: #fff; touch-action: pan-y; }
+.orientation-card { width: min(100%, 360px); text-align: center; }
+.orientation-brand { font: 26px 'Lilita One', sans-serif; letter-spacing: 1px; }
+.orientation-brand span { color: #ffe24a; }
+.orientation-phone { width: 112px; height: 96px; margin: 32px auto 22px; display: block; color: #ffe24a; }
+#landscapeTitle { margin: 0 0 14px; font: 34px/1.05 'Lilita One', sans-serif; letter-spacing: .4px; }
+.orientation-card p { margin: 0; font: 600 19px/1.4 'Barlow Condensed', sans-serif; color: #dde3ff; }
+#landscapeActivate { display: block; width: 100%; min-height: 56px; margin: 28px 0 16px; border: 0; border-radius: 5px; background: #ffe24a; color: #141640; font: 22px 'Lilita One', sans-serif; cursor: pointer; touch-action: manipulation; }
+#landscapeActivate:disabled { opacity: .65; }
+#landscapeActivate:focus-visible { outline: 3px solid white; outline-offset: 5px; }
+.orientation-card #landscapeStatus { font-size: 16px; color: #b9c6f4; min-height: 46px; }
+.orientation-fullscreen { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 10px; border: 1px solid #ffffff30; border-radius: 50%; color: white; background: #10153680; cursor: pointer; touch-action: manipulation; }
+.orientation-fullscreen svg { width: 22px; height: 22px; }
+.orientation-fullscreen:focus-visible { outline: 2px solid #ffe24a; outline-offset: 3px; }
+html.landscape-required #touchUI { display: none !important; }
+@media (max-height: 560px) {
+  .orientation-phone { margin: 16px auto; height: 72px; }
+  #landscapeTitle { font-size: 28px; }
+  #landscapeActivate { margin-top: 18px; }
+}

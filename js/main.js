@@ -2875,12 +2875,17 @@ const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in wi
 let touchUIRoot = null, touchResetFn = null;
 function syncTouchUI() {
   if (!touchUIRoot) return;
-  const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen;
+  const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen && !window.StormLandscape?.blocked;
   if (!show && !touchUIRoot.classList.contains('hidden')) touchResetFn?.();
   touchUIRoot.classList.toggle('hidden', !show);
 }
 // état du joystick analogique (rempli par touchInit, lu par updatePlayer)
 const touchJoy = { x: 0, y: 0, mag: 0, on: false };
+window.addEventListener('stormorientationchange', () => {
+  touchResetFn?.(); mouse.l = mouse.r = false;
+  Object.keys(keys).forEach(k => { keys[k] = false; });
+  syncTouchUI();
+});
 function touchInit() {
   if (!IS_TOUCH || window.__touchDone) return;
   window.__touchDone = true;
@@ -3014,6 +3019,7 @@ function touchInit() {
   window.addEventListener('resize', () => touchResetFn?.());
   // fermer la grande carte d'un simple geste sur téléphone
   const bigmapEl = document.getElementById('bigmap');
+  if (bigmapEl?.querySelector('.bm-hint')) bigmapEl.querySelector('.bm-hint').textContent = 'Touche la carte ou le fond pour revenir au jeu.';
   if (bigmapEl) bigmapEl.addEventListener('touchstart', (e) => {
     e.preventDefault();
     if (bigmapOpen) { bigmapOpen = false; bigmapEl.classList.add('hidden'); syncTouchUI(); tryLock(); }
@@ -3104,6 +3110,7 @@ function touchAimAssist(dt) {
   camPitch = clamp(lerp(camPitch, pitchT, k), -1.35, 1.25);
 }
 function onAction(code) {
+  if (window.StormLandscape?.blocked) return;
   const is = (a) => BIND[a] === code;
   if (state !== 'playing') return;
   if (code === 'Escape' || code === 'KeyP') { if (editing) { cancelEdit(); return; } if (settingsOpen) return; if (paused) { resumeGame(); return; } if (code === 'KeyP' || !locked) togglePause(true); return; }
@@ -8338,7 +8345,7 @@ function updateImpostors() {
 }
 let fpsAcc = 0, fpsN = 0;
 function step(dt) {
-  if (state === 'menu' || paused) return;
+  if (state === 'menu' || paused || window.StormLandscape?.blocked) return;
   gameT += dt;
   if (matchOver) {
     // Un top 1 est décidé : la zone et le monde entier sont figés, seul le perso bouge encore.

@@ -460,7 +460,7 @@ body.touch #prompt { top: 36%; font-size: 15px; max-width: calc(100% - 32px); wh
 body.touch #prompt kbd, body.touch #busHint kbd { display: none; }
 body.touch #busHint { top: 27%; bottom: auto; font-size: 18px; width: max-content; max-width: calc(100% - 32px); text-align: center; }
 body.touch #useBar { top: 42%; max-width: 200px; }
-body.touch #bigmap { padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+body.touch #bigmap { pointer-events: auto; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
 body.touch #bigmap canvas { max-width: 90vw; max-height: 78dvh; width: auto; height: auto; object-fit: contain; }
 body.touch #pause .panel, body.touch #gameSettings .panel { max-width: calc(100vw - 28px); max-height: calc(100dvh - 28px); overflow: auto; }
 body.touch:has(#tPieces.on) #prompt { visibility: hidden; }

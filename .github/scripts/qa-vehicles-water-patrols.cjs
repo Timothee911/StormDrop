@@ -109,10 +109,15 @@ const puppeteer = require('puppeteer');
       window.advanceTime(300);
     });
     const idle0 = await page.evaluate(() => ({ pose: __game.player.waterPose, upright: __game.player.mesh.rotation.x, leg: __game.player.parts.hipL.rotation.x, water: __game.player.inWater }));
-    await page.evaluate(() => window.advanceTime(170));
-    const idle1 = await page.evaluate(() => ({ pose: __game.player.waterPose, upright: __game.player.mesh.rotation.x, leg: __game.player.parts.hipL.rotation.x }));
+    // Two samples can coincide on opposite sides of a sine-wave peak.
+    // Check the actual motion range instead of depending on the starting phase.
+    const idleSamples = await page.evaluate(() => Array.from({ length: 10 }, () => {
+      window.advanceTime(80);
+      return { pose: __game.player.waterPose, upright: __game.player.mesh.rotation.x, leg: __game.player.parts.hipL.rotation.x };
+    }));
     check('immobile dans l’eau : personnage vertical', idle0.water && idle0.pose === 'tread' && idle0.upright === 0, idle0);
-    check('immobile dans l’eau : jambes animées en permanence', Math.abs(idle0.leg - idle1.leg) > 0.03, [idle0, idle1]);
+    const legRange = Math.max(...idleSamples.map(s => s.leg)) - Math.min(...idleSamples.map(s => s.leg));
+    check('immobile dans l’eau : jambes animées en permanence', legRange > 0.03 && idleSamples.every(s => s.pose === 'tread' && s.upright === 0), { legRange, samples: idleSamples });
     await page.keyboard.down('w'); await page.evaluate(() => window.advanceTime(450)); await page.keyboard.up('w');
     check('déplacement dans l’eau : crawl conservé', await page.evaluate(() => __game.player.waterPose === 'crawl' && __game.player.mesh.rotation.x < -1));
     await page.keyboard.down('w'); await page.mouse.down();

@@ -214,7 +214,7 @@ window.addEventListener('pointercancel', () => { dragging = false; });
 window.addEventListener('pointermove', (e) => { if (!dragging) return; const dx = e.clientX - lastX; lastX = e.clientX; charYaw += dx * 0.012; spinV = dx * 0.012; });
 function resize() {
   // Mobile uses the same live preview, in the page flow rather than behind cards.
-  const compact = matchMedia('(max-width: 900px)').matches;
+  const compact = matchMedia('(max-width: 900px), (pointer: coarse)').matches;
   const hostId = { home: 'homeStage', pass: 'passStage', locker: 'lockerStage' }[curTab];
   const host = compact && hostId && $(hostId);
   const parent = host || document.body;
@@ -256,7 +256,7 @@ function loop() {
   const now = performance.now(); const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now; clockT += dt;
   // camera
   view.x += (viewT.x - view.x) * Math.min(1, dt * 6); view.d += (viewT.d - view.d) * Math.min(1, dt * 6); view.h += (viewT.h - view.h) * Math.min(1, dt * 6);
-  const stageX = matchMedia('(max-width: 900px)').matches ? 0 : view.x;
+  const stageX = matchMedia('(max-width: 900px), (pointer: coarse)').matches ? 0 : view.x;
   camera.position.set(-stageX, view.h + 0.35, -view.d); camera.lookAt(-stageX, view.h, 0);
   plat.position.set(0, 0, 0);
   // character
@@ -603,6 +603,7 @@ const TIPS = [
 let mmTimer = 0, inMatch = false, mmTimeout = 0;
 function bindPlay() {
   $('playBtn').onclick = () => {
+    if (window.StormLandscape?.blocked) return;
     if (inMatch) { cancelMM2(); toast('Recherche annulée'); return; }
     if (!S.name) { // pas de pseudo par défaut : on en demande un avant de jouer
       $('setName').value = ''; $('setDiff').value = S.diff; $('settingsModal').classList.remove('hidden');
@@ -610,6 +611,7 @@ function bindPlay() {
       $('setName').focus(); toast('Choisis un pseudo pour lancer une partie');
       return;
     }
+    void window.StormLandscape?.enter();
     inMatch = true; if (lockMod && lockMod.onPlay) lockMod.onPlay();
     $('playBtn').querySelector('span').textContent = 'ANNULE'; $('matchmaking').classList.remove('hidden');
     let t = 0; $('mmTime').textContent = '0:00';
