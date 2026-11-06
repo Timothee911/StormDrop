@@ -166,6 +166,39 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     await page.tap('#tReload');
     await page.waitForFunction(() => __game.player.reloading > 0, { polling: 50 });
     check('rechargement tactile', await page.evaluate(() => __game.player.reloading > 0));
+    // GLISSER : glissade déclenchée depuis le bouton, même sans sprint activé
+    await page.evaluate(() => {
+      const p = __game.player;
+      p.reloading = 0; p.vel.set(6, 0, 0); p.grounded = true;
+    });
+    await page.tap('#tSlide');
+    check('GLISSER tactile : glissade dès qu’on avance', await page.evaluate(() => __game.player.slideT > 0));
+    // SOIN : le meilleur objet de soin du sac est choisi et utilisé
+    await page.evaluate(() => {
+      const p = __game.player;
+      p.slideT = 0; p.crouchToggle = false; p.vel.set(0, 0, 0);
+      p.hp = 40; p.shield = 10;
+      p.slots[2] = { kind: 'consum', id: 'bandage', count: 5 };
+      p.slots[3] = { kind: 'consum', id: 'shieldL', count: 1 };
+      p.cur = 1; p.using = null;
+    });
+    await page.tap('#tHeal');
+    check('SOIN tactile : bandage prioritaire choisi et utilisé', await page.evaluate(() => __game.player.using?.item?.id === 'bandage' && __game.player.cur === 2));
+    await page.evaluate(() => { __game.player.using = null; });
+    // SON : coupure puis restauration du volume
+    await page.tap('#tSound');
+    check('SON tactile : volume coupé', await page.evaluate(() => __game.settings.volume === 0));
+    await page.tap('#tSound');
+    check('SON tactile : volume restauré', await page.evaluate(() => __game.settings.volume > 0));
+    // roue d'émotes : toutes les danses accessibles depuis le bouton EMOTE
+    await page.tap('#tEmote');
+    await page.waitForFunction(() => !document.getElementById('touchEmotes').hidden, { polling: 50 });
+    check('EMOTE tactile : roue avec toutes les émotes', await page.evaluate(() => {
+      const b = [...document.querySelectorAll('#touchEmoteGrid .temote')];
+      return b.length >= 14 && b.every(e => e.getBoundingClientRect().width > 0);
+    }));
+    await page.tap('#touchEmoteGrid [data-e="salut"]');
+    check('émote jouée depuis la roue', await page.evaluate(() => __game.player.emoting?.id === 'salut' && document.getElementById('touchEmotes').hidden));
     const ads = await point('#tAds', 4);
     await touch('touchStart', [ads]);
     await page.waitForFunction(() => __game.mouse.r, { polling: 50 });
@@ -248,9 +281,13 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     check('ÉPAULE : changement réel de côté', await page.evaluate(v => JSON.parse(render_game_to_text()).shoulder === -v, shoulder));
     await page.tap('#tShoulder');
     check('ÉPAULE : retour au côté initial', await page.evaluate(v => JSON.parse(render_game_to_text()).shoulder === v, shoulder));
+    await page.evaluate(() => { __game.player.emoting = null; });
     await page.tap('#tEmote');
-    check('EMOTE : lancer une animation', await page.evaluate(() => !!__game.player.emoting));
+    check('EMOTE : roue ouverte depuis le bouton', await page.evaluate(() => !document.getElementById('touchEmotes').hidden));
+    await page.tap('#touchEmoteGrid [data-e="danse"]');
+    check('EMOTE : lancer une animation', await page.evaluate(() => __game.player.emoting?.id === 'danse' && document.getElementById('touchEmotes').hidden));
     await page.tap('#tEmote');
+    await page.tap('#touchEmoteGrid [data-e="danse"]');
     check('EMOTE : arrêter une animation', await page.evaluate(() => !__game.player.emoting));
     await page.tap('#tBag');
     check('SAC : six objets, dialogue et commandes de jeu masquées', await page.evaluate(() => !document.getElementById('touchInventory').hidden && document.querySelectorAll('[data-invslot]').length === 6 && document.getElementById('touchUI').classList.contains('hidden')));

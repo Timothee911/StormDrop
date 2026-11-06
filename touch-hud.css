@@ -26,6 +26,17 @@ body.touch #tPause { right: var(--touch-right); top: var(--touch-top); bottom: a
 body.touch #tBag { right: calc(var(--touch-right) + 50px); top: var(--touch-top); }
 body.touch #tEmote { right: calc(var(--touch-right) + 100px); top: var(--touch-top); }
 body.touch #tMarker { right: calc(var(--touch-right) + 150px); top: var(--touch-top); }
+/* rangée d'actions rapides au-dessus de l'inventaire : SOIN et SON,
+   ÉCRAN juste au-dessus (la place manque à droite avec les encoches) */
+body.touch #tHeal { left: calc(50% + 84px); bottom: calc(var(--touch-low) + 64px); }
+body.touch #tSound { left: calc(50% + 140px); bottom: calc(var(--touch-low) + 64px); }
+body.touch #tFull { left: calc(50% - 44px); bottom: calc(var(--touch-low) + 118px); }
+/* glissade : coin bas-droit, à côté de RECH (comme sur la référence) */
+body.touch #tSlide { right: calc(var(--touch-right) + 66px); bottom: calc(var(--touch-low) + 12px); }
+/* au-delà de 740px le compteur de munitions revient à droite : on remonte GLISSER juste au-dessus */
+@media (min-width: 741px) {
+  body.touch #tSlide { right: calc(var(--touch-right) + 100px); bottom: calc(var(--touch-low) + 52px); }
+}
 body.touch #tFire { right: calc(var(--touch-right) + 8px); bottom: calc(var(--touch-low) + 76px); }
 body.touch #tJump { right: calc(var(--touch-right) + 8px); bottom: calc(var(--touch-low) + 156px); width: 54px; height: 54px; }
 body.touch #tInteract { right: calc(var(--touch-right) + 76px); bottom: calc(var(--touch-low) + 176px); }
@@ -113,6 +124,17 @@ body.touch.touch-disguised #poiBanner { visibility: hidden; }
 #touchBagStatus { min-height: 20px; margin: 12px 0; }
 .touch-bag-panel footer { display: flex; gap: 10px; }
 #touchInventory #touchBagEquip { background: #ffe24a; color: #10182d; border-color: #ffe24a; }
+/* roue d'émotes : toutes les danses, ouverte depuis le bouton EMOTE */
+#touchEmotes { position: fixed; z-index: 88; inset: 0; background: rgba(7, 15, 29, .94); color: #fff; display: grid; place-items: center; padding: max(14px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); font-family: var(--font-body); }
+#touchEmotes[hidden] { display: none; }
+.temote-panel { width: min(560px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+.temote-panel header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.temote-panel header b { font-family: var(--font-display); font-size: 22px; letter-spacing: .06em; }
+#touchEmoteClose { min-width: 44px; min-height: 44px; color: #fff; background: #203550; border: 1px solid #8cabc7; border-radius: 5px; font: 700 15px var(--font-body); cursor: pointer; padding: 8px 14px; }
+#touchEmoteGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.temote { min-height: 48px; color: #fff; background: #203550; border: 1px solid #8cabc7; border-radius: 5px; font: 700 13px var(--font-body); cursor: pointer; padding: 6px 8px; touch-action: manipulation; }
+.temote:active, .temote[aria-pressed="true"] { background: #37466a; border-color: #ffe24a; }
+#touchEmotes button:focus-visible { outline: 3px solid #ffe24a; outline-offset: 2px; }
 @media (max-height: 360px) {
   body.touch #joyBase { width: 84px; height: 84px; }
   body.touch #joyKnob { width: 36px; height: 36px; margin: -18px 0 0 -18px; }

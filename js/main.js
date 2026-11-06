@@ -2875,11 +2875,13 @@ const down = (act) => !!keys[BIND[act]];
 // caméra au doigt + aim assist léger comme sur Fortnite mobile).
 // =====================================================================
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-let touchUIRoot = null, touchResetFn = null, touchSyncFn = null, touchBagOpen = false, touchBagClose = null;
+let touchUIRoot = null, touchResetFn = null, touchSyncFn = null, touchBagOpen = false, touchBagClose = null, touchEmoteOpen = false, touchEmoteClose = null;
 function syncTouchUI() {
   if (!touchUIRoot) return;
-  const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen && !touchBagOpen && !window.StormLandscape?.blocked;
-  if (!show && !touchUIRoot.classList.contains('hidden')) touchResetFn?.();
+  if (window.StormLandscape?.blocked && touchEmoteOpen) touchEmoteClose?.(); // la consigne paysage passe devant la roue
+  const show = state === 'playing' && !paused && !bigmapOpen && !settingsOpen && !touchBagOpen && !touchEmoteOpen && !window.StormLandscape?.blocked;
+  // pas de reset ici quand c'est l'ouverture du sac ou de la roue qui masque les contrôles
+  if (!show && !touchUIRoot.classList.contains('hidden') && !touchBagOpen && !touchEmoteOpen) touchResetFn?.();
   touchUIRoot.classList.toggle('hidden', !show);
 }
 // état du joystick analogique (rempli par touchInit, lu par updatePlayer)
@@ -2915,7 +2917,11 @@ function touchInit() {
     tRotate: '<path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/>',
     tMaterial: '<path d="m12 3 10 6-10 6L2 9 12 3Zm-10 12 10 6 10-6M2 12l10 6 10-6"/>',
     tEditReset: '<path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/>',
-    tEditCancel: '<path d="m5 5 14 14M19 5 5 19"/>'
+    tEditCancel: '<path d="m5 5 14 14M19 5 5 19"/>',
+    tSlide: '<circle cx="17" cy="4" r="2"/><path d="m3 19 6-7 5 2 4-7"/><path d="M2 22h20"/>',
+    tHeal: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
+    tSound: '<path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16 9a4.2 4.2 0 0 1 0 6"/>',
+    tFull: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'
   };
   const control = (id, label, extra = '') => `<button type="button" id="${id}" class="tbtn ${extra}" aria-label="${label}"><svg viewBox="0 0 24 24" aria-hidden="true">${icons[id]}</svg><span>${label}</span></button>`;
   ui.innerHTML = `
@@ -2939,16 +2945,20 @@ function touchInit() {
     ${control('tMaterial', 'MATÉRIAU')}
     ${control('tEditReset', 'RÉINIT.')}
     ${control('tEditCancel', 'ANNULER')}
+    ${control('tSlide', 'GLISSER')}
+    ${control('tHeal', 'SOIN', 'small')}
+    ${control('tSound', 'SON', 'small')}
+    ${control('tFull', 'ÉCRAN', 'small')}
     <div id="touchBearing" aria-hidden="true"></div>
     <div id="tPieces" role="group" aria-label="Pièces de construction"><button type="button" class="tp" data-p="wall"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16v18H4zM4 9h16M4 15h16M12 3v6M8 9v6m8-6v6m-4 0v6"/></svg>MUR</button><button type="button" class="tp" data-p="floor"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 13 10-7 10 7-10 7-10-7Zm5-3 10 7M7 17l10-7"/></svg>SOL</button><button type="button" class="tp" data-p="ramp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21 21 3v18H3Zm5-5h13m-8-5h8"/></svg>RAMPE</button><button type="button" class="tp" data-p="cone"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 19 10-15 10 15H2Zm10-15v15M2 19l10-5 10 5"/></svg>TOIT</button></div>`;
   document.body.appendChild(ui);
   touchUIRoot = ui;
-  for (const [id, label] of Object.entries({ tReload: 'Recharger', tBuild: 'Construction', tEdit: 'Modifier une construction', tInteract: 'Interagir ou entrer et sortir du véhicule' })) {
+  for (const [id, label] of Object.entries({ tReload: 'Recharger', tBuild: 'Construction', tEdit: 'Modifier une construction', tInteract: 'Interagir ou entrer et sortir du véhicule', tSlide: 'Glisser ou s’accroupir', tHeal: 'Utiliser le meilleur objet de soin', tSound: 'Couper ou remettre le son', tFull: 'Basculer le plein écran' })) {
     document.getElementById(id).setAttribute('aria-label', label);
   }
   // l'aide du menu pause parle de raccourcis clavier : version tactile
   const ch = document.querySelector('#pause .ctl-help');
-  if (ch) ch.innerHTML = '<span>Gauche : joystick et COURIR</span><span>Droite : caméra, TIR, VISER, SAUT, ACCROUPI</span><span>AGIR : ouvrir, ramasser, entrer / sortir du véhicule</span><span>CONSTR. : quatre pièces, PIVOT et MATÉRIAU</span><span>MODIF. : sélectionner au tir, VALIDER, RÉINIT. ou ANNULER</span><span>En haut : CARTE, MARQUER, EMOTE, SAC et PAUSE</span><span>SAC : équiper ou déposer · objets en bas : sélectionner</span>';
+  if (ch) ch.innerHTML = '<span>Gauche : joystick et COURIR</span><span>Droite : caméra, TIR, VISER, SAUT, ACCROUPI, GLISSER</span><span>AGIR : ouvrir, ramasser, entrer / sortir du véhicule</span><span>SOIN : utiliser le meilleur objet de soin du sac</span><span>CONSTR. : quatre pièces, PIVOT et MATÉRIAU</span><span>MODIF. : sélectionner au tir, VALIDER, RÉINIT. ou ANNULER</span><span>En haut : CARTE, MARQUER, EMOTE, SAC et PAUSE · SON et ÉCRAN sous PAUSE</span><span>EMOTE : roue avec toutes les danses</span><span>SAC : équiper ou déposer · objets en bas : sélectionner</span>';
   const $t = (id) => document.getElementById(id);
   let sprintOn = false;
   const label = (id, text, accessible = text) => {
@@ -2970,19 +2980,23 @@ function touchInit() {
     $t('tMaterial').hidden = !buildMode;
     $t('tEditReset').hidden = $t('tEditCancel').hidden = !editing;
     $t('tReload').hidden = buildMode || !!editing;
+    $t('tHeal').hidden = buildMode || !!editing;
     $t('tAds').hidden = buildMode || !!editing || driving;
     $t('tShoulder').hidden = buildMode || !!editing || driving;
     $t('tFire').disabled = driving || (!grounded && !editing);
     $t('tBuild').disabled = !grounded;
     $t('tEdit').disabled = !grounded;
     $t('tCrouch').disabled = !grounded;
+    $t('tSlide').disabled = !grounded;
+    $t('tHeal').disabled = !grounded;
     $t('tEmote').disabled = !grounded || buildMode;
     $t('tInteract').disabled = player.mode === 'bus';
     label('tJump', driving ? 'KLAXON' : player.mode === 'bus' ? 'SAUTER' : ['fall', 'glide'].includes(player.mode) ? 'PLANEUR' : 'SAUT');
     label('tFire', editing ? 'CHOISIR' : buildMode ? 'PLACER' : player.item?.kind === 'consum' ? 'UTILISER' : 'TIR');
     label('tEdit', editing ? 'VALIDER' : 'MODIF.', editing ? 'Valider la modification' : 'Modifier une construction');
     label('tInteract', driving ? 'SORTIR' : 'AGIR', driving ? 'Sortir du véhicule' : 'Interagir ou entrer dans un véhicule');
-    for (const [id, on] of [['tBuild', buildMode], ['tSprint', sprintOn], ['tAds', mouse.r], ['tCrouch', player.crouchToggle], ['tEmote', !!player.emoting]]) {
+    label('tSound', SET.volume > 0 ? 'SON' : 'MUET', 'Couper ou remettre le son');
+    for (const [id, on] of [['tBuild', buildMode], ['tSprint', sprintOn], ['tAds', mouse.r], ['tCrouch', player.crouchToggle], ['tEmote', !!player.emoting], ['tSound', SET.volume <= 0]]) {
       const value = String(!!on);
       if ($t(id).getAttribute('aria-pressed') !== value) $t(id).setAttribute('aria-pressed', value);
     }
@@ -3034,6 +3048,31 @@ function touchInit() {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
+  // ---- roue d'émotes : toutes les danses du jeu, même celles jamais demandées ----
+  const em = document.createElement('section');
+  em.id = 'touchEmotes'; em.hidden = true; em.setAttribute('role', 'dialog'); em.setAttribute('aria-modal', 'true'); em.setAttribute('aria-label', 'Choisir une émote');
+  em.innerHTML = `<div class="temote-panel"><header><b>EMOTES</b><button type="button" id="touchEmoteClose">FERMER</button></header><div id="touchEmoteGrid" role="group" aria-label="Émotes">${Object.entries(EMOTES).map(([id, e]) => `<button type="button" class="temote" data-e="${id}">${e.name}</button>`).join('')}</div></div>`;
+  document.body.appendChild(em);
+  touchEmoteClose = () => { touchEmoteOpen = false; em.hidden = true; syncTouchUI(); };
+  $t('tEmote').addEventListener('click', () => {
+    if (state !== 'playing' || paused || !player || player.mode !== 'ground' || buildMode) return;
+    touchResetFn?.(); // stoppe le joystick et les touches maintenues
+    touchEmoteOpen = true; em.hidden = false; syncTouchUI();
+    const eq = LOAD.emote || 'danse';
+    for (const b of em.querySelectorAll('.temote')) b.toggleAttribute('aria-pressed', b.dataset.e === eq);
+    $t('touchEmoteClose').focus({ preventScroll: true });
+  });
+  $t('touchEmoteClose').addEventListener('click', touchEmoteClose);
+  for (const b of em.querySelectorAll('.temote')) {
+    b.addEventListener('click', () => {
+      if (state === 'playing' && !paused && player && player.alive && player.mode === 'ground') {
+        // toucher la danse en cours l'arrête, sinon elle démarre
+        player.emoting = player.emoting?.id === b.dataset.e ? null : { id: b.dataset.e, t: 0 };
+        touchSyncFn?.();
+      }
+      touchEmoteClose();
+    });
+  }
   const joyBase = $t('joyBase'), joyKnob = $t('joyKnob');
   // ---- joystick flottant (moitié gauche de l'écran) ----
   let joyId = null, joyCX = 0, joyCY = 0, joyX = 0, joyY = 0;
@@ -3112,6 +3151,12 @@ function touchInit() {
   };
   aimWhileHeld($t('tFire')); aimWhileHeld($t('tAds'));
   hold($t('tCrouch'), () => { press(BIND.crouch); keys[BIND.crouch] = true; }, () => { keys[BIND.crouch] = false; });
+  // GLISSER : glissade dès qu'on avance (élan forcé), sinon simple accroupissement
+  hold($t('tSlide'), () => {
+    if (state !== 'playing' || paused || !player || player.mode !== 'ground') return;
+    if (player.grounded && Math.hypot(player.vel.x, player.vel.z) > 3) player.sprint = true; // le temps de déclencher la glissade
+    crouchOrSlide(player);
+  }, null);
   $t('tInteract').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.interact); }, { passive: false });
   $t('tReload').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.reload); }, { passive: false });
   $t('tBuild').addEventListener('touchstart', (e) => { e.preventDefault(); press(BIND.buildToggle); }, { passive: false });
@@ -3119,7 +3164,34 @@ function touchInit() {
   $t('tSprint').addEventListener('click', () => { sprintOn = !sprintOn; joyApply(); touchSyncFn(); });
   $t('tMarker').addEventListener('click', () => press(BIND.marker));
   $t('tShoulder').addEventListener('click', () => press(BIND.shoulder));
-  $t('tEmote').addEventListener('click', () => press(BIND.emote));
+  // SOIN : sélectionne et utilise le meilleur objet de soin du sac (vie d'abord, gros soin en priorité)
+  $t('tHeal').addEventListener('click', () => {
+    if (state !== 'playing' || paused || !player || !player.alive || player.mode !== 'ground' || buildMode || editing) return;
+    const need = (it) => { const C = CONSUM[it.id]; return C.hp ? player.hp < C.maxHp : player.shield < C.maxSh; };
+    const rank = (it) => { const C = CONSUM[it.id]; return C.hp ? 100 + C.hp : C.sh; };
+    let best = -1;
+    player.slots.forEach((s, i) => { if (s && s.kind === 'consum' && need(s) && (best < 0 || rank(s) > rank(player.slots[best]))) best = i; });
+    if (best < 0) {
+      const full = player.hp >= 100 && player.shield >= 100;
+      showCenter('', full ? 'Santé et bouclier au maximum' : 'Aucun objet de soin dans le sac', 1.2);
+      return;
+    }
+    selectSlot(best);
+    const it = player.slots[best];
+    if (!player.using) player.using = { item: it, t: 0, dur: CONSUM[it.id].dur };
+    sfx('click', 0.4);
+  });
+  // SON : coupe et restaure le volume (réglage mémorisé)
+  let volKeep = 0;
+  $t('tSound').addEventListener('click', () => {
+    if (SET.volume > 0) { volKeep = SET.volume; SET.volume = 0; } else SET.volume = volKeep || 0.8;
+    saveSettings(SET); setVolumes(SET.volume, SET.music); touchSyncFn();
+  });
+  // ÉCRAN : plein écran
+  $t('tFull').addEventListener('click', () => {
+    const req = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    if (req && req.catch) req.catch(() => {});
+  });
   $t('tRotate').addEventListener('click', () => press(BIND.reload));
   $t('tMaterial').addEventListener('click', () => press(BIND.matCycle));
   $t('tEditReset').addEventListener('click', () => { if (editing) { editing.mask = 0; editing.paint = null; sfx('click', .4); } });
@@ -3255,9 +3327,16 @@ function touchAimAssist(dt) {
   camYaw = lerpAngle(camYaw, yawT, k);
   camPitch = clamp(lerp(camPitch, pitchT, k), -1.35, 1.25);
 }
+// sprint + accroupi = glissade (partagé par la touche clavier et le bouton tactile GLISSER)
+function crouchOrSlide(ch) {
+  if (ch.sprint && ch.grounded && !(ch.slideT > 0) && ch.mode === 'ground') {
+    const sp = Math.hypot(ch.vel.x, ch.vel.z) || 1;
+    ch.slideT = 0.95; ch.slideDir = new THREE.Vector3(ch.vel.x / sp, 0, ch.vel.z / sp); ch.crouchToggle = false; sfx('land', 0.35);
+  } else ch.crouchToggle = !ch.crouchToggle;
+}
 function onAction(code) {
   if (window.StormLandscape?.blocked) return;
-  if (touchBagOpen) { if (code === 'Escape') touchBagClose?.(); return; }
+  if (touchBagOpen || touchEmoteOpen) { if (code === 'Escape') { touchBagClose?.(); touchEmoteClose?.(); } return; }
   const is = (a) => BIND[a] === code;
   if (state !== 'playing') return;
   if (code === 'Escape' || code === 'KeyP') { if (editing) { cancelEdit(); return; } if (settingsOpen) return; if (paused) { resumeGame(); return; } if (code === 'KeyP' || !locked) togglePause(true); return; }
@@ -3284,13 +3363,7 @@ function onAction(code) {
   if (is('interact')) interact();
   if (is('marker')) placeMarkerAhead();
   if (is('emote') && player.mode === 'ground' && !buildMode) { player.emoting = player.emoting ? null : { id: LOAD.emote || 'danse', t: 0 }; }
-  if (is('crouch')) {
-    // sprint + crouch = slide
-    if (player.sprint && player.grounded && !(player.slideT > 0) && player.mode === 'ground') {
-      const sp = Math.hypot(player.vel.x, player.vel.z) || 1;
-      player.slideT = 0.95; player.slideDir = new THREE.Vector3(player.vel.x / sp, 0, player.vel.z / sp); player.crouchToggle = false; sfx('land', 0.35);
-    } else player.crouchToggle = !player.crouchToggle;
-  }
+  if (is('crouch')) crouchOrSlide(player);
   const dm = code.match(/^Digit([1-6])$/);
   if (dm) { cancelEdit(); selectSlot(+dm[1] - 1); }
 }
@@ -8587,7 +8660,7 @@ window.render_game_to_text = () => JSON.stringify({
 });
 window.__game = { structs, rebuildHouse, towers, outline,
   ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
-  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, get busEnded() { return bus.ended; } };
+  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; } };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built
