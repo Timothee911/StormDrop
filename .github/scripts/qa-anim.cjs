@@ -440,7 +440,7 @@ async function lobbyTests() {
   check('XP : 10 000 XP par niveau, sans reste (1→2→3)', res.levelUp === true, JSON.stringify(res));
   check('XP : 20 000 XP d\'un coup → 2 niveaux pile', res.multiOK === true, JSON.stringify(res));
   check('boutique : tenues, sacs à dos, pioches, planeurs et emotes présents', res.allCats === true, res.cats);
-  check('boutique : 8 objets du jour', res.dailyN === 8, 'daily=' + res.dailyN);
+  check('boutique : 14 objets du jour', res.dailyN === 14, 'daily=' + res.dailyN);
 
   // nombre de joueurs : 50 ou 100, pas moins pas plus
   const players = await page.evaluate(() => {
