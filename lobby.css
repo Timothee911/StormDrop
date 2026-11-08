@@ -485,8 +485,11 @@ h3 { font-family: var(--font-display); font-weight: 400; font-size: 24px; margin
   .lk-slot { flex: 0 0 72px; width: 72px; height: 76px; }
   .lk-panel { width: 100%; }
   .lk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
-  .lk-detail { position: relative; inset: auto; width: 100%; margin-top: 18px; }
-  .lk-detail h2 { font-size: 32px; }
+  /* Casier : le nom de l'objet est déplacé dans l'aperçu (lobby.js) pour
+     s'afficher juste en dessous du perso ; on réserve la place en dessous. */
+  #lockerStage { margin-bottom: 48px; }
+  .mobile-stage .lk-detail { position: absolute; top: 100%; bottom: auto; left: 0; right: 0; width: auto; margin: 2px 0 0; text-align: center; }
+  .mobile-stage .lk-detail .pp-name { font-size: 26px; }
   #page-shop { padding: 18px 14px 30px; }
   .shop { height: auto; min-height: 100%; }
   .shop-head { flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
@@ -524,9 +527,8 @@ h3 { font-family: var(--font-display); font-weight: 400; font-size: 24px; margin
   .shop-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .lk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   #page-locker.on { display: grid; grid-template-columns: minmax(170px, .8fr) minmax(0, 1.2fr); gap: 16px; align-content: start; }
-  #lockerStage { grid-column: 1; grid-row: 1; height: 220px; position: sticky; top: 0; align-self: start; }
-  .locker { grid-column: 2; grid-row: 1 / 3; min-width: 0; }
-  .lk-detail { grid-column: 1; grid-row: 2; margin-top: 0; }
+  #lockerStage { grid-column: 1; grid-row: 1; height: min(240px, calc(100dvh - var(--lobby-head) - 84px)); position: sticky; top: 0; align-self: start; }
+  .locker { grid-column: 2; grid-row: 1; min-width: 0; }
   #page-pass.on { display: grid; grid-template-columns: minmax(250px, .9fr) minmax(0, 1.1fr); gap: 14px 20px; align-content: start; }
   .pass-head { grid-column: 1; grid-row: 1 / 3; }
   #passStage { grid-column: 2; grid-row: 1; height: 200px; }

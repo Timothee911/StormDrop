@@ -225,6 +225,13 @@ function resize() {
   const rect = canvas.getBoundingClientRect();
   const w = Math.max(1, rect.width), h = Math.max(1, rect.height);
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  // Casier mobile : le nom de l'objet suit l'aperçu pour rester juste sous le perso.
+  const detail = $('lkDetail'), lockerPage = $('page-locker');
+  if (compact && curTab === 'locker' && host) {
+    if (detail.parentElement !== host) host.appendChild(detail);
+  } else if (detail.parentElement !== lockerPage) {
+    lockerPage.appendChild(detail); // place d'origine sur grand écran
+  }
 }
 window.addEventListener('resize', resize); resize();
 new ResizeObserver(resize).observe(document.documentElement);
@@ -256,8 +263,11 @@ function loop() {
   const now = performance.now(); const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now; clockT += dt;
   // camera
   view.x += (viewT.x - view.x) * Math.min(1, dt * 6); view.d += (viewT.d - view.d) * Math.min(1, dt * 6); view.h += (viewT.h - view.h) * Math.min(1, dt * 6);
-  const stageX = matchMedia('(max-width: 900px), (pointer: coarse)').matches ? 0 : view.x;
-  camera.position.set(-stageX, view.h + 0.35, -view.d); camera.lookAt(-stageX, view.h, 0);
+  const compact = matchMedia('(max-width: 900px), (pointer: coarse)').matches;
+  const stageX = compact ? 0 : view.x;
+  // Mobile : caméra plus proche pour un perso beaucoup plus grand dans l'aperçu
+  const camD = compact ? view.d * 0.58 : view.d;
+  camera.position.set(-stageX, view.h + 0.35, -camD); camera.lookAt(-stageX, view.h, 0);
   plat.position.set(0, 0, 0);
   // character
   if (!dragging) { spinV *= 0.92; charYaw += spinV; }
