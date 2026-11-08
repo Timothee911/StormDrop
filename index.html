@@ -118,20 +118,37 @@
 
 <!-- BATTLE PASS -->
 <section class="page" id="page-pass">
-  <div class="pass-head">
-    <div>
-      <div class="kicker">SAISON 2 · TOP SECRET</div>
-      <h1>PASSE DE COMBAT</h1>
-      <div class="pass-sub">Monte de niveau en jouant pour débloquer <b>30 paliers</b> de récompenses.</div>
+  <div class="pass-layout">
+    <div class="pass-left">
+      <div class="pass-season">SAISON 2 · TOP SECRET</div>
+      <h1 id="passTitle">PASSE DE COMBAT</h1>
+      <div class="pass-sub" id="passSub">Monte de niveau en jouant pour débloquer <b>30 paliers</b> de récompenses.</div>
+      <div class="pass-status" id="passStatus"></div>
+      <div class="pass-preview" id="passPreview"></div>
     </div>
-    <div class="pass-buy" id="passBuy">
-      <div class="pb-title">PASSE PREMIUM</div>
-      <div class="pb-text">Débloque toutes les récompenses premium, dont les agents Brutus, TNTina, Meowscles, Skye et Midas.</div>
-      <button class="buy-btn" id="passBuyBtn"><i class="coin"></i> 950</button>
+    <div class="pass-right">
+      <div class="pr-level">
+        <div class="lvl-badge big"><span id="prLvl">1</span></div>
+        <div class="pr-xp">
+          <div class="pr-xp-head"><b id="prLvl2">NIVEAU 1</b><span id="prXpLeft">10 000 XP</span></div>
+          <div class="lvl-bar"><i id="prXpFill"></i></div>
+          <div class="pr-xp-next" id="prXpNext">jusqu'au niveau 2</div>
+        </div>
+      </div>
+      <button class="buy-level" id="buyLevelBtn"><b>ACHETER UN NIVEAU</b><span>150 <i class="coin"></i> · jusqu'au niveau suivant</span></button>
+      <div class="pass-buy" id="passBuy">
+        <div class="pb-title">PASSE PREMIUM</div>
+        <div class="pb-text">Débloque toutes les récompenses premium, dont les agents Brutus, TNTina, Meowscles, Skye et Midas.</div>
+        <button class="buy-btn" id="passBuyBtn"><i class="coin"></i> 950</button>
+      </div>
     </div>
   </div>
   <div class="mobile-stage" id="passStage" aria-label="Aperçu de la récompense"></div>
-  <div class="pass-preview" id="passPreview"></div>
+  <div class="pass-nav" id="passNav">
+    <button data-pass="main" class="on">PASSE DE COMBAT</button>
+    <button data-pass="bonus">PASS BONUS</button>
+    <button data-pass="quete">PASS QUÊTE</button>
+  </div>
   <div class="pass-track-wrap">
     <button class="pt-arrow l" id="ptL" aria-label="Précédent">‹</button>
     <div class="pass-track" id="passTrack"></div>
