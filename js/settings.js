@@ -7,7 +7,7 @@ export const ACTIONS = [
   ['edit', 'Éditer une pièce', 'KeyG'], ['matCycle', 'Changer de matériau', 'KeyT'], ['shoulder', 'Changer d\u2019épaule', 'KeyH'],
   ['emote', 'Emote', 'KeyB'], ['map', 'Grande carte', 'KeyM'], ['marker', 'Placer un marqueur', 'KeyN'],
 ];
-export const DEFAULTS = { sens: 1, adsSens: 1, fov: 80, volume: 0.8, music: 0.5, quality: 'moyenne', viewDist: 1, outline: 1, outlineW: 1, binds: Object.fromEntries(ACTIONS.map((a) => [a[0], a[2]])) };
+export const DEFAULTS = { sens: 1, adsSens: 1, fov: 80, volume: 0.8, music: 0.5, quality: 'haute', viewDist: 1, outline: 1, outlineW: 1, binds: Object.fromEntries(ACTIONS.map((a) => [a[0], a[2]])) };
 const KEY = 'stormdrop-settings-v2';
 export function loadSettings() {
   let s = {};

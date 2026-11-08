@@ -16,10 +16,10 @@
       <rect x="22" y="30" width="70" height="42" rx="7" stroke="currentColor" stroke-width="3"/>
       <path d="M82 43v16M17 46C17 23 36 9 57 12m-8-8 9 8-10 8M97 56c0 23-19 37-40 34m8 8-9-8 10-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-    <h1 id="landscapeTitle">TOURNE TON TÉLÉPHONE</h1>
-    <p>Le lobby et les parties se jouent en mode paysage.</p>
-    <button type="button" id="landscapeActivate" data-landscape-request>ACTIVER LE PAYSAGE</button>
-    <p id="landscapeStatus" role="status" aria-live="polite">Tiens ton appareil à l’horizontale pour continuer.</p>
+    <h1 id="landscapeTitle">MODE PAYSAGE</h1>
+    <p>Le jeu bascule tout seul en plein écran paysage.</p>
+    <button type="button" id="landscapeActivate" data-landscape-request>LANCER EN PAYSAGE</button>
+    <p id="landscapeStatus" role="status" aria-live="polite">Appuie sur le bouton : le jeu se met en paysage automatiquement.</p>
   </div>`;
   document.body.appendChild(gate);
   const activate = gate.querySelector('button'), status = gate.querySelector('[role=status]');
@@ -52,7 +52,7 @@
       try { if (screen.orientation?.lock) await screen.orientation.lock('landscape'); } catch (_) {}
       sync();
       status.textContent = blocked
-        ? 'Tourne ton téléphone à l’horizontale. Si nécessaire, désactive le verrouillage de rotation de ton appareil.'
+        ? 'Tourne ton téléphone à l’horizontale : ton navigateur ne permet pas le verrouillage automatique.'
         : 'Mode paysage prêt.';
     } finally { busy = false; activate.disabled = false; }
   }

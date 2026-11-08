@@ -361,19 +361,30 @@ function buildHead(head, s) {
   if (s.extra === 'shades') part(head, arcGeo(0.22, 0.07, 1.9), mat(0x050505, { metalness: 0.8, roughness: 0.1, side: THREE.DoubleSide }), 0, 0.28, 0, 1, 1, 1.05);
   if (s.extra === 'mask') part(head, arcGeo(0.178, 0.16, 2.6), mat(s.shirt, { side: THREE.DoubleSide }), 0, 0.11, -0.03);
 }
+// Bretelles partagées : deux sangles visibles dans le dos, plaquées sur la face
+// arrière du sac (comme un vrai sac à dos porté), + deux sangles sur la poitrine.
+function backpackStraps(torso, color, z, yTop = 0.72, yBot = 0.3, sx = 0.15, ry = 0, rx = 0.05) {
+  const m = mat(color, { roughness: 0.7 });
+  const h = Math.max(0.2, yTop - yBot), cy = (yTop + yBot) / 2;
+  for (const s of [-1, 1]) {
+    const b = rbox(torso, 0.06, h, 0.03, s * sx, cy, z, m, 0.012); // sangle sur le sac
+    b.rotation.x = rx; b.rotation.y = s * ry; // ry : épouse les objets ronds
+    onChest(torso, 0.05, 0.34, 0.022, s * 0.16, 0.49, m, 0.008); // sangle poitrine
+  }
+}
 function buildBackpack(torso, id) {
   const B = BACKPACKS[id]; if (!B || id === 'none') return;
   const c = mat(B.color);
   if (id === 'sac') {
     rbox(torso, 0.48, 0.55, 0.22, 0, 0.42, 0.27, c, 0.07); rbox(torso, 0.38, 0.15, 0.06, 0, 0.3, 0.39, mat(0xffd23f), 0.025);
-    for (const sx of [-1, 1]) onChest(torso, 0.055, 0.34, 0.022, sx * 0.17, 0.49, mat(0x5a3a20), 0.01); // bretelles
+    backpackStraps(torso, 0x24242e, 0.435); // bretelles
   }
   if (id === 'carapace') { const s = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), c); s.rotation.x = Math.PI / 2; s.position.set(0, 0.42, 0.22); s.castShadow = true; torso.add(s); }
   if (id === 'cape') { const cp = box(torso, 0.7, 1.1, 0.05, 0, 0.18, 0.28, mat(B.color, { side: THREE.DoubleSide })); cp.rotation.x = 0.15; box(torso, 0.74, 0.08, 0.1, 0, 0.74, 0.24, mat(0xffd23f)); }
   if (id === 'ailes' || id === 'ailesdragon') {
     const m = id === 'ailes' ? mat(0xffffff, { emissive: 0xfff6d0, emissiveIntensity: 0.25 }) : mat(0xb3122e);
     for (const sgn of [-1, 1]) {
-      const w = new THREE.Group(); w.position.set(sgn * 0.15, 0.6, 0.28); w.rotation.y = sgn * 0.5; w.rotation.z = sgn * -0.35; torso.add(w);
+      const w = new THREE.Group(); w.position.set(sgn * 0.15, 0.6, 0.33); w.rotation.y = sgn * 0.5; w.rotation.z = sgn * -0.35; torso.add(w);
       box(w, 0.9, 0.5, 0.05, sgn * 0.45, 0.1, 0, m); box(w, 0.6, 0.35, 0.05, sgn * 0.7, -0.25, 0, m);
       if (id === 'ailesdragon') box(w, 0.95, 0.06, 0.07, sgn * 0.47, 0.36, 0, mat(0xffb000));
     }
@@ -386,15 +397,17 @@ function buildBackpack(torso, id) {
   }
   if (id === 'cristal') {
     const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), mat(0x7af0ff, { emissive: 0x2ad0ff, emissiveIntensity: 0.9, roughness: 0.1, metalness: 0.2 }));
-    cr.scale.set(0.8, 1.3, 0.8); cr.position.set(0, 0.55, 0.55); cr.userData.float = true; torso.add(cr);
+    cr.scale.set(0.8, 1.3, 0.8); cr.position.set(0, 0.55, 0.46); cr.userData.float = true; torso.add(cr);
   }
   if (id === 'skate') { // planche verticale dans le dos avec roues
+    backpackStraps(torso, 0x24242e, 0.42, 0.85, 0.05);
     const deck = rbox(torso, 0.42, 1.0, 0.07, 0, 0.42, 0.3, mat(B.color, { roughness: 0.5 }), 0.05); deck.rotation.z = 0.12;
     rbox(torso, 0.44, 0.08, 0.09, 0, 0.42, 0.3, mat(0x1a1a22), 0.03);
     for (const [y, x] of [[0.12, 0.03], [0.72, -0.03]]) for (const sx of [-1, 1])
       cyl(torso, 0.05, 0.05, 0.05, x + sx * 0.16, y, 0.35, mat(0xffd23f, { roughness: 0.4 }), 10).rotation.x = Math.PI / 2;
   }
   if (id === 'lanterne') { // lanterne de mineur à grille + coeur lumineux
+    backpackStraps(torso, 0xc9a05c, 0.425, 0.66, 0.3, 0.09);
     const frame = mat(0x3a3a44, { metalness: 0.5, roughness: 0.4 });
     rbox(torso, 0.26, 0.34, 0.18, 0, 0.42, 0.3, frame, 0.03);
     const core = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), mat(0xfff2b8, { emissive: 0xffd23f, emissiveIntensity: 1.6 }));
@@ -403,6 +416,7 @@ function buildBackpack(torso, id) {
     cyl(torso, 0.05, 0.07, 0.06, 0, 0.62, 0.3, frame, 10);
   }
   if (id === 'tank') { // bonbonne d'oxygène avec robinet
+    backpackStraps(torso, 0x24242e, 0.445, 0.7, 0.25, 0.09, 0.6);
     const tl = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.62, 14), mat(B.color, { metalness: 0.4, roughness: 0.35 }));
     tl.position.set(0, 0.42, 0.3); tl.castShadow = true; torso.add(tl);
     cyl(torso, 0.16, 0.16, 0.05, 0, 0.14, 0.3, mat(0xffd23f), 14);
@@ -410,16 +424,18 @@ function buildBackpack(torso, id) {
     cyl(torso, 0.02, 0.02, 0.14, 0.06, 0.84, 0.3, mat(0xc0c8d0, { metalness: 0.7 }), 8).rotation.z = Math.PI / 2;
   }
   if (id === 'tnt') { // baril de TNT avec mèche et bandes
+    backpackStraps(torso, 0x24242e, 0.49, 0.72, 0.28, 0.11, 0.56);
     const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.56, 14), mat(0x8a3a2a, { roughness: 0.7 }));
-    bar.position.set(0, 0.42, 0.3); bar.castShadow = true; torso.add(bar);
-    for (const y of [0.28, 0.56]) cyl(torso, 0.21, 0.21, 0.05, 0, y, 0.3, mat(0xd94848), 14);
-    rbox(torso, 0.3, 0.16, 0.02, 0, 0.42, 0.51, mat(0xffe14d), 0.008);
+    bar.position.set(0, 0.48, 0.3); bar.castShadow = true; torso.add(bar);
+    for (const y of [0.33, 0.61]) cyl(torso, 0.21, 0.21, 0.05, 0, y, 0.3, mat(0xd94848), 14);
+    rbox(torso, 0.3, 0.16, 0.02, 0, 0.48, 0.51, mat(0xffe14d), 0.008);
     const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.16, 6), mat(0x2a2a2a));
-    fuse.rotation.z = 0.4; fuse.position.set(0.06, 0.76, 0.3); torso.add(fuse);
+    fuse.rotation.z = 0.4; fuse.position.set(0.06, 0.82, 0.3); torso.add(fuse);
     const spark = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), mat(0xffb43a, { emissive: 0xff7a1a, emissiveIntensity: 1.8 }));
-    spark.position.set(0.12, 0.83, 0.3); torso.add(spark);
+    spark.position.set(0.12, 0.89, 0.3); torso.add(spark);
   }
   if (id === 'champi') { // gros champignon à pois
+    backpackStraps(torso, 0x24242e, 0.575, 0.62, 0.48, 0.15, 0.52, -0.24); // sangles sur le dôme
     cyl(torso, 0.11, 0.14, 0.42, 0, 0.28, 0.3, mat(0xf2e1a0), 10);
     const cap = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat(B.color));
     cap.position.set(0, 0.48, 0.3); cap.castShadow = true; torso.add(cap);
@@ -427,6 +443,7 @@ function buildBackpack(torso, id) {
       sph(torso, 0.045, x, y, z, mat(0xfff6d0), 1, 0.7, 1);
   }
   if (id === 'plush') { // peluche ours accrochée dans le dos
+    backpackStraps(torso, 0x24242e, 0.5, 0.68, 0.32, 0.11, 0.58); // sangles sur la tête de l'ours
     const fur = mat(B.color, { roughness: 0.9 });
     sph(torso, 0.2, 0, 0.5, 0.32, fur); // tête
     for (const sx of [-1, 1]) sph(torso, 0.08, sx * 0.17, 0.66, 0.32, fur); // oreilles
@@ -436,6 +453,7 @@ function buildBackpack(torso, id) {
     for (const sx of [-1, 1]) sph(torso, 0.022, sx * 0.07, 0.55, 0.5, mat(0x1a1a22)); // yeux
   }
   if (id === 'boombox') { // boombox avec haut-parleurs et poignée
+    backpackStraps(torso, 0xc9a05c, 0.40, 0.62, 0.28);
     rbox(torso, 0.52, 0.34, 0.18, 0, 0.42, 0.3, mat(B.color, { roughness: 0.6 }), 0.04);
     for (const x of [-0.14, 0.14]) {
       cyl(torso, 0.09, 0.09, 0.03, x, 0.42, 0.4, mat(0x111118), 14).rotation.x = Math.PI / 2;
@@ -445,15 +463,16 @@ function buildBackpack(torso, id) {
     for (const sx of [-1, 1]) box(torso, 0.05, 0.1, 0.03, sx * 0.2, 0.57, 0.4, mat(0x111118));
   }
   if (id === 'aquarium') { // bocal en verre avec poisson rouge qui flotte
+    backpackStraps(torso, 0x24242e, 0.585, 0.68, 0.34, 0.12, 0.52); // harnais métal
     const glass = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), new THREE.MeshStandardMaterial({ color: 0x9fdfff, transparent: true, opacity: 0.35, roughness: 0.1, metalness: 0.1 }));
-    glass.position.set(0, 0.52, 0.42); torso.add(glass);
+    glass.position.set(0, 0.5, 0.36); torso.add(glass);
     const water = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), new THREE.MeshStandardMaterial({ color: 0x2a9fd6, transparent: true, opacity: 0.5, roughness: 0.2 }));
-    water.position.set(0, 0.5, 0.42); torso.add(water);
+    water.position.set(0, 0.48, 0.36); torso.add(water);
     const fish = new THREE.Group();
     const fb = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 6), mat(0xff6b3d)); fb.rotation.z = Math.PI / 2; fish.add(fb);
     const ft = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.08, 4), mat(0xff6b3d)); ft.rotation.z = -Math.PI / 2; ft.position.x = -0.1; fish.add(ft);
-    fish.position.set(0, 0.52, 0.42); fish.userData.float = true; torso.add(fish);
-    cyl(torso, 0.03, 0.03, 0.1, 0, 0.78, 0.42, mat(0xc0c8d0, { metalness: 0.6 }), 8);
+    fish.position.set(0, 0.5, 0.36); fish.userData.float = true; torso.add(fish);
+    cyl(torso, 0.03, 0.03, 0.1, 0, 0.76, 0.36, mat(0xc0c8d0, { metalness: 0.6 }), 8);
   }
 }
 export function makePickaxe(id = 'default') {
@@ -489,11 +508,12 @@ export function makePickaxe(id = 'default') {
     const bg = new THREE.TorusGeometry(0.4, 0.085, 8, 14, 2.2);
     bg.rotateX(Math.PI / 2); // anneau à plat (plan XZ)
     bg.rotateY(2.67);        // arc symétrique, ventre vers la tête de l'outil
+    // prise en main au MILIEU de la banane : l'arc entoure la main (grip à l'origine)
     const bn = new THREE.Mesh(bg, mat(0xffd23f, { roughness: 0.5 }));
-    bn.position.set(0, 0.02, -0.42); g.add(bn);
+    bn.position.set(0, 0.02, 0); g.add(bn);
     for (const sx of [-1, 1]) { // bouts marron aux deux extrémités
       const tip = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.16, 6), mat(0x6b4a2a));
-      tip.rotation.z = sx * Math.PI / 2; tip.position.set(sx * 0.4, 0.02, -0.6); g.add(tip);
+      tip.rotation.z = sx * Math.PI / 2; tip.position.set(sx * 0.4, 0.02, -0.18); g.add(tip);
     }
   } else if (id === 'glace') {
     // piolet : manche bois + pic de glace + cristaux
@@ -537,23 +557,28 @@ export function makePickaxe(id = 'default') {
     box(g, 0.032, 0.02, 1.05, 0, 0.085, -0.6, mat(0xff2e7d, { emissive: 0xff2e7d, emissiveIntensity: 1.4 }));
   } else if (id === 'raquette') {
     // raquette de tennis : manche + cadre ovale + cordes
-    box(g, 0.05, 0.05, 0.62, 0, 0, 0.0, mat(0x2a2a3a));
+    // prise en main au BOUT du manche (main à l'origine), tête en haut
+    box(g, 0.05, 0.05, 0.62, 0, 0, -0.31, mat(0x2a2a3a));
+    // tête quasi dans l'axe du manche (comme une vraie raquette) pour ne pas
+    // traverser l'épaule quand l'outil est tenu incliné
     const frame = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 8, 20), mat(0x39ff88, { emissive: 0x1fc46a, emissiveIntensity: 0.5 }));
-    frame.position.set(0, 0.28, -0.34); frame.scale.y = 1.3; g.add(frame);
+    frame.position.set(0, 0.1, -0.65); frame.scale.y = 1.3; g.add(frame);
     const strM = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.15 });
-    for (let i = -3; i <= 3; i++) { box(g, 0.012, 0.66, 0.012, i * 0.075, 0.28, -0.34, strM); box(g, 0.4, 0.012, 0.012, 0, 0.28 + i * 0.11, -0.34, strM); }
+    for (let i = -3; i <= 3; i++) { box(g, 0.012, 0.66, 0.012, i * 0.075, 0.1, -0.65, strM); box(g, 0.4, 0.012, 0.012, 0, 0.1 + i * 0.11, -0.65, strM); }
   } else if (id === 'guitare') {
     // guitare électrique : caisse + manche + micros + cordes
+    // prise en main au sommet du manche (près de la caisse) : la caisse retombe
+    // près de la main et le manche monte au-dessus de l'épaule, comme en jeu.
     const bodyM = mat(0xb3122e, { roughness: 0.35 });
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.09, 20), bodyM);
-    body.rotation.x = Math.PI / 2; body.position.set(0, 0.05, -0.52); g.add(body);
+    body.rotation.x = Math.PI / 2; body.position.set(0, 0.05, 0.22); g.add(body);
     const cut = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.09, 16), mat(0x1a1a22));
-    cut.rotation.x = Math.PI / 2; cut.position.set(0.1, -0.12, -0.42); g.add(cut);
-    box(g, 0.07, 0.06, 0.72, 0, 0.03, 0.02, mat(0x1a1a22));
-    box(g, 0.11, 0.05, 0.1, 0, 0.03, 0.42, mat(0x1a1a22));
-    for (const z of [-0.38, -0.6]) box(g, 0.18, 0.04, 0.05, 0, 0.08, z, mat(0xc0c8d0, { metalness: 0.7 }));
+    cut.rotation.x = Math.PI / 2; cut.position.set(0.1, -0.12, 0.32); g.add(cut);
+    box(g, 0.07, 0.06, 0.6, 0, 0.03, -0.14, mat(0x1a1a22)); // manche vers le haut
+    box(g, 0.11, 0.05, 0.1, 0, 0.03, -0.48, mat(0x1a1a22)); // tête
+    for (const z of [0.1, 0.32]) box(g, 0.18, 0.04, 0.05, 0, 0.08, z, mat(0xc0c8d0, { metalness: 0.7 })); // micros sur la caisse
     const strM = mat(0xdfe4ee, { metalness: 0.6, roughness: 0.3 });
-    for (const x of [-0.06, -0.02, 0.02, 0.06]) box(g, 0.008, 0.008, 1.05, x, 0.1, -0.08, strM);
+    for (const x of [-0.06, -0.02, 0.02, 0.06]) box(g, 0.008, 0.008, 0.8, x, 0.1, -0.1, strM); // cordes
   } else if (id === 'trident') {
     // trident des abysses : hampe + trois fourches lumineuses
     box(g, 0.055, 0.055, 1.3, 0, 0, -0.35, mat(0x1f3a5a, { metalness: 0.5, roughness: 0.4 }));

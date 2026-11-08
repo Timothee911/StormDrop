@@ -181,7 +181,7 @@ function rewardHTML(r, cls = '') {
 // ---------------------------------------------------------------------------
 const canvas = $('stage');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.75));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -189,7 +189,8 @@ const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 200);
 renderer.setClearColor(0x000000, 0);
 const stageOutline = createOutline(renderer, { alpha: true, width: 2, fadeNear: 40, fadeFar: 120, strength: 0.95 });
 scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x3b2a9e, 1.1));
-const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(-3, 6, -5); key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(-3, 6, -5); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); // netteté des ombres sur les cosmétiques
 key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02; // surfaces courbes des personnages : évite l'acné d'ombre
 key.shadow.camera.left = -3; key.shadow.camera.right = 3; key.shadow.camera.top = 4; key.shadow.camera.bottom = -2; scene.add(key);
 const rim = new THREE.DirectionalLight(0x8fd8ff, 1.6); rim.position.set(4, 3, 5); scene.add(rim);
@@ -222,7 +223,7 @@ function buildChar() {
 function playEmote(id) { emoteId = id; emoteT = 0; }
 let previewMode = null; // 'pickaxe' | 'glider'
 // camera placement per tab: [charScreenX offset (world units), cam distance, look height]
-const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 6.6, h: 0.62 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
+const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 5.7, h: 0.70 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
 let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
@@ -294,6 +295,10 @@ function loop() {
   const camH = compact && curTab === 'pass' ? PASS_MOB.h : view.h;
   camera.position.set(-stageX, camH + 0.35, -camD); camera.lookAt(-stageX, camH, 0);
   plat.position.set(0, 0, 0);
+  // Sur l'écran de passe, le perso est cadré plus grand : on masque le socle pour
+  // ne pas voir la plateforme sous ses pieds.
+  const onPass = curTab === 'pass';
+  for (const p of [pd, ring, glow, top]) p.visible = !onPass;
   // character
   if (!dragging) { spinV *= 0.92; charYaw += spinV; }
   if (charM) {
@@ -303,6 +308,8 @@ function loop() {
       if (emoteT > 5) emoteT = -1;
     } else if (previewMode === 'pickaxe') {
       y = poseIdle(charM, clockT); heldPick.visible = true; charM.shR.rotation.set(0.6 + Math.sin(clockT * 2) * 0.1, 0, 0.1);
+      // même tenue qu'en jeu (repos) : tête de l'outil vers le haut, inclinée
+      heldPick.rotation.set(2.0, 0, 0.5);
     } else { y = poseIdle(charM, clockT); heldPick.visible = false; }
     charM.group.position.y = y;
     charM.group.rotation.y = charYaw;
@@ -733,8 +740,14 @@ const TIPS = [
 ];
 let mmTimer = 0, inMatch = false, mmTimeout = 0;
 function bindPlay() {
-  $('playBtn').onclick = () => {
-    if (window.StormLandscape?.blocked) return;
+  $('playBtn').onclick = async () => {
+    if (window.StormLandscape?.blocked) {
+      // Portrait : on ne demande pas une rotation manuelle — on passe le jeu en
+      // plein écran paysage directement (Android/Chrome). Si le navigateur ne
+      // peut pas verrouiller l'orientation, la consigne reste affichée.
+      await window.StormLandscape?.enter();
+      if (window.StormLandscape.blocked) return;
+    }
     if (inMatch) { cancelMM2(); toast('Recherche annulée'); return; }
     if (!S.name) { // pas de pseudo par défaut : on en demande un avant de jouer
       $('setName').value = ''; $('setDiff').value = S.diff; $('settingsModal').classList.remove('hidden');
@@ -848,7 +861,7 @@ buildChar(); updateTopbar(); renderHome();
 requestAnimationFrame(loop);
 // pre-render thumbnails in the background so tabs open instantly
 (() => { const q = []; for (const c in CATS) for (const id in CATS[c].items) q.push([c, id]); const tick = () => { for (let i = 0; i < 3 && q.length; i++) { const [c, id] = q.shift(); thumb(c, id); } if (q.length) setTimeout(tick, 30); }; tick(); })();
-window.__lobby = { S, setTab, addXP, applyResult, showResult, launchMatch, xpNeeded, shopToday, DEFAULT_LOADOUT, renderModePick };
+window.__lobby = { setYaw: (a) => { charYaw = a; spinV = 0; }, S, setTab, addXP, applyResult, showResult, launchMatch, xpNeeded, shopToday, DEFAULT_LOADOUT, renderModePick };
 
 // ---------------------------------------------------------------------------
 // Installable app (PWA): offline cache + install button
