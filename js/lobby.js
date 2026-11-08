@@ -222,7 +222,7 @@ function buildChar() {
 function playEmote(id) { emoteId = id; emoteT = 0; }
 let previewMode = null; // 'pickaxe' | 'glider'
 // camera placement per tab: [charScreenX offset (world units), cam distance, look height]
-const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 9.5, h: 0.9 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
+const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 4.2, h: 1.05 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
 let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
@@ -281,12 +281,17 @@ function loop() {
   // camera
   view.x += (viewT.x - view.x) * Math.min(1, dt * 6); view.d += (viewT.d - view.d) * Math.min(1, dt * 6); view.h += (viewT.h - view.h) * Math.min(1, dt * 6);
   const compact = matchMedia('(max-width: 900px), (pointer: coarse)').matches;
-  const stageX = compact ? 0 : view.x;
-  // bureau : vise un peu plus bas sur le passe pour degager la piste sous le perso
-  const aimH = view.h - (!compact && curTab === 'pass' ? 0.38 : 0);
-  // Mobile : caméra plus proche pour un perso beaucoup plus grand dans l'aperçu
-  const camD = compact ? view.d * 0.58 : view.d;
-  camera.position.set(-stageX, aimH + 0.35, -camD); camera.lookAt(-stageX, aimH, 0);
+  // Sur le passe mobile, le perso est légèrement décalé à gauche pour laisser
+  // la place aux boutons d'achat en haut à droite.
+  // (la caméra regarde vers +z : un stageX positif place le perso à gauche de l'écran)
+  const stageX = compact ? (curTab === 'pass' ? 1.0 : 0) : view.x;
+  // Mobile : caméra plus proche pour un perso beaucoup plus grand dans l'aperçu.
+  // Sur le passe, le perso garde son cadrage (plein écran derrière l'interface).
+  const camD = compact ? view.d * (curTab === 'pass' ? 0.92 : 0.58) : view.d;
+  // Sur le passe mobile, on vise un peu plus haut pour que le casque
+  // ne soit pas rogné par le bord haut du canvas (plus court en paysage).
+  const camH = view.h + (compact && curTab === 'pass' ? 0.09 : 0);
+  camera.position.set(-stageX, camH + 0.35, -camD); camera.lookAt(-stageX, camH, 0);
   plat.position.set(0, 0, 0);
   // character
   if (!dragging) { spinV *= 0.92; charYaw += spinV; }
