@@ -118,6 +118,26 @@
 
 <!-- BATTLE PASS -->
 <section class="page" id="page-pass">
+  <div class="pass-home" id="passHome">
+    <div class="pass-home-heading">
+      <div class="pass-season">CHAPITRE 2 · SAISON 2 — TOP SECRET</div>
+      <h1>CHOISIS TES RÉCOMPENSES</h1>
+      <p>Choisis une catégorie pour découvrir toutes ses récompenses en grand.</p>
+    </div>
+    <div class="pass-home-cards">
+      <button class="pass-home-card main" data-open-pass="main">
+        <span class="pass-card-art">★</span><strong>PASSE DE COMBAT</strong><small>Les récompenses des 30 paliers</small><span class="pass-card-open">VOIR LES OBJETS →</span>
+      </button>
+      <button class="pass-home-card bonus" data-open-pass="bonus">
+        <span class="pass-card-art">✦</span><strong>PASS BONUS</strong><small>Les récompenses supplémentaires</small><span class="pass-card-open">VOIR LES OBJETS →</span>
+      </button>
+      <button class="pass-home-card quest" data-open-pass="quete">
+        <span class="pass-card-art">⚡</span><strong>PASS QUÊTE</strong><small>Les récompenses des défis</small><span class="pass-card-open">VOIR LES OBJETS →</span>
+      </button>
+    </div>
+  </div>
+  <div class="pass-content" id="passContent" style="display:none">
+    <button class="pass-back" id="passBack">← RETOUR AUX CATÉGORIES</button>
   <div class="pass-layout">
     <div class="pass-left">
       <div class="pass-season">CHAPITRE 2 · SAISON 2 — TOP SECRET</div>
@@ -144,17 +164,11 @@
     </div>
   </div>
   <div class="mobile-stage" id="passStage" aria-label="Aperçu de la récompense"></div>
-  <div class="pass-nav" id="passNav">
-    <button data-pass="main" class="on">PASSE DE COMBAT</button>
-    <button data-pass="free">GRATUIT</button>
-    <button data-pass="premium">PREMIUM</button>
-    <button data-pass="bonus">PASS BONUS</button>
-    <button data-pass="quete">PASS QUÊTE</button>
-  </div>
   <div class="pass-track-wrap">
     <button class="pt-arrow l" id="ptL" aria-label="Précédent">‹</button>
     <div class="pass-track" id="passTrack"></div>
     <button class="pt-arrow r" id="ptR" aria-label="Suivant">›</button>
+  </div>
   </div>
 </section>
 

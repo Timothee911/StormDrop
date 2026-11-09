@@ -532,15 +532,20 @@ function renderPass() {
 }
 $('ptL').onclick = () => { $('passTrack').scrollLeft -= 600; };
 $('ptR').onclick = () => { $('passTrack').scrollLeft += 600; };
-// navigation entre sous-pass (piste principale / bonus / quête)
-document.querySelectorAll('#passNav button').forEach((b) => b.onclick = () => {
-  passView = b.dataset.pass;
-  if (passView === 'free') passSel = { t: Math.min(S.level || 1, MAX_TIER), k: 'free' };
-  if (passView === 'premium') passSel = { t: Math.min(S.level || 1, MAX_TIER), k: 'prem' };
-  document.querySelectorAll('#passNav button').forEach((x) => x.classList.toggle('on', x === b));
+// Navigation : écran de catégories puis une page dédiée par catégorie
+document.querySelectorAll('#passHome [data-open-pass]').forEach((b) => b.onclick = () => {
+  passView = b.dataset.openPass;
+  $('passHome').style.display = 'none';
+  $('passContent').style.display = 'flex';
   renderPass.scrolled = false;
+  $('passTrack').scrollTop = 0;
+  $('passTrack').scrollLeft = 0;
   renderPass();
 });
+$('passBack').onclick = () => {
+  $('passContent').style.display = 'none';
+  $('passHome').style.display = 'flex';
+};
 // acheter un niveau : 150 Éclats, passe directement au niveau suivant
 $('buyLevelBtn').onclick = () => {
   if (S.level >= MAX_BONUS) { toast('Toutes les récompenses du passe sont déjà débloquées'); return; }
