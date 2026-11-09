@@ -1539,3 +1539,41 @@ body[data-tab="pass"] #page-pass {
     height: 125px;
   }
 }
+
+
+/* Pass de combat : cinq skins beaucoup plus grands */
+#page-pass .pass-home-card:has([data-open-pass="main"]) {
+  min-height: clamp(330px, 48vh, 440px);
+}
+#page-pass .pass-home-card:has([data-open-pass="main"]) .pass-card-skins {
+  height: clamp(290px, 42vh, 380px);
+  min-height: clamp(290px, 42vh, 380px);
+  align-items: flex-end;
+  gap: 0;
+}
+#page-pass .pass-home-card:has([data-open-pass="main"]) .pass-home-skin {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+#page-pass .pass-home-card:has([data-open-pass="main"]) .pass-home-skin img {
+  height: 100%;
+  width: 210%;
+  max-width: none;
+  object-fit: contain;
+  object-position: center bottom;
+  transform: none;
+}
+@media(max-width:760px) {
+  #page-pass .pass-home-card:has([data-open-pass="main"]) {
+    min-height: 230px;
+  }
+  #page-pass .pass-home-card:has([data-open-pass="main"]) .pass-card-skins {
+    height: 180px;
+    min-height: 180px;
+  }
+  #page-pass .pass-home-card:has([data-open-pass="main"]) .pass-home-skin img {
+    height: 180px;
+    width: 210%;
+  }
+}
