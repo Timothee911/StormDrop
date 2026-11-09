@@ -1439,3 +1439,47 @@ body[data-tab="pass"] #page-pass {
   #page-pass .pass-home-card strong { font-size: 9px; }
   #page-pass .pass-card-open { padding: 4px 3px; font-size: 7px; }
 }
+
+
+/* Accueil du passe : cartes alignées à gauche, sans noms, tenues plus imposantes */
+#page-pass .pass-home-cards {
+  width: min(78%, 960px);
+  margin-left: 0;
+  margin-right: auto;
+  transform: translateY(clamp(40px, 8vh, 88px));
+  gap: clamp(10px, 1.4vw, 20px);
+}
+#page-pass .pass-home-card {
+  min-height: clamp(205px, 31vh, 300px);
+}
+#page-pass .pass-card-skins {
+  min-height: clamp(180px, 28vh, 260px);
+  align-items: stretch;
+}
+#page-pass .pass-home-skin {
+  overflow: visible;
+}
+#page-pass .pass-home-skin img {
+  height: clamp(180px, 28vh, 260px);
+  width: 145%;
+  max-width: none;
+  flex: 1 1 auto;
+  transform: scale(1.28);
+  transform-origin: center bottom;
+}
+#page-pass .pass-home-skin small { display: none !important; }
+@media(max-width:760px) {
+  #page-pass .pass-home-cards {
+    width: min(100%, 480px);
+    margin-left: 0;
+    margin-right: auto;
+    transform: translateY(24px);
+  }
+  #page-pass .pass-home-card { min-height: 145px; }
+  #page-pass .pass-card-skins { min-height: 112px; }
+  #page-pass .pass-home-skin img {
+    height: 112px;
+    width: 145%;
+    transform: scale(1.22);
+  }
+}
