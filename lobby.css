@@ -1083,6 +1083,6 @@ body[data-tab="pass"] #page-pass {
     padding: 0 4px 7px;
     font-size: clamp(10px,2.5vw,13px);
   }
-  #page-pass .pass-nav button::before { inset-bottom: 17px; }
+  #page-pass .pass-nav button::before { bottom: 17px; }
   #page-pass .pass-nav button::after { height: 22px; }
 }
