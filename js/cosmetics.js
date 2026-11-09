@@ -482,8 +482,29 @@ export function makePickaxe(id = 'default') {
     box(g, 0.07, 0.07, 1.0, 0, 0, -0.2, wood);
     box(g, 0.05, 0.4, 0.3, 0, 0.12, -0.6, mat(0xc0c8d0, { metalness: 0.7, roughness: 0.3 }));
   } else if (id === 'sucre') {
-    const h = box(g, 0.08, 0.08, 1.0, 0, 0, -0.2, mat(0xffffff)); for (let i = 0; i < 5; i++) box(g, 0.085, 0.085, 0.06, 0, 0, -0.6 + i * 0.2, mat(0xff2e4d));
-    const top = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.05, 6, 12, Math.PI), mat(0xff2e4d)); top.rotation.y = Math.PI / 2; top.position.set(0, 0.18, -0.7); g.add(top);
+    // sucre d'orge : canne en J laquée, rayures rouges en spirale
+    const caneM = mat(0xfff6f0, { roughness: 0.12 });
+    const redM = mat(0xff2e4d, { roughness: 0.2 });
+    // tige droite (grip à l'origine)
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.92, 14), caneM);
+    shaft.rotation.x = Math.PI / 2; shaft.position.set(0, 0, -0.44); g.add(shaft);
+    // rayures diagonales enroulées autour de la tige
+    for (let i = 0; i < 7; i++) {
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.09, 14, 1, true), redM);
+      st.rotation.x = Math.PI / 2 + 0.4; st.position.set(0, 0, -0.08 - i * 0.13); g.add(st);
+    }
+    // crosse en J au sommet (demi-tore, ventre vers le haut)
+    const hook = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.058, 10, 14, Math.PI), caneM);
+    hook.rotation.x = -Math.PI / 2; hook.position.set(0.17, 0, -0.86); g.add(hook);
+    // rayures rouges sur la crosse (segments d'arc)
+    for (const a of [0.3, 1.2, 2.1]) {
+      const seg = new THREE.TorusGeometry(0.17, 0.062, 10, 6, 0.5);
+      seg.rotateZ(a); seg.rotateX(-Math.PI / 2);
+      const sm = new THREE.Mesh(seg, redM); sm.position.set(0.17, 0, -0.86); g.add(sm);
+    }
+    // boule blanche au bout libre de la crosse
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 8), caneM);
+    knob.position.set(0.34, 0, -0.86); g.add(knob);
   } else if (id === 'epee') {
     box(g, 0.06, 0.06, 0.3, 0, 0, 0.05, mat(0x222222)); box(g, 0.3, 0.06, 0.06, 0, 0, -0.1, mat(0xffd23f));
     box(g, 0.05, 0.12, 0.85, 0, 0, -0.55, mat(0x39ff88, { emissive: 0x39ff88, emissiveIntensity: 1.3 }));
@@ -503,18 +524,28 @@ export function makePickaxe(id = 'default') {
       const b = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), boneM); b.position.set(x, y, z); g.add(b);
     }
   } else if (id === 'banane') {
-    // banane : arc de tore courbé comme une lame, à plat dans le plan XZ du
-    // modèle (le plan qui reste de face après la rotation de la vignette)
-    const bg = new THREE.TorusGeometry(0.4, 0.085, 8, 14, 2.2);
-    bg.rotateX(Math.PI / 2); // anneau à plat (plan XZ)
-    bg.rotateY(2.67);        // arc symétrique, ventre vers la tête de l'outil
-    // prise en main au MILIEU de la banane : l'arc entoure la main (grip à l'origine)
-    const bn = new THREE.Mesh(bg, mat(0xffd23f, { roughness: 0.5 }));
-    bn.position.set(0, 0.02, 0); g.add(bn);
-    for (const sx of [-1, 1]) { // bouts marron aux deux extrémités
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.16, 6), mat(0x6b4a2a));
-      tip.rotation.z = sx * Math.PI / 2; tip.position.set(sx * 0.4, 0.02, -0.18); g.add(tip);
-    }
+    // banane explosive : tenue par la tige (grip à l'origine), la banane se
+    // courbe au-dessus de la main comme une lame — mèche allumée au sommet
+    const R = 0.52;
+    const bg = new THREE.TorusGeometry(R, 0.1, 10, 20, 2.1);
+    bg.rotateZ(Math.PI / 2); bg.rotateY(Math.PI); bg.rotateX(Math.PI / 2);
+    // l'arc part de la main (0,0,0) et monte vers la tête de l'outil (-z)
+    const bn = new THREE.Mesh(bg, mat(0xffd23f, { roughness: 0.45 }));
+    bn.position.set(0, 0.02, -R); g.add(bn);
+    // tige marron qui dépasse sous la main
+    const stem = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 6), mat(0x6b4a2a));
+    stem.rotation.x = Math.PI / 2; stem.position.set(0, 0.02, 0.1); g.add(stem);
+    // pointe marron au sommet + mèche + étincelle (banane explosive)
+    const end = new THREE.Vector3(0.87 * R, 0.02, -1.5 * R);
+    const dir = new THREE.Vector3(0.87, 0, -0.5).normalize();
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.15, 6), mat(0x6b4a2a));
+    tip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    tip.position.copy(end).addScaledVector(dir, 0.07); g.add(tip);
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 5), mat(0x3a2a1a));
+    fuse.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    fuse.position.copy(end).addScaledVector(dir, 0.2); g.add(fuse);
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), mat(0xffb43a, { emissive: 0xff7a1a, emissiveIntensity: 1.8 }));
+    spark.position.copy(end).addScaledVector(dir, 0.28); g.add(spark);
   } else if (id === 'glace') {
     // piolet : manche bois + pic de glace + cristaux
     box(g, 0.06, 0.06, 0.95, 0, 0, -0.15, mat(0x5a3a20));
@@ -556,15 +587,21 @@ export function makePickaxe(id = 'default') {
     bl.rotation.x = 0.06;
     box(g, 0.032, 0.02, 1.05, 0, 0.085, -0.6, mat(0xff2e7d, { emissive: 0xff2e7d, emissiveIntensity: 1.4 }));
   } else if (id === 'raquette') {
-    // raquette de tennis : manche + cadre ovale + cordes
-    // prise en main au BOUT du manche (main à l'origine), tête en haut
-    box(g, 0.05, 0.05, 0.62, 0, 0, -0.31, mat(0x2a2a3a));
-    // tête quasi dans l'axe du manche (comme une vraie raquette) pour ne pas
-    // traverser l'épaule quand l'outil est tenu incliné
-    const frame = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 8, 20), mat(0x39ff88, { emissive: 0x1fc46a, emissiveIntensity: 0.5 }));
-    frame.position.set(0, 0.1, -0.65); frame.scale.y = 1.3; g.add(frame);
-    const strM = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.15 });
-    for (let i = -3; i <= 3; i++) { box(g, 0.012, 0.66, 0.012, i * 0.075, 0.1, -0.65, strM); box(g, 0.4, 0.012, 0.012, 0, 0.1 + i * 0.11, -0.65, strM); }
+    // raquette de match : manche long avec grip néon, jonc en V, tamis ovale
+    // incliné vers l'avant (plus lisible de trois quarts, pas un plateau plat)
+    const dark = mat(0x232328, { roughness: 0.5 });
+    const neon = mat(0x39ff88, { emissive: 0x1fc46a, emissiveIntensity: 0.7 });
+    box(g, 0.055, 0.055, 0.85, 0, 0, -0.38, dark); // manche z [-0.805, +0.045]
+    for (let i = 0; i < 4; i++) box(g, 0.063, 0.063, 0.03, 0, 0, -0.05 - i * 0.08, neon); // grip
+    // jonc en V : deux branches du haut du manche vers le bas du cadre
+    for (const sx of [-1, 1]) { const v = box(g, 0.03, 0.03, 0.34, sx * 0.1, 0, -0.93, dark); v.rotation.y = sx * 0.32; }
+    // tête : cadre ovale néon + cordage croisé, incliné
+    const head = new THREE.Group(); head.position.set(0, 0.06, -1.1); head.rotation.x = -0.3; g.add(head);
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.045, 10, 26), neon);
+    frame.scale.set(0.85, 1.12, 1); head.add(frame);
+    const strM = mat(0xf2fff6, { emissive: 0xffffff, emissiveIntensity: 0.12 });
+    for (let i = -3; i <= 3; i++) box(head, 0.012, 0.56, 0.012, i * 0.072, 0, 0, strM);
+    for (let i = -2; i <= 2; i++) box(head, 0.42, 0.012, 0.012, 0, i * 0.11, 0, strM);
   } else if (id === 'guitare') {
     // guitare électrique : caisse + manche + micros + cordes
     // prise en main au sommet du manche (près de la caisse) : la caisse retombe
@@ -580,15 +617,25 @@ export function makePickaxe(id = 'default') {
     const strM = mat(0xdfe4ee, { metalness: 0.6, roughness: 0.3 });
     for (const x of [-0.06, -0.02, 0.02, 0.06]) box(g, 0.008, 0.008, 0.8, x, 0.1, -0.1, strM); // cordes
   } else if (id === 'trident') {
-    // trident des abysses : hampe + trois fourches lumineuses
-    box(g, 0.055, 0.055, 1.3, 0, 0, -0.35, mat(0x1f3a5a, { metalness: 0.5, roughness: 0.4 }));
-    const gold = mat(0xffc400, { metalness: 0.8, roughness: 0.3 });
-    cyl(g, 0.09, 0.09, 0.06, 0, 0, -0.95, gold, 12);
-    for (const [x, r] of [[-0.24, 0.35], [0, 0], [0.24, 0.35]]) {
-      box(g, 0.045, 0.045, 0.42, x, 0.05 + r * 0.35, -1.2, mat(0x2a4a6a, { metalness: 0.5 }));
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 6), mat(0x5ad8ff, { emissive: 0x2ab8ff, emissiveIntensity: 1.2, metalness: 0.4 }));
-      tip.rotation.x = -Math.PI / 2; tip.position.set(x, 0.05 + r * 0.35, -1.52); g.add(tip);
-      if (r) box(g, 0.05, 0.05, 0.16, x * 0.55, 0.05 + r * 0.2, -1.05, mat(0x2a4a6a, { metalness: 0.5 }));
+    // trident des abysses : hampe bleu profond lisible, collier doré, trois
+    // fourches courbes — la centrale plus haute (silhouette de trident)
+    const steel = mat(0x2a6a94, { metalness: 0.55, roughness: 0.35 });
+    box(g, 0.055, 0.055, 1.1, 0, 0, -0.33, steel); // hampe z [-0.88, +0.22]
+    const gold = mat(0xffc400, { metalness: 0.85, roughness: 0.25 });
+    cyl(g, 0.1, 0.13, 0.09, 0, 0, -0.92, gold, 12).rotation.x = Math.PI / 2;
+    const tipC = mat(0x5ad8ff, { emissive: 0x2ab8ff, emissiveIntensity: 1.3, metalness: 0.4, roughness: 0.2 });
+    // fourche centrale (la plus haute)
+    box(g, 0.05, 0.05, 0.46, 0, 0.04, -1.15, steel);
+    const ct = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.26, 8), tipC);
+    ct.rotation.x = -Math.PI / 2; ct.position.set(0, 0.04, -1.51); g.add(ct);
+    // fourches latérales : aile courbe (extérieur puis haut) + prong droit
+    for (const sx of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.042, 8, 12, Math.PI / 2), steel);
+      wing.geometry.rotateZ(Math.PI / 2); wing.geometry.rotateX(-Math.PI / 2);
+      wing.scale.x = sx; wing.position.set(sx * 0.28, 0.03, -0.92); g.add(wing);
+      box(g, 0.045, 0.045, 0.3, sx * 0.28, 0.03, -1.28, steel);
+      const st = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.2, 6), tipC);
+      st.rotation.x = -Math.PI / 2; st.position.set(sx * 0.28, 0.03, -1.53); g.add(st);
     }
   } else {
     box(g, 0.07, 0.07, 1.0, 0, 0, -0.2, wood);
