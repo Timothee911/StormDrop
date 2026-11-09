@@ -1390,3 +1390,52 @@ body[data-tab="pass"] #page-pass {
   #page-pass .pass-home-skin img { height: 76px; }
   #page-pass .pass-home-skin small { font-size: 7px; }
 }
+
+
+/* Cartes catégories : skins agrandis, cartes plus compactes et abaissées */
+#page-pass .pass-home-cards {
+  width: min(70%, 820px);
+  gap: clamp(9px, 1.2vw, 16px);
+  transform: translateY(clamp(40px, 8vh, 88px));
+}
+#page-pass .pass-home-card {
+  min-height: clamp(175px, 27vh, 265px);
+  padding: 9px clamp(8px, 1vw, 14px);
+  gap: 4px;
+}
+#page-pass .pass-card-skins {
+  flex: 1 1 auto;
+  min-height: clamp(145px, 23vh, 225px);
+  margin: 0;
+  align-items: stretch;
+  gap: 0;
+}
+#page-pass .pass-home-skin {
+  max-width: none;
+  flex: 1 1 0;
+  min-height: 0;
+}
+#page-pass .pass-home-skin img {
+  height: clamp(145px, 23vh, 225px);
+  width: 100%;
+  object-fit: contain;
+  transform: scale(1.12);
+  transform-origin: center bottom;
+}
+#page-pass .pass-home-skin small { font-size: clamp(8px, .7vw, 10px); }
+#page-pass .pass-home-card strong { font-size: clamp(13px, 1.1vw, 17px); }
+#page-pass .pass-home-card small { font-size: 10px; }
+#page-pass .pass-card-open { margin-top: 2px; padding: 5px 8px; font-size: 9px; }
+@media(max-width:760px) {
+  #page-pass .pass-home-cards {
+    width: min(100%, 480px);
+    transform: translateY(24px);
+    gap: 5px;
+  }
+  #page-pass .pass-home-card { min-height: 128px; padding: 6px 4px; }
+  #page-pass .pass-card-skins { min-height: 88px; }
+  #page-pass .pass-home-skin img { height: 92px; transform: scale(1.08); }
+  #page-pass .pass-home-skin small { font-size: 6px; }
+  #page-pass .pass-home-card strong { font-size: 9px; }
+  #page-pass .pass-card-open { padding: 4px 3px; font-size: 7px; }
+}
