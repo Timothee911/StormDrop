@@ -542,6 +542,23 @@ document.querySelectorAll('#passHome [data-open-pass]').forEach((b) => b.onclick
   $('passTrack').scrollLeft = 0;
   renderPass();
 });
+// Aperçu des tenues premium directement sur les trois cartes d'accueil du passe.
+const PASS_HOME_SKINS = {
+  main: ['brutus', 'tntina', 'meowscles', 'skye', 'midas'],
+  bonus: ['cyber'],
+  quete: ['roi'],
+};
+document.querySelectorAll('#passHome [data-open-pass]').forEach((card) => {
+  const key = card.dataset.openPass;
+  const art = card.querySelector('.pass-card-art');
+  if (!art) return;
+  const skins = PASS_HOME_SKINS[key] || [];
+  art.className = 'pass-card-skins';
+  art.innerHTML = skins.map((id) => {
+    const it = itemOf('skin', id);
+    return `<span class="pass-home-skin"><img src="${thumb('skin', id, true)}" alt="${it.name}" title="${it.name}"><small>${it.name}</small></span>`;
+  }).join('');
+});
 $('passBack').onclick = () => {
   $('passContent').style.display = 'none';
   $('passHome').style.display = 'flex';
