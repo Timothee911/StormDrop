@@ -792,3 +792,200 @@ h3 { font-family: var(--font-display); font-weight: 400; font-size: 24px; margin
   #page-pass .pass-left, #page-pass .pass-right { background: rgba(4, 18, 30, .48); padding: 10px; }
   #page-pass .pass-track-wrap { padding: 6px; }
 }
+
+
+/* PASS SCREEN — composition inspirée de l'écran Fortnite fourni */
+body[data-tab="pass"] #bg {
+  background:
+    radial-gradient(ellipse 42% 72% at 50% 48%, rgba(255,190,53,.98) 0%, rgba(246,125,13,.96) 42%, rgba(119,43,5,.98) 100%),
+    linear-gradient(115deg, #a93d08, #f58b13 52%, #672007);
+}
+body[data-tab="pass"] .bg-img { opacity: 0 !important; filter: none !important; }
+body[data-tab="pass"] .bg-shade,
+body[data-tab="pass"] .bg-bolt,
+body[data-tab="pass"] .bg-clouds,
+body[data-tab="pass"] .bg-floor { opacity: 0 !important; }
+body[data-tab="pass"] .bg-glow {
+  left: 50%; top: 47%; width: 76vmin; height: 76vmin;
+  background: radial-gradient(circle, rgba(255,218,91,.48), rgba(255,166,31,.18) 48%, transparent 72%);
+  filter: blur(2px); opacity: 1; mix-blend-mode: screen;
+}
+body[data-tab="pass"] #stage { z-index: 1; }
+body[data-tab="pass"] #topbar {
+  background: linear-gradient(180deg, rgba(55,13,5,.82), rgba(55,13,5,.12));
+  border-bottom-color: rgba(255,214,132,.2);
+}
+body[data-tab="pass"] #page-pass {
+  z-index: 2;
+  padding: 74px 24px 12px;
+  gap: 8px;
+  background: transparent;
+}
+#page-pass .pass-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: minmax(210px, 24vw) minmax(0,1fr) minmax(170px, 19vw);
+  gap: clamp(10px, 1.5vw, 24px);
+  position: relative;
+  pointer-events: none;
+}
+#page-pass .pass-layout::before { display: none; }
+#page-pass .pass-left,
+#page-pass .pass-right { pointer-events: auto; z-index: 3; }
+#page-pass .pass-left {
+  align-self: start;
+  max-height: 100%;
+  overflow: visible;
+  gap: 9px;
+  padding: 4px 0 0;
+  background: transparent;
+}
+#page-pass .pass-season {
+  background: linear-gradient(180deg,#ffe8a2,#d98a20);
+  color: #552306;
+  border: 1px solid rgba(255,245,205,.75);
+  box-shadow: 0 3px 0 rgba(91,31,4,.35);
+  font-size: 14px;
+}
+#page-pass .pass-left h1 {
+  color: #fff7e6;
+  font-size: clamp(25px,2.2vw,36px);
+  text-shadow: 0 3px 3px rgba(78,24,0,.55);
+}
+#page-pass .pass-sub {
+  max-width: 250px;
+  color: #fff8ed;
+  text-shadow: 0 2px 3px rgba(67,20,0,.65);
+  font-size: 15px;
+}
+#page-pass .pass-status {
+  background: rgba(77,28,5,.74);
+  border: 1px solid rgba(255,220,158,.45);
+  border-left: 4px solid #ffdf8b;
+  border-radius: 2px;
+  box-shadow: 0 8px 24px rgba(64,20,0,.2);
+  color: #fff6e8;
+}
+#page-pass .ps-lock.on,
+#page-pass .pp-tier { color: #ffdc85; }
+#page-pass .ps-bar { background: rgba(31,12,3,.72); }
+#page-pass .ps-bar i { background: linear-gradient(90deg,#fff0b3,#ffbd37); }
+#page-pass .pass-preview {
+  margin-top: 2px;
+  padding: 9px 12px;
+  background: linear-gradient(90deg,rgba(91,31,4,.72),rgba(91,31,4,0));
+  border-left: 3px solid #ffe09a;
+  text-shadow: 0 2px 3px rgba(54,17,0,.6);
+}
+#page-pass .pass-preview .pp-name { color: #fff; }
+#page-pass .pass-right {
+  align-self: start;
+  overflow: visible;
+  gap: 9px;
+  padding-top: 4px;
+}
+#page-pass .pr-level {
+  background: rgba(67,23,4,.78);
+  border: 1px solid rgba(255,223,166,.45);
+  border-radius: 2px;
+  box-shadow: 0 8px 24px rgba(65,20,0,.24);
+}
+#page-pass .pr-level .lvl-badge {
+  background: linear-gradient(145deg,#fff0a8,#ffad19);
+  color: #6b2600;
+  clip-path: polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
+}
+#page-pass .buy-level {
+  border-radius: 2px;
+  background: linear-gradient(180deg,#fff0a9,#e99b24);
+  color: #542000;
+  box-shadow: 0 3px 0 #8a4109;
+}
+#page-pass .pass-buy {
+  border-radius: 2px;
+  background: linear-gradient(145deg,#f9c15d,#a95012);
+  color: #fff4d9;
+  border: 1px solid rgba(255,225,163,.55);
+  box-shadow: 0 6px 20px rgba(65,20,0,.22);
+}
+#page-pass .pass-buy .buy-btn {
+  background: #173b78;
+  color: #fff;
+  box-shadow: 0 3px 0 #09224b;
+}
+#page-pass .pass-nav {
+  position: relative;
+  z-index: 4;
+  gap: 8px;
+  margin: 0 0 0 4px;
+}
+#page-pass .pass-nav button {
+  min-width: clamp(120px,16vw,220px);
+  height: clamp(40px,7vh,68px);
+  padding: 8px 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(255,226,169,.48);
+  background: linear-gradient(180deg,rgba(75,30,10,.8),rgba(33,16,12,.88));
+  color: #fff0d2;
+  box-shadow: 0 4px 10px rgba(68,20,0,.22);
+  font-size: clamp(13px,1.2vw,17px);
+  white-space: normal;
+}
+#page-pass .pass-nav button.on {
+  background: linear-gradient(180deg,#ffe7a2,#d78b25);
+  color: #542100;
+  border-color: #fff0c6;
+  box-shadow: 0 4px 0 rgba(104,42,4,.55);
+}
+#page-pass .pass-track-wrap {
+  position: relative;
+  z-index: 4;
+  flex: 0 0 auto;
+  min-height: 104px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255,220,157,.5);
+  border-radius: 2px;
+  background: linear-gradient(180deg,rgba(65,23,5,.88),rgba(35,13,4,.94));
+  box-shadow: 0 8px 28px rgba(53,15,0,.3);
+}
+#page-pass .pass-track { gap: 8px; }
+#page-pass .tier { width: clamp(76px,7.2vw,112px); }
+#page-pass .tier-num {
+  color: #fff0d2;
+  background: rgba(46,17,4,.88);
+  border: 1px solid rgba(255,220,157,.5);
+  border-radius: 2px;
+}
+#page-pass .tier.cur .tier-num {
+  color: #592500;
+  background: #ffe19a;
+  border-color: #fff1c8;
+}
+#page-pass .reward {
+  border-radius: 2px;
+  border: 2px solid rgba(255,224,173,.42);
+  background: linear-gradient(145deg,rgba(255,255,255,.18),rgba(54,16,2,.6));
+}
+#page-pass .reward.prem { border-color: rgba(255,213,112,.9); }
+#page-pass .reward.sel {
+  border-color: #fff8dd;
+  box-shadow: 0 0 0 2px #ffbf43,0 0 18px rgba(255,204,84,.6);
+}
+#page-pass .reward .rw-label { background: rgba(48,16,2,.78); color: #fff3d9; }
+#page-pass .pt-arrow {
+  border-radius: 2px;
+  color: #fff0d2;
+  background: rgba(47,17,4,.9);
+  border: 1px solid rgba(255,220,157,.45);
+}
+@media (max-width: 900px), (pointer: coarse) {
+  body[data-tab="pass"] #page-pass { padding: 98px 12px 10px; }
+  #page-pass .pass-layout {
+    grid-template-columns: minmax(0,1fr) minmax(130px,38%);
+    gap: 8px;
+  }
+  #page-pass .pass-left { grid-column: 1; }
+  #page-pass .pass-right { grid-column: 2; }
+  #page-pass .pass-nav button { min-width: 0; flex: 1; height: 38px; padding: 5px; }
+  #page-pass .pass-track-wrap { min-height: 86px; }
+}
