@@ -989,3 +989,100 @@ body[data-tab="pass"] #page-pass {
   #page-pass .pass-nav button { min-width: 0; flex: 1; height: 38px; padding: 5px; }
   #page-pass .pass-track-wrap { min-height: 86px; }
 }
+
+
+/* Boutons de catégories du passe : cartes larges façon Fortnite */
+#page-pass .pass-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+  margin: 0 4px 2px;
+}
+#page-pass .pass-nav button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  height: clamp(76px, 10.5vh, 112px);
+  padding: 0 8px 9px;
+  border: 1px solid rgba(255,226,169,.55);
+  border-radius: 2px;
+  background: linear-gradient(145deg,#345b70,#173044 62%,#0d1b2a);
+  color: #fff8e9;
+  box-shadow: 0 4px 0 rgba(76,29,5,.48), 0 8px 18px rgba(55,17,0,.2);
+  font-family: var(--font-display);
+  font-size: clamp(12px,1.12vw,16px);
+  font-weight: 900;
+  letter-spacing: .45px;
+  line-height: 1.1;
+  text-align: center;
+  text-shadow: 0 2px 3px rgba(0,0,0,.85);
+  white-space: normal;
+  transition: transform .16s ease, filter .16s ease, border-color .16s ease;
+}
+#page-pass .pass-nav button::before {
+  content: '';
+  position: absolute;
+  z-index: -2;
+  inset: 0 0 19px;
+  background:
+    radial-gradient(ellipse at 50% 22%,rgba(255,220,150,.8),transparent 36%),
+    linear-gradient(135deg,rgba(255,255,255,.16),transparent 48%),
+    linear-gradient(155deg,#8c5427,#d58a32 48%,#663315);
+  opacity: .96;
+  transition: transform .25s ease, filter .2s ease;
+}
+#page-pass .pass-nav button::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: auto 0 0;
+  height: 25px;
+  background: linear-gradient(180deg,rgba(18,15,13,.88),rgba(12,10,9,.98));
+  border-top: 1px solid rgba(255,235,195,.25);
+}
+#page-pass .pass-nav button:nth-child(2)::before {
+  background:
+    radial-gradient(ellipse at 52% 22%,rgba(255,232,164,.72),transparent 35%),
+    linear-gradient(135deg,rgba(255,255,255,.14),transparent 48%),
+    linear-gradient(155deg,#60417f,#a15ab2 48%,#40285c);
+}
+#page-pass .pass-nav button:nth-child(3)::before {
+  background:
+    radial-gradient(ellipse at 52% 22%,rgba(255,232,164,.72),transparent 35%),
+    linear-gradient(135deg,rgba(255,255,255,.14),transparent 48%),
+    linear-gradient(155deg,#246a6c,#35a5a0 48%,#16494f);
+}
+#page-pass .pass-nav button:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.13);
+}
+#page-pass .pass-nav button:hover::before { transform: scale(1.06); }
+#page-pass .pass-nav button.on {
+  color: #fff5d9;
+  border: 2px solid #ffe49a;
+  background: #4b2a12;
+  box-shadow: 0 0 0 2px rgba(255,190,69,.4),0 5px 0 rgba(76,29,5,.5),0 0 20px rgba(255,205,93,.38);
+}
+#page-pass .pass-nav button.on::after {
+  background: linear-gradient(180deg,#a85b12,#61300c);
+  border-top-color: rgba(255,240,197,.5);
+}
+#page-pass .pass-nav button:focus-visible {
+  outline: 3px solid #fff2bd;
+  outline-offset: 3px;
+}
+@media (max-width: 900px), (pointer: coarse) {
+  #page-pass .pass-nav { gap: 6px; margin: 0 2px; }
+  #page-pass .pass-nav button {
+    height: 66px;
+    padding: 0 4px 7px;
+    font-size: clamp(10px,2.5vw,13px);
+  }
+  #page-pass .pass-nav button::before { inset-bottom: 17px; }
+  #page-pass .pass-nav button::after { height: 22px; }
+}
