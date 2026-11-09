@@ -477,10 +477,79 @@ function buildBackpack(torso, id) {
 }
 export function makePickaxe(id = 'default') {
   const g = new THREE.Group();
-  const wood = mat(0x8a5a32);
+  // Aides de construction : segments effilés entre deux points (manches cintrés,
+  // pointes courbes) — bien moins « boîtes » que des cubes empilés.
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const UP = V(0, 1, 0);
+  const link = (a, b, r1, r2, m, seg = 10) => {
+    const d = V(b.x - a.x, b.y - a.y, b.z - a.z), len = d.length();
+    const o = new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, len, seg), m);
+    o.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    o.quaternion.setFromUnitVectors(UP, d.multiplyScalar(1 / len));
+    o.castShadow = true; g.add(o); return o;
+  };
+  const tube = (pts, rs, m) => { for (let i = 0; i < pts.length - 1; i++) link(pts[i], pts[i + 1], rs[i], rs[i + 1] ?? rs[rs.length - 1], m); };
+  const wood = matR(0x8a5a32, 0.75), woodDark = matR(0x5a3a20, 0.8);
+  const leather = matR(0x3a2a1a, 0.9), steel = matR(0x9aa4b0, 0.35, 0.85), gold = matR(0xffc400, 0.25, 0.85);
   if (id === 'hache') {
-    box(g, 0.07, 0.07, 1.0, 0, 0, -0.2, wood);
-    box(g, 0.05, 0.4, 0.3, 0, 0.12, -0.6, mat(0xc0c8d0, { metalness: 0.7, roughness: 0.3 }));
+    // hache de bûcheron : manche en frêne légèrement cintré, fer en acier
+    // à joue bombée et tranchant courbe, déporté sur le côté qui frappe
+    tube([V(0, 0, 0.12), V(0, -0.01, -0.3), V(0, 0.01, -0.6), V(0, 0.02, -0.92)], [0.034, 0.042, 0.046, 0.038], wood);
+    for (let i = 0; i < 3; i++) cyl(g, 0.046, 0.046, 0.045, 0, 0, 0.03 - i * 0.055, leather, 8).rotation.x = Math.PI / 2; // grip
+    cyl(g, 0.054, 0.054, 0.1, 0, 0.01, -0.92, steel, 12).rotation.x = Math.PI / 2; // œil
+    // fer : profil de lame extrudé mince, biseauté (tranchant)
+    const shp = new THREE.Shape();
+    shp.moveTo(0, 0.13);
+    shp.quadraticCurveTo(0.2, 0.15, 0.32, 0.08);
+    shp.quadraticCurveTo(0.41, 0.03, 0.42, -0.08);
+    shp.quadraticCurveTo(0.43, -0.24, 0.38, -0.33);
+    shp.quadraticCurveTo(0.2, -0.37, 0.05, -0.28);
+    shp.quadraticCurveTo(0, -0.18, 0, 0.13);
+    const blade = new THREE.Mesh(new THREE.ExtrudeGeometry(shp, { depth: 0.024, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2 }), steel);
+    blade.rotation.set(0, Math.PI, -0.5); // lame du côté qui frappe, relevée vers l'avant
+    blade.scale.set(0.92, 0.95, 1); // fer bien visible mais à distance du visage
+    blade.position.set(-0.024, 0.01, -0.91); g.add(blade);
+    box(g, 0.06, 0.08, 0.09, 0.045, 0.01, -0.91, steel); // talon opposé
+  } else if (id === 'epee') {
+    // lame néon : poignée gainée, pommeau, garde à quillons, lame effilée
+    // plate avec arêtes néon vertes
+    const dark = matR(0x1c1c24, 0.5, 0.3);
+    const neon = matR(0x39ff88, 0.3, 0.2, { emissive: 0x39ff88, emissiveIntensity: 1.4 });
+    cyl(g, 0.032, 0.032, 0.28, 0, 0, 0.0, dark, 10).rotation.x = Math.PI / 2; // poignée
+    for (let i = 0; i < 5; i++) cyl(g, 0.037, 0.037, 0.02, 0, 0, -0.1 + i * 0.05, leather, 8).rotation.x = Math.PI / 2; // gainage
+    sph(g, 0.05, 0, 0, 0.17, dark); // pommeau
+    box(g, 0.32, 0.045, 0.055, 0, 0, -0.2, steel); // quillons
+    // lame : effilée du fort à la pointe, section losange aplatie
+    const bl = cyl(g, 0.075, 0.026, 0.74, 0, 0.028, -0.59, dark, 4);
+    bl.rotation.x = Math.PI / 2; bl.scale.x = 0.3;
+    const tp = cyl(g, 0.026, 0.004, 0.16, 0, 0.028, -1.04, dark, 4);
+    tp.rotation.x = Math.PI / 2; tp.scale.x = 0.3;
+    box(g, 0.012, 0.05, 0.74, 0.024, 0.028, -0.57, neon); // arêtes néon
+    box(g, 0.012, 0.05, 0.74, -0.024, 0.028, -0.57, neon);
+  } else if (id === 'marteau') {
+    // marteau-tonnerre : grosse tête d'acier aux angles adoucis, faces de
+    // frappe bombées, bandeaux runiques lumineux, manche gainé cuir
+    const dark = matR(0x2a2a34, 0.5, 0.4);
+    const hammerSteel = matR(0x6a7484, 0.3, 0.8);
+    const glow = matR(0x5ad8ff, 0.2, 0.1, { emissive: 0x3ab8ff, emissiveIntensity: 1.2 });
+    tube([V(0, 0, 0.1), V(0, 0, -0.45), V(0, 0, -0.8)], [0.036, 0.042, 0.046], dark); // manche
+    for (let i = 0; i < 4; i++) cyl(g, 0.05, 0.05, 0.045, 0, 0, -0.01 - i * 0.06, leather, 10).rotation.x = Math.PI / 2; // grip
+    rbox(g, 0.38, 0.26, 0.26, 0, -0.02, -0.97, hammerSteel, 0.05); // tête
+    for (const sx of [-1, 1]) sph(g, 0.11, sx * 0.18, -0.02, -0.97, hammerSteel, 1, 1.15, 0.95); // faces bombées
+    box(g, 0.4, 0.05, 0.065, 0, 0.09, -0.97, glow); // bandeau runique haut
+    for (const sx of [-1, 1]) box(g, 0.02, 0.045, 0.18, sx * 0.195, 0, -0.97, glow); // runes latérales
+    sph(g, 0.045, 0, -0.16, -0.97, glow); // cœur électrique
+  } else if (id === 'faux') {
+    // faux lunaire : long manche sombre cintré, lame croissant très effilée
+    // qui balaie le côté gauche et revient vers le porteur
+    const dark = matR(0x242432, 0.45, 0.5);
+    const bladeM = matR(0xcfe0ff, 0.15, 0.55, { emissive: 0x6a8aff, emissiveIntensity: 0.8 });
+    tube([V(0, 0, 0.18), V(0, 0, -0.5), V(0.02, 0.04, -0.95)], [0.03, 0.035, 0.04], dark);
+    cyl(g, 0.038, 0.038, 0.14, 0.05, 0, -0.3, leather, 8).rotation.x = Math.PI / 2; // poignée basse
+    cyl(g, 0.05, 0.05, 0.07, 0.01, 0.04, -0.88, matR(0xffc400, 0.25, 0.85), 10).rotation.x = Math.PI / 2; // collier
+    // lame croissant : chaîne effilée partant du sommet du manche, balaie
+    // l'avant puis revient vers l'extérieur (profil de faux vu de dessus)
+    tube([V(0.02, 0.04, -0.9), V(0.05, 0.05, -1.12), V(0.14, 0.04, -1.28), V(0.28, 0, -1.34), V(0.4, -0.05, -1.3)], [0.04, 0.036, 0.03, 0.02, 0.004], bladeM);
   } else if (id === 'sucre') {
     // sucre d'orge : canne en J laquée, rayures rouges en spirale
     const caneM = mat(0xfff6f0, { roughness: 0.12 });
@@ -505,24 +574,18 @@ export function makePickaxe(id = 'default') {
     // boule blanche au bout libre de la crosse
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 8), caneM);
     knob.position.set(0.34, 0, -0.86); g.add(knob);
-  } else if (id === 'epee') {
-    box(g, 0.06, 0.06, 0.3, 0, 0, 0.05, mat(0x222222)); box(g, 0.3, 0.06, 0.06, 0, 0, -0.1, mat(0xffd23f));
-    box(g, 0.05, 0.12, 0.85, 0, 0, -0.55, mat(0x39ff88, { emissive: 0x39ff88, emissiveIntensity: 1.3 }));
-  } else if (id === 'marteau') {
-    box(g, 0.08, 0.08, 1.0, 0, 0, -0.2, mat(0x333344));
-    box(g, 0.45, 0.28, 0.28, 0, 0, -0.68, mat(0x6a7fa0, { metalness: 0.7, roughness: 0.3 }));
-    box(g, 0.47, 0.06, 0.3, 0, 0, -0.68, mat(0x5ad8ff, { emissive: 0x3ab8ff, emissiveIntensity: 1.2 }));
-  } else if (id === 'faux') {
-    box(g, 0.06, 0.06, 1.2, 0, 0, -0.3, mat(0x2a2a3a));
-    const bl = box(g, 0.04, 0.12, 0.7, 0, 0.3, -0.75, mat(0xcfe0ff, { emissive: 0x6a8aff, emissiveIntensity: 0.8, metalness: 0.5 })); bl.rotation.x = -1.1;
   } else if (id === 'os') {
-    // fémur : os blanc avec boules aux extrémités
-    const boneM = mat(0xf2ead8, { roughness: 0.6 });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.85, 10), boneM);
-    shaft.rotation.x = Math.PI / 2; shaft.position.set(0, 0, -0.45); g.add(shaft);
-    for (const z of [-0.02, -0.88]) for (const [x, y] of [[0.05, 0.05], [-0.05, 0.05], [0.05, -0.05], [-0.05, -0.05]]) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), boneM); b.position.set(x, y, z); g.add(b);
-    }
+    // fémur : os long tenu par la diaphyse — tête fémorale au bout avant
+    // (côté qui frappe), double condyle qui dépasse sous la main
+    const boneM = matR(0xf2ead8, 0.6);
+    tube([V(0, 0, 0.16), V(0, 0, 0.0), V(0, -0.02, -0.4), V(0, -0.05, -0.78)], [0.038, 0.042, 0.046, 0.05], boneM);
+    // col + tête fémorale (grosse boule du bout avant, dégagée de l'épaule)
+    link(V(0, 0, -0.78), V(0.04, 0.03, -0.9), 0.05, 0.062, boneM);
+    sph(g, 0.085, 0.06, 0.04, -0.94, boneM);
+    sph(g, 0.055, -0.03, 0.0, -0.8, boneM); // grand trochanter (bosse)
+    // condyles doubles sous la main
+    sph(g, 0.062, 0.045, 0, 0.23, boneM);
+    sph(g, 0.062, -0.045, 0, 0.23, boneM);
   } else if (id === 'banane') {
     // banane explosive : tenue par la tige (grip à l'origine), la banane se
     // courbe au-dessus de la main comme une lame — mèche allumée au sommet
@@ -547,45 +610,85 @@ export function makePickaxe(id = 'default') {
     const spark = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), mat(0xffb43a, { emissive: 0xff7a1a, emissiveIntensity: 1.8 }));
     spark.position.copy(end).addScaledVector(dir, 0.28); g.add(spark);
   } else if (id === 'glace') {
-    // piolet : manche bois + pic de glace + cristaux
-    box(g, 0.06, 0.06, 0.95, 0, 0, -0.15, mat(0x5a3a20));
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.55, 8), mat(0xbfeaff, { emissive: 0x4ab8ff, emissiveIntensity: 0.5, metalness: 0.3, roughness: 0.15 }));
-    spike.rotation.x = -Math.PI / 2; spike.position.set(0, 0.02, -0.85); g.add(spike);
-    for (const [x, y, z, s] of [[0.1, 0.12, -0.55, 1], [-0.09, -0.05, -0.68, 0.7]]) {
-      const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.08 * s, 0), mat(0x9fe3ff, { emissive: 0x3aa8ff, emissiveIntensity: 0.7 })); cr.position.set(x, y, z); g.add(cr);
+    // piolet polaire : manche isolé, tête acier avec pic courbe d'un côté et
+    // lame plate de l'autre, cristaux de givre lumineux
+    const shaftM = matR(0x3a4250, 0.5, 0.3);
+    const iceM = matR(0xbfeaff, 0.15, 0.3, { emissive: 0x4ab8ff, emissiveIntensity: 0.5 });
+    tube([V(0, 0, 0.1), V(0, 0, -0.5), V(0, 0, -0.83)], [0.032, 0.038, 0.042], shaftM);
+    for (let i = 0; i < 4; i++) cyl(g, 0.046, 0.046, 0.035, 0, 0, -0.02 - i * 0.05, leather, 8).rotation.x = Math.PI / 2; // grip
+    cyl(g, 0.056, 0.056, 0.07, 0, 0, -0.85, steel, 10).rotation.x = Math.PI / 2; // œil
+    // pic courbe (côté qui frappe) : s'écarte peu et file vers l'avant/haut
+    tube([V(-0.03, 0, -0.85), V(-0.1, 0.01, -0.97), V(-0.18, -0.02, -1.1), V(-0.22, -0.06, -1.2)], [0.042, 0.036, 0.022, 0.004], iceM);
+    box(g, 0.19, 0.02, 0.09, 0.12, 0.01, -0.86, iceM); // lame-adze plate de l'autre côté
+    // cristaux de givre accrochés au manche
+    for (const [x, y, z, s] of [[0.08, 0.09, -0.6, 1], [-0.09, -0.06, -0.7, 0.7]]) {
+      const cr = new THREE.Mesh(new THREE.OctahedronGeometry(0.08 * s, 0), iceM); cr.position.set(x, y, z); g.add(cr);
     }
   } else if (id === 'cle') {
-    // clé à molette géante : manche + mâchoires en C
-    const steel = mat(0xb0b8c4, { metalness: 0.8, roughness: 0.25 });
-    box(g, 0.07, 0.07, 0.95, 0, 0, -0.2, steel);
-    box(g, 0.24, 0.16, 0.1, 0, 0.13, -0.72, steel);
-    const jaw = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.055, 8, 12, 4.2), steel);
-    jaw.position.set(0, 0.13, -0.62); jaw.rotation.y = Math.PI / 2; g.add(jaw);
-    box(g, 0.05, 0.22, 0.06, 0, -0.15, -0.25, steel);
+    // clé à molette géante : manche plat d'acier, tête en C avec vis de
+    // réglage moletée — les mâchoires s'ouvrent vers l'avant
+    const brightSteel = matR(0xc8d0da, 0.3, 0.45); // acier clair, lisible sans éclairage d'ambiance
+    box(g, 0.055, 0.11, 0.9, 0, 0, -0.35, brightSteel); // manche plat z [-0.8, +0.1]
+    sph(g, 0.09, 0, 0, 0.14, brightSteel, 1, 1.5, 0.5); // pommeau aplati au bout du manche
+    rbox(g, 0.1, 0.28, 0.22, 0, 0.03, -0.95, brightSteel, 0.03); // bloc de tête
+    const jaw = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.048, 8, 14, 4.4), brightSteel);
+    jaw.position.set(0, 0.05, -0.95); jaw.rotation.y = Math.PI / 2; g.add(jaw); // mâchoire en C
+    box(g, 0.05, 0.2, 0.06, 0, -0.11, -0.95, brightSteel); // mâchoire mobile
+    cyl(g, 0.055, 0.055, 0.06, 0, -0.03, -0.82, brightSteel, 12).rotation.z = Math.PI / 2; // vis moletée
   } else if (id === 'flambeau') {
-    // flambeau : coupe + flamme émissive
-    box(g, 0.06, 0.06, 1.0, 0, 0, -0.2, mat(0x8a5a32));
-    cyl(g, 0.13, 0.16, 0.14, 0, 0.08, -0.72, mat(0xc0c8d0, { metalness: 0.7, roughness: 0.3 }), 12);
-    const fl = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.34, 8), mat(0xffb43a, { emissive: 0xff7a1a, emissiveIntensity: 1.6 }));
-    fl.position.set(0, 0.32, -0.72); g.add(fl);
-    const fl2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 8), mat(0xfff6d0, { emissive: 0xffe98a, emissiveIntensity: 1.8 }));
-    fl2.position.set(0, 0.36, -0.72); g.add(fl2);
+    // flambeau : manche de bois cerclé, coupelle évasée vers l'avant,
+    // flamme à trois cœurs qui pointe vers le haut (axe -z de l'outil)
+    tube([V(0, 0, 0.14), V(0, 0, -0.3), V(0, 0, -0.6)], [0.03, 0.036, 0.042], wood);
+    for (const z of [-0.04, -0.3]) cyl(g, 0.05, 0.05, 0.03, 0, 0, z, steel, 10).rotation.x = Math.PI / 2; // cerclages
+    cyl(g, 0.1, 0.15, 0.16, 0, 0.04, -0.7, steel, 14).rotation.x = Math.PI / 2; // coupelle évasée vers l'avant
+    const fl = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 10), matR(0xffb43a, 0.4, 0, { emissive: 0xff7a1a, emissiveIntensity: 1.6 }));
+    fl.rotation.x = -Math.PI / 2; fl.position.set(0, 0.05, -0.88); g.add(fl);
+    const fl2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 10), matR(0xfff6d0, 0.4, 0, { emissive: 0xffe98a, emissiveIntensity: 1.8 }));
+    fl2.rotation.x = -Math.PI / 2; fl2.position.set(0, 0.05, -0.93); g.add(fl2);
+    sph(g, 0.03, 0, 0.05, -0.78, matR(0xffd23f, 0.3, 0, { emissive: 0xffa03a, emissiveIntensity: 1.4 })); // braise
   } else if (id === 'pelle') {
-    // pelle dorée : manche + poignée en T + lame
-    box(g, 0.06, 0.06, 1.0, 0, 0, -0.2, mat(0x8a5a32));
-    box(g, 0.22, 0.05, 0.06, 0, 0.03, 0.3, mat(0x8a5a32));
-    const gold = mat(0xffc400, { metalness: 0.85, roughness: 0.25 });
-    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.19, 0.42, 4), gold);
-    blade.rotation.x = -Math.PI / 2; blade.rotation.y = Math.PI / 4; blade.scale.y = 1.6; blade.position.set(0, 0, -0.86); g.add(blade);
-    box(g, 0.2, 0.2, 0.05, 0, 0, -0.66, gold);
+    // pelle du roi : manche de frêne à poignée en T, fer doré bombé à
+    // pointe arrondie — la face du fer regarde vers l'avant
+    tube([V(0, 0, 0.1), V(0, 0, -0.8)], [0.028, 0.036], wood);
+    box(g, 0.24, 0.045, 0.045, 0, 0.02, 0.14, woodDark); // poignée en T
+    cyl(g, 0.05, 0.05, 0.08, 0, 0, -0.83, gold, 10).rotation.x = Math.PI / 2; // douille
+    // fer : profil de pelle extrudé (arrondi en haut, pointe en bas),
+    // face tournée vers l'avant, bords biseautés
+    const sp = new THREE.Shape();
+    sp.moveTo(-0.19, 0.08);
+    sp.quadraticCurveTo(0, 0.12, 0.19, 0.08);
+    sp.quadraticCurveTo(0.23, -0.1, 0.1, -0.26);
+    sp.quadraticCurveTo(0, -0.42, -0.1, -0.26);
+    sp.quadraticCurveTo(-0.23, -0.1, -0.19, 0.08);
+    const blade = new THREE.Mesh(new THREE.ExtrudeGeometry(sp, { depth: 0.03, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2 }), gold);
+    blade.rotation.z = Math.PI; // la pointe du fer retombe vers le sol
+    blade.position.set(0, -0.03, -0.92); g.add(blade); // z ∈ [-0.89, -0.96]
+    box(g, 0.03, 0.42, 0.045, 0, 0.14, -0.93, gold); // rigidôlage central (dos du fer)
+    box(g, 0.32, 0.035, 0.05, 0, -0.12, -0.9, gold); // marche-pied (replié du fer)
   } else if (id === 'katana') {
-    // katana : poignée gainée, garde, lame courbée néon rose
-    box(g, 0.055, 0.055, 0.34, 0, 0, 0.13, mat(0x1a1030));
-    for (let i = 0; i < 5; i++) box(g, 0.06, 0.012, 0.05, 0, i % 2 ? 0.031 : -0.031, 0.02 + i * 0.07, mat(0xff2e7d));
-    box(g, 0.16, 0.045, 0.045, 0, 0, -0.05, mat(0x2a2a3a, { metalness: 0.6 }));
-    const bl = box(g, 0.03, 0.09, 1.05, 0, 0.03, -0.6, mat(0xffd6ec, { emissive: 0xff2e7d, emissiveIntensity: 1.1, metalness: 0.4, roughness: 0.2 }));
-    bl.rotation.x = 0.06;
-    box(g, 0.032, 0.02, 1.05, 0, 0.085, -0.6, mat(0xff2e7d, { emissive: 0xff2e7d, emissiveIntensity: 1.4 }));
+    // katana rose néon : tsuka gainée à losanges croisés, tsuba circulaire,
+    // lame courbée (arc de tore aplati) à tranchant néon
+    const dark = matR(0x1a1030, 0.5, 0.2);
+    const wrap = matR(0xff2e7d, 0.6, 0);
+    const edge = matR(0xffd6ec, 0.2, 0.3, { emissive: 0xff2e7d, emissiveIntensity: 1.4 });
+    // poignée (tsuka) : losanges de soie croisés
+    cyl(g, 0.032, 0.032, 0.3, 0, 0, 0.02, dark, 8).rotation.x = Math.PI / 2;
+    for (let i = 0; i < 6; i++) { const b = box(g, 0.014, 0.058, 0.05, 0, 0, -0.1 + i * 0.052, wrap); b.rotation.z = 0.6; }
+    sph(g, 0.042, 0, 0, 0.19, dark, 1, 1, 0.8); // pommeau (kashira)
+    cyl(g, 0.055, 0.055, 0.025, 0, 0, -0.14, matR(0x2a2a3a, 0.35, 0.6), 14).rotation.x = Math.PI / 2; // tsuba
+    // lame courbe : arc de tore aplati, corde le long de l'axe, bombé léger
+    const bg = new THREE.TorusGeometry(2.6, 0.05, 8, 20, 0.42);
+    bg.rotateX(Math.PI / 2); // corde le long de z
+    bg.rotateZ(-Math.PI / 2); // bombé vers -y (le tranchant)
+    const blade = new THREE.Mesh(bg, matR(0x3a3a4e, 0.3, 0.5));
+    blade.scale.set(0.55, 1, 1); // lame plate (fine en x)
+    blade.position.set(0, 2.52, -0.68); g.add(blade); // z ∈ [-1.2, -0.14]
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.13, 8), edge);
+    tip.rotation.x = -Math.PI / 2; tip.position.set(0, -0.05, -1.26); tip.scale.x = 0.6; g.add(tip); // pointe (kissaki)
+    // tranchant néon : suit le bombé de la lame en trois segments
+    box(g, 0.016, 0.045, 0.4, 0, -0.034, -0.32, edge);
+    box(g, 0.016, 0.045, 0.4, 0, -0.066, -0.7, edge);
+    box(g, 0.016, 0.045, 0.4, 0, -0.034, -1.08, edge);
   } else if (id === 'raquette') {
     // raquette de match : manche long avec grip néon, jonc en V, tamis ovale
     // incliné vers l'avant (plus lisible de trois quarts, pas un plateau plat)
@@ -603,19 +706,31 @@ export function makePickaxe(id = 'default') {
     for (let i = -3; i <= 3; i++) box(head, 0.012, 0.56, 0.012, i * 0.072, 0, 0, strM);
     for (let i = -2; i <= 2; i++) box(head, 0.42, 0.012, 0.012, 0, i * 0.11, 0, strM);
   } else if (id === 'guitare') {
-    // guitare électrique : caisse + manche + micros + cordes
-    // prise en main au sommet du manche (près de la caisse) : la caisse retombe
-    // près de la main et le manche monte au-dessus de l'épaule, comme en jeu.
-    const bodyM = mat(0xb3122e, { roughness: 0.35 });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.09, 20), bodyM);
-    body.rotation.x = Math.PI / 2; body.position.set(0, 0.05, 0.22); g.add(body);
-    const cut = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.09, 16), mat(0x1a1a22));
-    cut.rotation.x = Math.PI / 2; cut.position.set(0.1, -0.12, 0.32); g.add(cut);
-    box(g, 0.07, 0.06, 0.6, 0, 0.03, -0.14, mat(0x1a1a22)); // manche vers le haut
-    box(g, 0.11, 0.05, 0.1, 0, 0.03, -0.48, mat(0x1a1a22)); // tête
-    for (const z of [0.1, 0.32]) box(g, 0.18, 0.04, 0.05, 0, 0.08, z, mat(0xc0c8d0, { metalness: 0.7 })); // micros sur la caisse
-    const strM = mat(0xdfe4ee, { metalness: 0.6, roughness: 0.3 });
-    for (const x of [-0.06, -0.02, 0.02, 0.06]) box(g, 0.008, 0.008, 0.8, x, 0.1, -0.1, strM); // cordes
+    // guitare foudre : tenue par le manche près de la caisse — la caisse part
+    // vers l'avant (c'est elle qui frappe), la tête dépasse sous la main.
+    // Corps fin tourné vers l'avant, micros, cordes et éclair néon.
+    const bodyM = matR(0xb3122e, 0.35, 0.1);
+    const darkM = matR(0x1a1a22, 0.5, 0.2);
+    const strM = matR(0xdfe4ee, 0.3, 0.6);
+    // manche : de la main vers la caisse (z ∈ [-0.7, +0.1]) — la caisse part
+    // au-dessus de l'épaule, loin du corps, la tête dépasse sous la main
+    box(g, 0.06, 0.05, 0.8, 0, 0.02, -0.3, darkM);
+    for (let i = 0; i < 5; i++) box(g, 0.066, 0.056, 0.03, 0, 0.02, -0.12 - i * 0.11, matR(0x2a2a3a, 0.7, 0)); // repères de touche
+    // caisse au bout du manche (z ∈ [-0.63, -1.01]), face tournée vers l'avant
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.08, 22), bodyM);
+    body.rotation.x = Math.PI / 2; body.position.set(0, 0.03, -0.82); g.add(body);
+    const cut = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 16), darkM);
+    cut.rotation.x = Math.PI / 2; cut.position.set(0.07, -0.08, -0.92); g.add(cut); // pan coupé
+    // tête + mécaniques sous la main
+    box(g, 0.09, 0.045, 0.12, 0, 0.03, 0.15, darkM);
+    for (const sx of [-1, 1]) cyl(g, 0.018, 0.018, 0.04, sx * 0.05, 0.05, 0.19, steel, 6);
+    // micros + chevalet + éclair
+    for (const z of [-0.7, -0.88]) box(g, 0.15, 0.035, 0.045, 0, 0.08, z, steel);
+    box(g, 0.13, 0.03, 0.04, 0, 0.075, -0.97, darkM);
+    const boltM = matR(0x39ff88, 0.3, 0, { emissive: 0x1fc46a, emissiveIntensity: 1.2 });
+    for (const [x, y, z] of [[0.02, 0.02, -0.8], [0.07, -0.03, -0.85], [0.05, -0.08, -0.9]]) box(g, 0.014, 0.014, 0.09, x, y, z, boltM);
+    // cordes du sillet au chevalet
+    for (const x of [-0.045, -0.015, 0.015, 0.045]) box(g, 0.007, 0.007, 1.05, x, 0.085, -0.43, strM);
   } else if (id === 'trident') {
     // trident des abysses : hampe bleu profond lisible, collier doré, trois
     // fourches courbes — la centrale plus haute (silhouette de trident)
@@ -638,10 +753,16 @@ export function makePickaxe(id = 'default') {
       st.rotation.x = -Math.PI / 2; st.position.set(sx * 0.28, 0.03, -1.53); g.add(st);
     }
   } else {
-    box(g, 0.07, 0.07, 1.0, 0, 0, -0.2, wood);
-    box(g, 0.7, 0.12, 0.12, 0, 0, -0.68, mat(0x7d8fa8, { metalness: 0.6, roughness: 0.3 }));
-    box(g, 0.12, 0.16, 0.16, 0.36, -0.04, -0.68, mat(0x9fe3ff, { emissive: 0x3aa8ff, emissiveIntensity: 0.5 }));
-    box(g, 0.12, 0.16, 0.16, -0.36, -0.04, -0.68, mat(0x9fe3ff, { emissive: 0x3aa8ff, emissiveIntensity: 0.5 }));
+    // pioche standard : manche en frêne cintré et gainé, tête d'acier à
+    // deux pointes recourbées qui plongent vers l'avant (le coup part de la pointe)
+    tube([V(0, 0, 0.14), V(0, 0, 0.02), V(0, 0, -0.2), V(0, 0, -0.55), V(0, 0, -0.92)], [0.034, 0.034, 0.04, 0.044, 0.028], wood);
+    for (let i = 0; i < 3; i++) cyl(g, 0.048, 0.048, 0.045, 0, 0, 0.03 - i * 0.055, leather, 8).rotation.x = Math.PI / 2; // grip
+    cyl(g, 0.06, 0.06, 0.1, 0, 0, -0.88, steel, 12).rotation.x = Math.PI / 2; // œil métallique
+    for (const sx of [-1, 1]) {
+      // pointe courbe : s'écarte peu de l'œil et file haut vers l'avant
+      // (les pointes passent au-dessus de la tête, jamais devant le visage)
+      tube([V(0, 0.01, -0.88), V(sx * 0.14, 0.03, -0.98), V(sx * 0.28, 0, -1.1), V(sx * 0.36, -0.07, -1.18)], [0.05, 0.044, 0.028, 0.004], steel);
+    }
   }
   const m = new THREE.Object3D(); m.position.set(0, 0, -0.7); g.add(m); g.userData.muzzle = m;
   return g;
