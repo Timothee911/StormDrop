@@ -556,7 +556,7 @@ document.querySelectorAll('#passHome [data-open-pass]').forEach((card) => {
   art.className = 'pass-card-skins';
   art.innerHTML = skins.map((id) => {
     const it = itemOf('skin', id);
-    return `<span class="pass-home-skin"><img src="${thumb('skin', id, true)}" alt="${it.name}" title="${it.name}"><small>${it.name}</small></span>`;
+    return `<span class="pass-home-skin"><img src="${thumb('skin', id, true)}" alt="${it.name}" title="${it.name}"></span>`;
   }).join('');
 });
 $('passBack').onclick = () => {
