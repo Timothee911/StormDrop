@@ -223,7 +223,7 @@ function buildChar() {
 function playEmote(id) { emoteId = id; emoteT = 0; }
 let previewMode = null; // 'pickaxe' | 'glider'
 // camera placement per tab: [charScreenX offset (world units), cam distance, look height]
-const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 5.7, h: 1.45 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
+const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 4.65, h: 1.45 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
 let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
@@ -290,7 +290,7 @@ function loop() {
   // Sur le passe mobile, le perso garde son cadrage d'origine (gros, plein écran
   // derrière l'interface) ; sur grand écran, VIEWS.pass le cadre plus petit et
   // plus bas pour que ses pieds restent au-dessus de la piste de récompenses.
-  const PASS_MOB = { d: 3.86, h: 1.8 };
+  const PASS_MOB = { d: 3.15, h: 1.8 };
   const camD = compact ? (curTab === 'pass' ? PASS_MOB.d : view.d * 0.58) : view.d;
   const camH = compact && curTab === 'pass' ? PASS_MOB.h : view.h;
   camera.position.set(-stageX, camH + 0.35, -camD); camera.lookAt(-stageX, camH, 0);

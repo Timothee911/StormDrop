@@ -1298,3 +1298,38 @@ body[data-tab="pass"] #page-pass {
   #page-pass .pass-content .tier .reward { height:115px; }
   #page-pass .pass-content .tier.single .reward { height:145px; }
 }
+
+
+/* Passe : catégories plus compactes pour libérer la place au personnage */
+#page-pass .pass-home {
+  justify-content: center;
+  gap: clamp(14px,2.5vh,28px);
+  padding: clamp(16px,2.5vw,38px);
+}
+#page-pass .pass-home-heading h1 {
+  font-size: clamp(24px,3vw,42px);
+  margin: 10px 0 5px;
+}
+#page-pass .pass-home-heading p { font-size: clamp(13px,1.2vw,17px); }
+#page-pass .pass-home-cards {
+  width: min(76%,900px);
+  gap: clamp(10px,1.4vw,18px);
+}
+#page-pass .pass-home-card {
+  min-height: clamp(145px,22vh,225px);
+  padding: clamp(12px,1.5vw,20px);
+  gap: 7px;
+}
+#page-pass .pass-card-art { font-size: clamp(42px,5.5vw,72px); }
+#page-pass .pass-home-card strong { font-size: clamp(15px,1.35vw,20px); }
+#page-pass .pass-home-card small { font-size: clamp(11px,.9vw,13px); }
+#page-pass .pass-card-open { padding: 7px 10px; font-size: 10px; }
+@media(max-width:760px) {
+  #page-pass .pass-home { padding: 82px 12px 14px; gap: 14px; }
+  #page-pass .pass-home-cards { width: min(100%,520px); grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+  #page-pass .pass-home-card { min-height: 112px; padding: 9px 7px; gap: 5px; }
+  #page-pass .pass-card-art { font-size: 30px; }
+  #page-pass .pass-home-card strong { font-size: 11px; }
+  #page-pass .pass-home-card small { display:none; }
+  #page-pass .pass-card-open { font-size: 8px; padding: 5px 4px; }
+}
