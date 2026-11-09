@@ -1333,3 +1333,60 @@ body[data-tab="pass"] #page-pass {
   #page-pass .pass-home-card small { display:none; }
   #page-pass .pass-card-open { font-size: 8px; padding: 5px 4px; }
 }
+
+
+/* Cartes du passe : personnages premium et boutons placés plus bas */
+#page-pass .pass-home-cards {
+  transform: translateY(clamp(24px, 5vh, 62px));
+}
+#page-pass .pass-home-card {
+  overflow: hidden;
+  position: relative;
+  justify-content: flex-end;
+  padding-top: 14px;
+}
+#page-pass .pass-card-skins {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(2px, .5vw, 8px);
+  width: 100%;
+  min-height: clamp(105px, 17vh, 175px);
+  margin: auto 0 2px;
+}
+#page-pass .pass-home-skin {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 118px;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+#page-pass .pass-home-skin img {
+  display: block;
+  width: 100%;
+  height: clamp(95px, 15vh, 155px);
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 5px 8px rgba(0,0,0,.45));
+}
+#page-pass .pass-home-skin small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(9px, .8vw, 12px);
+  font-weight: 800;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px #000;
+}
+@media(max-width:760px) {
+  #page-pass .pass-home-cards { transform: translateY(16px); }
+  #page-pass .pass-card-skins { min-height: 70px; gap: 1px; }
+  #page-pass .pass-home-skin img { height: 76px; }
+  #page-pass .pass-home-skin small { font-size: 7px; }
+}
