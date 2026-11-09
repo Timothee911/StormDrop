@@ -1124,3 +1124,18 @@ body[data-tab="pass"] #page-pass {
   #page-pass .pass-nav { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; }
   #page-pass .pass-nav button { height: 58px; font-size: clamp(8px,1.9vw,11px); padding: 0 2px 6px; }
 }
+
+
+/* Couleurs des onglets après réorganisation : les 3 vues d'objets en premier */
+#page-pass .pass-nav button:nth-child(2)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#76519c,#b07bd0 55%,#493066);
+}
+#page-pass .pass-nav button:nth-child(3)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#246a6c,#35a5a0 55%,#16494f);
+}
+#page-pass .pass-nav button:nth-child(4)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#276b8a,#3b9bc1 55%,#173e61);
+}
+#page-pass .pass-nav button:nth-child(5)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,225,156,.85),transparent 38%),linear-gradient(145deg,#a56b25,#e6a53b 55%,#704018);
+}
