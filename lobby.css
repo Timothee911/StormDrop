@@ -1086,3 +1086,41 @@ body[data-tab="pass"] #page-pass {
   #page-pass .pass-nav button::before { bottom: 17px; }
   #page-pass .pass-nav button::after { height: 22px; }
 }
+
+
+/* Five working reward filters, arranged as compact Fortnite-style category tiles */
+#page-pass .pass-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+#page-pass .pass-nav button {
+  min-width: 0;
+  height: clamp(64px, 8.5vh, 88px);
+  font-size: clamp(11px, .95vw, 14px);
+  padding: 0 5px 8px;
+  letter-spacing: .25px;
+}
+#page-pass .pass-nav button:nth-child(1)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,225,156,.85),transparent 38%),linear-gradient(145deg,#a56b25,#e6a53b 55%,#704018);
+}
+#page-pass .pass-nav button:nth-child(2)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#276b8a,#3b9bc1 55%,#173e61);
+}
+#page-pass .pass-nav button:nth-child(3)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#76519c,#b07bd0 55%,#493066);
+}
+#page-pass .pass-nav button:nth-child(4)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#8b5427,#d28a3b 55%,#543014);
+}
+#page-pass .pass-nav button:nth-child(5)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#246a6c,#35a5a0 55%,#16494f);
+}
+#page-pass .pass-nav button.on {
+  border-color: #fff0b7;
+  box-shadow: 0 0 0 2px rgba(255,190,69,.5),0 5px 0 rgba(76,29,5,.5),0 0 18px rgba(255,205,93,.42);
+}
+#page-pass .tier.single { width: clamp(82px,7.2vw,112px); }
+@media (max-width: 900px), (pointer: coarse) {
+  #page-pass .pass-nav { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; }
+  #page-pass .pass-nav button { height: 58px; font-size: clamp(8px,1.9vw,11px); padding: 0 2px 6px; }
+}
