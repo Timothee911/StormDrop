@@ -7110,7 +7110,9 @@ function updateChar(ch, dt) {
   ch.cool -= dt; ch.bloom = Math.max(0, ch.bloom - dt * 0.08);
   ch.waterAimT = Math.max(0, (ch.waterAimT || 0) - dt);
   if (ch.reloading > 0) { ch.reloading -= dt; if (ch.reloading <= 0) { ch.reloading = 0; finishReload(ch); } }
-  if (ch.swing > 0) ch.swing = Math.max(0, ch.swing - dt * 3.5);
+  // décroissance du coup de pioche : ~0,36 s pour laisser respirer les 4 temps
+  // (armé → frappe → rebond d'impact → retour) sans ralentir le rythme de minage
+  if (ch.swing > 0) ch.swing = Math.max(0, ch.swing - dt * 2.8);
   // particules vertes de soin pendant l'utilisation d'un bandage / d'une potion
   if (ch.using && ch.alive) { ch.healFxT = (ch.healFxT || 0) - dt; if (ch.healFxT <= 0) { ch.healFxT = 0.16; burst(_v1.set(ch.pos.x, ch.pos.y + 1.15, ch.pos.z), 0x5fe35f, 2, 1.4, 0.1, 0.55, 0.9); } }
   if (!ch.isPlayer) {
@@ -7370,17 +7372,30 @@ function animateChar(ch, dt) {
     // (de l'épaule droite, en haut, vers la hanche gauche, en bas) avec rotation du buste et fouetté du poignet.
     const s = ch.swing;
     const eq = ch.equipT > 0 ? clamp(ch.equipT / (ch.equipDur || 0.3), 0, 1) : 0;
-    let ang, roll, el, tilt, hroll = 0.5, twist = 0;
+    let ang, roll, el, tilt, hroll = 0.5, twist = 0, lean = 0, dip = 0;
     if (s > 0) {
-      const k = 1 - s;                       // 0 = début du coup, 1 = fin
-      const wind = Math.min(1, k / 0.22);    // armé (0 -> 1) puis frappe
-      const hit = clamp((k - 0.18) / 0.5, 0, 1), eh = hit * hit * (3 - 2 * hit), rec = clamp((k - 0.68) / 0.32, 0, 1);
-      ang = lerp(lerp(0.55, 2.5, wind), 0.3, eh); ang = lerp(ang, 0.55, rec);
-      roll = lerp(lerp(0.12, 0.75, wind), -0.7, eh); roll = lerp(roll, 0.12, rec);
-      el = lerp(lerp(0.4, 1.3, wind), 0.1, eh); el = lerp(el, 0.4, rec);
-      tilt = lerp(lerp(2.0, 2.9, wind), 1.15, eh); tilt = lerp(tilt, 2.0, rec);
-      hroll = lerp(lerp(0.5, 0.9, wind), 1.35, eh); hroll = lerp(hroll, 0.5, rec); // le manche bascule : tête en haut puis en bas à gauche
-      twist = lerp(lerp(0, 0.45, wind), -0.5, eh); twist = lerp(twist, 0, rec);
+      // COUP DE PIOCHE en 4 temps : armé (anticipation), frappe (accélération
+      // franche, ease-in cubique : la tête part lentement puis claque), impact
+      // (le choc rebondit : petit recul du bras, du manche et du buste), retour
+      // (ease-out avec léger dépassement façon ressort, puis pose détendue).
+      const k = 1 - s;                        // 0 = début du coup, 1 = fin
+      const wind = Math.min(1, k / 0.2);
+      const windE = 1 - (1 - wind) * (1 - wind);           // ease-out : l'armé s'installe vite
+      const hit = clamp((k - 0.15) / 0.28, 0, 1);
+      const eh = hit * hit;                                // ease-in : la descente démarre tôt puis claque
+      const imp = clamp((k - 0.43) / 0.14, 0, 1);
+      const impE = Math.sin(imp * Math.PI);                // bosse courte : rebond d'impact
+      const rec = clamp((k - 0.57) / 0.43, 0, 1);
+      const recE = 1 - Math.pow(1 - rec, 3);               // ease-out : freinage en douceur
+      const over = Math.sin(rec * Math.PI) * 0.09;         // léger dépassement avant la pose
+      ang  = lerp(lerp(0.55, 2.7, windE), 0.16, eh); ang  = lerp(ang, 0.55, recE) + impE * 0.3 + over * 0.5;
+      roll = lerp(lerp(0.12, 0.95, windE), -0.78, eh); roll = lerp(roll, 0.12, recE) - impE * 0.18;
+      el   = lerp(lerp(0.4, 1.35, windE), 0.06, eh); el   = lerp(el, 0.4, recE) + impE * 0.55;
+      tilt = lerp(lerp(2.0, 3.0, windE), 1.0, eh); tilt = lerp(tilt, 2.0, recE) + impE * 0.22 + over;
+      hroll = lerp(lerp(0.5, 1.0, windE), 1.42, eh); hroll = lerp(hroll, 0.5, recE) + impE * 0.12;
+      twist = lerp(lerp(0, 0.6, windE), -0.55, eh); twist = lerp(twist, 0, recE) + impE * 0.12;
+      lean = -0.16 * eh + 0.16 * recE + 0.1 * impE;        // le buste plonge dans la frappe, se relève au rebond
+      dip = 0.05 * Math.max(0, eh - recE);                 // petit tassement des jambes pendant le coup
     } else {
       ang = lerp(0.55 + sw * 0.25, 2.3, eq); roll = 0.12; el = 0.4; tilt = 2.0;
     }
@@ -7388,6 +7403,8 @@ function animateChar(ch, dt) {
     P.shL.rotation.set(-ap * armA, 0, -armOut); P.elL.rotation.set(elBase + Math.max(0, -ap) * 0.45 * amp, 0, 0);
     if (ch.held) ch.held.rotation.set(tilt, 0, hroll); // hroll : la tête de la pioche penche en diagonale
     if (twist) P.torso.rotation.y += twist;
+    if (lean) P.torso.rotation.x += lean;
+    if (dip) m.position.y -= dip;
   } else if (it && it.kind === 'weapon') {
     let rel = 0, tilt = 0, low = 0, k = 0, eq = 0;
     if (ch.reloading > 0) { const tot = WEAPONS[it.id].reload * RAR[it.rarity].reload; const rp = 1 - ch.reloading / tot; k = Math.sin(clamp(rp, 0, 1) * Math.PI); rel = k * 0.35; tilt = k * 0.9; }
