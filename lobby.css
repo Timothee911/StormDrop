@@ -1124,3 +1124,19 @@ body[data-tab="pass"] #page-pass {
   #page-pass .pass-nav { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; }
   #page-pass .pass-nav button { height: 58px; font-size: clamp(8px,1.9vw,11px); padding: 0 2px 6px; }
 }
+
+
+/* Trois destinations principales du passe : objets principaux, bonus et quêtes */
+#page-pass .pass-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#page-pass .pass-nav button:nth-child(1)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,225,156,.85),transparent 38%),linear-gradient(145deg,#a56b25,#e6a53b 55%,#704018);
+}
+#page-pass .pass-nav button:nth-child(2)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#76519c,#b07bd0 55%,#493066);
+}
+#page-pass .pass-nav button:nth-child(3)::before {
+  background: radial-gradient(ellipse at 50% 20%,rgba(255,255,255,.6),transparent 38%),linear-gradient(145deg,#246a6c,#35a5a0 55%,#16494f);
+}
+@media (max-width: 900px), (pointer: coarse) {
+  #page-pass .pass-nav { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
