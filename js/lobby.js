@@ -223,7 +223,7 @@ function buildChar() {
 function playEmote(id) { emoteId = id; emoteT = 0; }
 let previewMode = null; // 'pickaxe' | 'glider'
 // camera placement per tab: [charScreenX offset (world units), cam distance, look height]
-const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 5.7, h: 0.70 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
+const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 5.7, h: 1.45 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
 let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
@@ -290,7 +290,7 @@ function loop() {
   // Sur le passe mobile, le perso garde son cadrage d'origine (gros, plein écran
   // derrière l'interface) ; sur grand écran, VIEWS.pass le cadre plus petit et
   // plus bas pour que ses pieds restent au-dessus de la piste de récompenses.
-  const PASS_MOB = { d: 3.86, h: 1.14 };
+  const PASS_MOB = { d: 3.86, h: 1.8 };
   const camD = compact ? (curTab === 'pass' ? PASS_MOB.d : view.d * 0.58) : view.d;
   const camH = compact && curTab === 'pass' ? PASS_MOB.h : view.h;
   camera.position.set(-stageX, camH + 0.35, -camD); camera.lookAt(-stageX, camH, 0);
@@ -429,6 +429,8 @@ function drawModeArt() {
 let passSel = null, passView = 'main', passBSel = 31, passQSel = 1;
 const PASS_TEXTS = {
   main: ['PASSE DE COMBAT', 'Monte de niveau en jouant pour débloquer <b>30 paliers</b> de récompenses.'],
+  free: ['RÉCOMPENSES GRATUITES', 'Découvre toutes les récompenses gratuites disponibles sur les <b>30 paliers</b>.'],
+  premium: ['RÉCOMPENSES PREMIUM', 'Débloque le Passe Premium pour récupérer les récompenses exclusives des agents.'],
   bonus: ['PASS BONUS', 'Encore plus de récompenses à récupérer après avoir terminé le Passe de combat !'],
   quete: ['PASS QUÊTE', 'Termine des défis quotidiens et hebdomadaires pour débloquer ces récompenses.'],
 };
@@ -437,6 +439,9 @@ function passStatusHTML() {
     if (S.level < MAX_TIER) return `<div class="ps-lock">${LOCK_SVG} PAGES VERROUILLÉES</div><div class="ps-cond">Termine le Passe de combat (niveau ${MAX_TIER}) pour débloquer les récompenses bonus.</div><div class="ps-bar"><i style="width:${Math.min(100, S.level / MAX_TIER * 100)}%"></i></div><div class="ps-count">Niveau ${S.level} / ${MAX_TIER}</div>`;
     const p = Math.min(100, (Math.min(S.level, MAX_BONUS) - MAX_TIER) / (MAX_BONUS - MAX_TIER) * 100);
     return `<div class="ps-lock on">PAGES DÉVERROUILLÉES</div><div class="ps-cond">Continue de monter de niveau pour réclamer toutes les récompenses bonus.</div><div class="ps-bar"><i style="width:${p}%"></i></div><div class="ps-count">Niveau ${Math.min(S.level, MAX_BONUS)} / ${MAX_BONUS}</div>`;
+  }
+  if (passView === 'free' || passView === 'premium') {
+    return `<div class="ps-lock on">${passView === 'free' ? 'PISTE GRATUITE' : (S.passOwned ? 'PASSE PREMIUM ACTIF' : 'PISTE PREMIUM')}</div><div class="ps-cond">${passView === 'free' ? 'Une récompense gratuite à chaque palier.' : (S.passOwned ? 'Tes récompenses premium sont prêtes à être débloquées.' : 'Achète le Passe Premium pour débloquer ces récompenses.')}</div><div class="ps-bar"><i style="width:${Math.min(100, S.level / MAX_TIER * 100)}%"></i></div><div class="ps-count">Niveau ${Math.min(S.level, MAX_TIER)} / ${MAX_TIER}</div>`;
   }
   if (passView === 'quete') {
     const d = S.doneCh.size;
@@ -451,7 +456,7 @@ function passRewardOf() {
 }
 function renderPassTrack() {
   const tr = $('passTrack');
-  if (passView === 'main') {
+  if (passView === 'main' || passView === 'free' || passView === 'premium') {
     // initialisé AVANT la boucle : la case sélectionnée doit porter .sel dès le 1er rendu
     if (!passSel) passSel = { t: 1, k: 'prem' };
     let h = '';
@@ -465,7 +470,8 @@ function renderPassTrack() {
         // la balise fermante </div> de la case, sinon le DOM du passe entier casse.
         return rewardHTML(r, cls).replace('class="reward', `data-t="${t}" data-k="${k}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + '</div>');
       };
-      h += `<div class="tier ${S.level === t ? 'cur' : ''}"><div class="tier-num">${t}</div><div class="row-tag">${t === 1 ? 'PREMIUM' : '&nbsp;'}</div>${cell('prem')}${cell('free')}<div class="row-tag">${t === 1 ? 'GRATUIT' : '&nbsp;'}</div></div>`;
+      const keys = passView === 'free' ? ['free'] : passView === 'premium' ? ['prem'] : ['prem', 'free'];
+      h += `<div class="tier ${keys.length === 1 ? 'single' : ''} ${S.level === t ? 'cur' : ''}"><div class="tier-num">${t}</div>${keys.map((k) => `<div class="row-tag">${t === 1 ? (k === 'prem' ? 'PREMIUM' : 'GRATUIT') : '&nbsp;'}</div>${cell(k)}`).join('')}</div>`;
     }
     tr.innerHTML = h;
     tr.querySelectorAll('.reward[data-t]').forEach((el) => el.onclick = () => { passSel = { t: +el.dataset.t, k: el.dataset.k }; renderPass(); });
@@ -518,7 +524,7 @@ function renderPass() {
   pb.querySelector('.pb-title').textContent = S.passOwned ? 'PASSE PREMIUM ACTIF' : 'PASSE PREMIUM';
   $('passBuyBtn').style.display = S.passOwned ? 'none' : '';
   // keep current tier visible (piste principale uniquement)
-  if (passView === 'main') {
+  if (passView === 'main' || passView === 'free' || passView === 'premium') {
     const tr = $('passTrack');
     const cur = tr.children[Math.max(0, Math.min(MAX_TIER, S.level) - 3)];
     if (cur && !renderPass.scrolled) { tr.scrollLeft = cur.offsetLeft - tr.offsetLeft; renderPass.scrolled = true; }
@@ -529,6 +535,8 @@ $('ptR').onclick = () => { $('passTrack').scrollLeft += 600; };
 // navigation entre sous-pass (piste principale / bonus / quête)
 document.querySelectorAll('#passNav button').forEach((b) => b.onclick = () => {
   passView = b.dataset.pass;
+  if (passView === 'free') passSel = { t: Math.min(S.level || 1, MAX_TIER), k: 'free' };
+  if (passView === 'premium') passSel = { t: Math.min(S.level || 1, MAX_TIER), k: 'prem' };
   document.querySelectorAll('#passNav button').forEach((x) => x.classList.toggle('on', x === b));
   renderPass.scrolled = false;
   renderPass();
