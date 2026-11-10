@@ -3608,6 +3608,10 @@ function melee(ch, origin, dir) {
     }
     burst(hit.point, 0xd0b080, 6, 4, 0.12); sfxAt('pick', hit.point, 1);
   } else { burst(hit.point, 0x9c8a5a, 4, 3, 0.1); sfxAt('pick', hit.point, 0.6); }
+  // effet d'impact : onde de choc sur la surface, éclat, étincelles,
+  // et une micro-secousse de caméra pour le joueur (le coup a du poids)
+  pickImpactFX(hit.point, dir, hit.type);
+  if (ch.isPlayer) shake = Math.max(shake, 0.22);
   return true;
 }
 function harvestTree(t, ch, crit) {
@@ -8302,6 +8306,73 @@ function splashFX(x, z, k = 1) {
   ripple(x, z, 0.9 + k);
 }
 
+// ---- impact de pioche : onde de choc + éclat + étincelles ----
+// L'effet claque au moment du contact : anneau additif qui s'étend sur la
+// surface frappée, flash court et gerbe d'étincelles chaudes.
+const pickShocks = [];
+{
+  const sg = new THREE.RingGeometry(0.3, 0.52, 22);
+  for (let i = 0; i < 6; i++) {
+    const m = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0xfff3d6, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.visible = false; m.renderOrder = 3; scene.add(m);
+    pickShocks.push({ m, life: 0, max: 0.3 });
+  }
+}
+const pickFlashes = [];
+{
+  const fg = new THREE.OctahedronGeometry(0.3, 0);
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.visible = false; m.renderOrder = 3; scene.add(m);
+    pickFlashes.push({ m, life: 0, max: 0.16 });
+  }
+}
+function pickImpactFX(point, dir, type) {
+  // orientation de l'onde de choc : couchée sur la surface frappée.
+  // Terrain : normale de la pente locale (l'anneau suit le sol). Autres
+  // surfaces (murs, arbres, rochers, persos) : face au joueur.
+  const n = _v2.copy(dir).multiplyScalar(-1);
+  if (type === 'terrain') {
+    const e = 0.4;
+    const hL = terrainH(point.x - e, point.z), hR = terrainH(point.x + e, point.z);
+    const hD = terrainH(point.x, point.z - e), hU = terrainH(point.x, point.z + e);
+    n.set(-(hR - hL) / (2 * e), 1, -(hU - hD) / (2 * e)).normalize();
+  }
+  // onde de choc : anneau posé sur la surface, légèrement décollé
+  const s = pickShocks.find((q) => q.life <= 0) || pickShocks[0];
+  s.life = s.max = 0.3;
+  s.m.position.copy(point).addScaledVector(n, 0.05);
+  s.m.lookAt(_v1.copy(point).add(n));
+  s.m.visible = true;
+  // éclat d'impact : flash court qui gonfle puis s'éteint
+  const f = pickFlashes.find((q) => q.life <= 0) || pickFlashes[0];
+  f.life = f.max = 0.16;
+  f.m.position.copy(point).addScaledVector(n, 0.06);
+  f.m.rotation.set(MR() * 3, MR() * 3, 0);
+  f.m.visible = true;
+  // étincelles chaudes projetées hors de la surface
+  burst(point, 0xffe2a8, 8, 6, 0.1, 1, 0.4);
+  burst(point, 0xfff6d8, 5, 8, 0.08, 1, 0.3);
+}
+function updatePickFX(dt) {
+  for (const s of pickShocks) {
+    if (s.life <= 0) continue;
+    s.life -= dt;
+    if (s.life <= 0) { s.m.visible = false; continue; }
+    const k = 1 - s.life / s.max;
+    s.m.scale.setScalar(0.5 + k * 2.6);
+    s.m.material.opacity = (1 - k) * 0.9;
+  }
+  for (const f of pickFlashes) {
+    if (f.life <= 0) continue;
+    f.life -= dt;
+    if (f.life <= 0) { f.m.visible = false; continue; }
+    const k = 1 - f.life / f.max;
+    f.m.scale.setScalar(0.6 + k * 1.2);
+    f.m.material.opacity = (1 - k) * 0.95;
+  }
+}
+
 // ---- oiseaux : posés au sol, ils s'envolent quand un personnage approche,
 // tournent en croissant puis vont se poser plus loin ----
 const birdBodyG = new THREE.BoxGeometry(0.09, 0.08, 0.24);
@@ -8623,6 +8694,7 @@ function step(dt) {
   updateDayNight(dt);
   updateAmbient(dt);
   updateRipples(dt);
+  updatePickFX(dt);
   updateBuilds(dt);
   updateWorld(dt);
   // dérive des nuages au vent (retour en boucle de l'autre côté du ciel)
