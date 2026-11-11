@@ -3592,21 +3592,27 @@ function melee(ch, origin, dir) {
   sfxAt('swing', ch.pos, 0.6);
   if (!hit) return true;
   if (ch.isPlayer && hit.point.distanceTo(ch.pos) > 3.6) return true;
+  // sons d'impact différenciés : la signature (pitch, filtration) dépend du
+  // matériau frappé et de l'intensité du coup (crit = plus haut, plus fort) ;
+  // chaque coup varie légèrement (détune dans audio.js) pour ne jamais
+  // sonner deux fois pareil.
+  const pickSnd = (mat, cr, vol = 1) => sfxAt((cr ? 'crit' : 'pick') + mat, hit.point, vol * (0.92 + MR() * 0.16));
   if (hit.type === 'char') { damageChar(hit.char, 20, ch, false, 'Pioche'); if (ch.isPlayer) showHitmarker(false, false, 20); sfxAt('pick', hit.point, 1); }
-  else if (hit.type === 'tree') { const cr = ch.isPlayer && weakCheck(hit, hit.tree); harvestTree(hit.tree, ch, cr); burst(hit.point, 0x9c6a3a, 6, 4, 0.12); sfxAt(cr ? 'crit' : 'pick', hit.point, 1); }
-  else if (hit.type === 'rock') { const cr = ch.isPlayer && weakCheck(hit, hit.rock); harvestRock(hit.rock, ch, cr); burst(hit.point, 0x9aa3ad, 6, 4, 0.12); sfxAt(cr ? 'crit' : 'pick', hit.point, 1); }
-  else if (hit.type === 'vehicleGlass') damageVehicleGlass(hit.pane, 25, ch, hit.point);
-  else if (hit.type === 'vehicle') damageVehicle(hit.vehicle, 35, ch, hit.point);
+  else if (hit.type === 'tree') { const cr = ch.isPlayer && weakCheck(hit, hit.tree); harvestTree(hit.tree, ch, cr, hit.point); burst(hit.point, 0x9c6a3a, 6, 4, 0.12); pickSnd('Wood', cr); }
+  else if (hit.type === 'rock') { const cr = ch.isPlayer && weakCheck(hit, hit.rock); harvestRock(hit.rock, ch, cr, hit.point); burst(hit.point, 0x9aa3ad, 6, 4, 0.12); pickSnd('Stone', cr); }
+  else if (hit.type === 'vehicleGlass') { damageVehicleGlass(hit.pane, 25, ch, hit.point); pickSnd('Metal', false, 0.5); }
+  else if (hit.type === 'vehicle') { damageVehicle(hit.vehicle, 35, ch, hit.point); pickSnd('Metal', false, 0.8); }
   else if (hit.type === 'struct') {
     const c = hit.col;
     if (!c.indestructible) {
       const cr = ch.isPlayer && c.kind !== 'build' && weakCheck(hit, c);
-      if (cr) sfx('crit', 0.8);
       const gain = c.kind === 'build' ? 0 : cr ? 18 : 9;
-      if (gain) { ch.mats[c.mat] = Math.min(999, ch.mats[c.mat] + gain); if (ch.isPlayer) matGain(c.mat, gain); }
+      if (gain) { ch.mats[c.mat] = Math.min(999, ch.mats[c.mat] + gain); if (ch.isPlayer) matGain(c.mat, gain, hit.point); }
       damageStruct(c, c.kind === 'build' ? 60 : cr ? 110 : 55, ch); if (c.hp <= 0 || !c.alive) weakHide();
-    }
-    burst(hit.point, 0xd0b080, 6, 4, 0.12); sfxAt('pick', hit.point, 1);
+      burst(hit.point, 0xd0b080, 6, 4, 0.12);
+      if (c.mat) pickSnd(c.mat[0].toUpperCase() + c.mat.slice(1), cr);
+      else pickSnd('Stone', cr);
+    } else { burst(hit.point, 0xd0b080, 6, 4, 0.12); pickSnd('Metal', false, 0.8); }
   } else { burst(hit.point, 0x9c8a5a, 4, 3, 0.1); sfxAt('pick', hit.point, 0.6); }
   // effet d'impact : onde de choc sur la surface, éclat, étincelles,
   // et une micro-secousse de caméra pour le joueur (le coup a du poids)
@@ -3614,10 +3620,10 @@ function melee(ch, origin, dir) {
   if (ch.isPlayer) shake = Math.max(shake, 0.22);
   return true;
 }
-function harvestTree(t, ch, crit) {
+function harvestTree(t, ch, crit, from) {
   if (!t.alive) return;
   const k = crit ? 2 : 1;
-  t.hp -= 50 * k; ch.mats.wood = Math.min(999, ch.mats.wood + 14 * k); if (ch.isPlayer) matGain('wood', 14 * k);
+  t.hp -= 50 * k; ch.mats.wood = Math.min(999, ch.mats.wood + 14 * k); if (ch.isPlayer) matGain('wood', 14 * k, from || _v1.set(t.x, t.y + 1.5, t.z));
   if (t.hp <= 0 && ch.isPlayer) weakHide();
   t.shake = 0.25;
   if (t.hp <= 0) {
@@ -3627,10 +3633,10 @@ function harvestTree(t, ch, crit) {
     sfxAt('break', _v1, 0.8);
   }
 }
-function harvestRock(r, ch, crit) {
+function harvestRock(r, ch, crit, from) {
   if (!r.alive) return;
   const k = crit ? 2 : 1;
-  r.hp -= 50 * k; ch.mats.stone = Math.min(999, ch.mats.stone + 12 * k); if (ch.isPlayer) matGain('stone', 12 * k);
+  r.hp -= 50 * k; ch.mats.stone = Math.min(999, ch.mats.stone + 12 * k); if (ch.isPlayer) matGain('stone', 12 * k, from || _v1.set(r.x, r.y + 0.8, r.z));
   if (r.hp <= 0 && ch.isPlayer) weakHide();
   if (r.hp <= 0) {
     r.alive = false; removeCollider(r.col); rockIM.setMatrixAt(r.i, ZERO_M); rockIM.instanceMatrix.needsUpdate = true;
@@ -6932,7 +6938,7 @@ function autoPickups(ch) {
     // même si l'objet vient d'être lâché et n'est pas encore posé
     if (Math.hypot(L.pos.x - ch.pos.x, L.pos.z - ch.pos.z) < 2.6 && Math.abs(L.pos.y - ch.pos.y) < 2.2) {
       if (L.item.kind === 'ammo') { ch.ammo[L.item.type] = Math.min(999, ch.ammo[L.item.type] + L.item.amount); if (ch.isPlayer) showCenter('', `+${L.item.amount} ${AMMO_NAMES[L.item.type]}`, 0.9); }
-      else { ch.mats[L.item.mat] = Math.min(999, ch.mats[L.item.mat] + L.item.amount); if (ch.isPlayer) matGain(L.item.mat, L.item.amount); }
+      else { ch.mats[L.item.mat] = Math.min(999, ch.mats[L.item.mat] + L.item.amount); if (ch.isPlayer) matGain(L.item.mat, L.item.amount, L.pos); }
       removeLoot(L); if (ch.isPlayer) sfx('pickup', 0.35);
     }
   }
@@ -7454,6 +7460,8 @@ function animateChar(ch, dt) {
   // accroupi : cuisses vers l'avant, genoux pliés (les pieds restent sous le corps)
   else if (ch.crouch) { m.position.y -= 0.32; P.hipL.rotation.x += 0.95; P.hipR.rotation.x += 0.95; P.kneeL.rotation.x -= 1.65; P.kneeR.rotation.x -= 1.65; P.torso.rotation.x = -0.3; }
   if (ch.hurtT > 0) { ch.hurtT -= dt; }
+  // traînée de frappe : arc lumineux qui suit la tête de la pioche
+  updatePickTrail(ch, dt);
 }
 
 // =====================================================================
@@ -7702,10 +7710,98 @@ function updateBuildBar() {
 }
 function updateHUDStatic() {
   if (!player) return;
-  $('matWood').textContent = player.mats.wood; $('matStone').textContent = player.mats.stone; $('matMetal').textContent = player.mats.metal;
+  // le compteur affiche matShown, qui suit player.mats avec le léger
+  // retard des matériaux en cours d'aspiration (ils volent en arc vers
+  // le compteur) ; une dépense recolle immédiatement, sans attendre,
+  // et un gain direct (bois de départ, debug) saute le vol.
+  for (const m of MAT_ORDER) {
+    if (player.mats[m] < matShown[m]) matShown[m] = player.mats[m];
+    else if (player.mats[m] > matShown[m] + matPending[m]) matShown[m] = player.mats[m] - matPending[m];
+    matEl(m).textContent = matShown[m];
+  }
   document.querySelectorAll('.mat').forEach((e) => e.classList.toggle('sel', e.dataset.mat === player.matSel));
 }
-function matGain(mat, n) { stats.harvested += n; updateHUDStatic(); }
+// ---------------------------------------------------------------------
+// Aspiration du loot : les matériaux récoltés ne s'affichent pas d'un coup,
+// ils volent en arc (Bézier quadratique) depuis le point de récolte jusqu'à
+// leur compteur HUD, qui pulse à chaque arrivée. Le total affiché rattrape
+// la valeur réelle au fil des arrivées.
+// ---------------------------------------------------------------------
+const matShown = { wood: 0, stone: 0, metal: 0 };
+const matPending = { wood: 0, stone: 0, metal: 0 }; // en vol vers le compteur
+const matFlights = [];
+const matTickT = { v: -1 };
+const MAT_ICON = {
+  wood: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="6" rx="1"/><rect x="2" y="13" width="20" height="6" rx="1"/></svg>',
+  stone: '<svg viewBox="0 0 24 24"><rect x="2" y="4" width="9" height="7" rx="1"/><rect x="13" y="4" width="9" height="7" rx="1"/><rect x="6" y="13" width="12" height="7" rx="1"/></svg>',
+  metal: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="7" cy="7" r="1.3"/><circle cx="17" cy="7" r="1.3"/><circle cx="7" cy="17" r="1.3"/><circle cx="17" cy="17" r="1.3"/></svg>',
+};
+function matEl(mat) { return $('mat' + mat[0].toUpperCase() + mat.slice(1)); }
+const _mfp = new THREE.Vector3();
+function matGain(mat, n, from) {
+  stats.harvested += n;
+  matFly(mat, n, from);
+}
+function matFly(mat, n, from) {
+  const layer = $('matFly');
+  if (!layer || !player || !player.alive || state !== 'playing') { if (player) { matShown[mat] = player.mats[mat]; matPending[mat] = 0; updateHUDStatic(); } return; }
+  // point de départ écran : le point de récolte projeté (bord de l'écran si derrière la caméra)
+  let sx = innerWidth / 2, sy = innerHeight * 0.6;
+  if (from) {
+    _mfp.set(from.x, from.y, from.z).project(camera);
+    if (_mfp.z < 1) { sx = (_mfp.x * 0.5 + 0.5) * innerWidth; sy = (-_mfp.y * 0.5 + 0.5) * innerHeight; }
+  }
+  sx = Math.min(innerWidth - 30, Math.max(30, sx)); sy = Math.min(innerHeight - 30, Math.max(30, sy));
+  // cible : le centre du compteur concerné
+  const dst = matEl(mat).getBoundingClientRect();
+  const tx = dst.left + dst.width / 2, ty = dst.top + dst.height / 2;
+  const k = Math.max(2, Math.min(5, 2 + Math.floor(n / 8)));
+  const per = Math.floor(n / k);
+  matPending[mat] += n;
+  for (let i = 0; i < k; i++) {
+    const d = document.createElement('div');
+    d.className = 'mf mf-' + mat;
+    d.innerHTML = MAT_ICON[mat];
+    layer.appendChild(d);
+    matFlights.push({
+      d, mat, amt: i === k - 1 ? n - per * (k - 1) : per,
+      t: -i * 0.055, dur: 0.5 + i * 0.045,
+      sx, sy: sy - i * 5, tx, ty,
+      cx: (sx + tx) / 2 + (MR() - 0.5) * 170, cy: Math.min(sy, ty) - 90 - MR() * 80,
+    });
+  }
+}
+function updateMatFly(dt) {
+  if (!matFlights.length) return;
+  const flush = !player.alive || state !== 'playing';
+  for (let i = matFlights.length - 1; i >= 0; i--) {
+    const f = matFlights[i];
+    if (flush) { // fin de partie : tout arrive d'un coup
+      matShown[f.mat] = Math.min(player.mats[f.mat], matShown[f.mat] + f.amt);
+      matPending[f.mat] = Math.max(0, matPending[f.mat] - f.amt);
+      f.d.remove(); matFlights.splice(i, 1); continue;
+    }
+    f.t += dt;
+    if (f.t < 0) { f.d.style.opacity = 0; continue; }
+    const kk = f.t / f.dur;
+    if (kk >= 1) { // arrivée : le compteur pulse et monte
+      matShown[f.mat] = Math.min(player.mats[f.mat], matShown[f.mat] + f.amt);
+      matPending[f.mat] = Math.max(0, matPending[f.mat] - f.amt);
+      const el = matEl(f.mat);
+      el.textContent = matShown[f.mat];
+      el.parentElement.classList.remove('pulse'); void el.parentElement.offsetWidth; el.parentElement.classList.add('pulse');
+      if (gameT - matTickT.v > 0.09) { matTickT.v = gameT; sfx('plip', 0.22); }
+      f.d.remove(); matFlights.splice(i, 1); continue;
+    }
+    const e = Math.pow(kk, 1.6); // accélère en approche : effet d'aspiration
+    const u = 1 - e;
+    const x = u * u * f.sx + 2 * u * e * f.cx + e * e * f.tx;
+    const y = u * u * f.sy + 2 * u * e * f.cy + e * e * f.ty;
+    f.d.style.opacity = Math.min(1, f.t * 10);
+    f.d.style.transform = `translate(${x}px,${y}px) scale(${1 - e * 0.35})`;
+  }
+  if (flush) updateHUDStatic();
+}
 let centerT = 0;
 function showCenter(title, sub, dur = 2) {
   const c = $('centerMsg'); c.innerHTML = `${title}${sub ? `<small>${sub}</small>` : ''}`; c.style.opacity = 1; centerT = dur;
@@ -7714,6 +7810,7 @@ let hudAcc = 0, lastSlotsSig = '';
 function updateHUD(dt) {
   if (!player) return;
   touchSyncFn?.();
+  updateMatFly(dt);
   if (hmT > 0) { hmT -= dt; if (hmT <= 0) $('hitmarker').style.opacity = 0; }
   if (centerT > 0) { centerT -= dt; if (centerT <= 0) $('centerMsg').style.opacity = 0; }
   hurtFlash = Math.max(0, hurtFlash - dt);
@@ -8373,6 +8470,89 @@ function updatePickFX(dt) {
   }
 }
 
+// ---- traînée de frappe : arc lumineux qui suit la tête de la pioche ----
+// Ruban en éventail (étroit à la queue, large à la tête), additif comme
+// l'anneau d'impact : il reste lisible même à distance. Chaque personnage
+// qui frappe un coup de pioche réutilise un slot du pool.
+const PICK_TRAIL_MAX = 16;
+const pickTrailPool = [];
+function makePickTrail() {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PICK_TRAIL_MAX * 2 * 3), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(PICK_TRAIL_MAX * 2 * 3), 3));
+  const idx = [];
+  for (let i = 0; i < PICK_TRAIL_MAX - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  g.setIndex(idx);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  m.visible = false; m.renderOrder = 3; m.frustumCulled = false;
+  scene.add(m);
+  const tr = { m, g, ch: null, samples: [], fade: 0 };
+  pickTrailPool.push(tr);
+  return tr;
+}
+const _pt = new THREE.Vector3(), _ptD = new THREE.Vector3(), _ptC = new THREE.Vector3(), _ptS = new THREE.Vector3();
+function updatePickTrail(ch, dt) {
+  const it = ch.item;
+  const on = ch.alive && ch.mode === 'ground' && ch.swing > 0.02 && it && it.kind === 'weapon' && it.id === 'pickaxe' && ch.held;
+  let tr = ch._pickTrail;
+  if (on && (!tr || tr.ch !== ch)) {
+    tr = ch._pickTrail = pickTrailPool.find((q) => q.ch === null) || makePickTrail();
+    tr.ch = ch; tr.samples.length = 0; tr.fade = 1;
+  }
+  if (!tr || tr.ch !== ch) return;
+  if (on) {
+    if (tr.fade < 1) tr.samples.length = 0; // nouveau coup : on repart de zéro
+    tr.fade = 1;
+    // position monde de la tête de la pioche (elle pivote avec le manche) ;
+    // on rafraîchit la chaîne de matrices pour échantillonner la pose
+    // exacte du coup en cours, même quand le rendu n'a pas encore tourné
+    ch.held.updateWorldMatrix(true, false);
+    _pt.set(0, 0, -0.68); ch.held.localToWorld(_pt);
+    const last = tr.samples[tr.samples.length - 1];
+    if (!last || _pt.distanceToSquared(last.p) > 0.0004) {
+      tr.samples.push({ p: _pt.clone(), age: 0 });
+      if (tr.samples.length > PICK_TRAIL_MAX) tr.samples.shift();
+    }
+  } else {
+    tr.fade -= dt * 7; // le coup est fini : la traînée s'éteint vite
+  }
+  const n = tr.samples.length;
+  if (n < 2 || tr.fade <= 0) {
+    tr.m.visible = false;
+    if (tr.fade <= 0) tr.ch = null;
+    return;
+  }
+  // enveloppe d'intensité : discrète à l'armé, pleine pendant la frappe,
+  // elle retombe doucement au retour — l'arc "claque" au moment du contact
+  let env = 1;
+  if (ch.swing > 0) {
+    const k = 1 - ch.swing;
+    env = k < 0.12 ? 0.3 + (k / 0.12) * 0.7 : k < 0.6 ? 1 : Math.max(0.25, 1 - (k - 0.6) * 1.5);
+  }
+  const I = env * tr.fade;
+  const pos = tr.g.attributes.position.array, col = tr.g.attributes.color.array;
+  for (let i = 0; i < n; i++) {
+    const s = tr.samples[i];
+    s.age += dt;
+    const k = i / (n - 1); // 0 = queue, 1 = tête
+    _ptD.subVectors(tr.samples[Math.min(n - 1, i + 1)].p, tr.samples[Math.max(0, i - 1)].p);
+    _ptC.subVectors(camera.position, s.p);
+    _ptS.crossVectors(_ptD, _ptC);
+    if (_ptS.lengthSq() < 1e-6) _ptS.set(0, 1, 0); else _ptS.normalize();
+    // éventail : quasi rien à la queue, large à la tête (l'arc couvre le geste)
+    const w = 0.05 + 0.5 * k * k;
+    pos[i * 6] = s.p.x + _ptS.x * w; pos[i * 6 + 1] = s.p.y + _ptS.y * w; pos[i * 6 + 2] = s.p.z + _ptS.z * w;
+    pos[i * 6 + 3] = s.p.x - _ptS.x * w; pos[i * 6 + 4] = s.p.y - _ptS.y * w; pos[i * 6 + 5] = s.p.z - _ptS.z * w;
+    const a = Math.pow(k, 1.6) * I; // queue éteinte, tête brillante (additif)
+    col[i * 6] = a; col[i * 6 + 1] = a * 0.93; col[i * 6 + 2] = a * 0.76;
+    col[i * 6 + 3] = a; col[i * 6 + 4] = a * 0.93; col[i * 6 + 5] = a * 0.76;
+  }
+  tr.g.setDrawRange(0, (n - 1) * 6);
+  tr.g.attributes.position.needsUpdate = true;
+  tr.g.attributes.color.needsUpdate = true;
+  tr.m.visible = true;
+}
+
 // ---- oiseaux : posés au sol, ils s'envolent quand un personnage approche,
 // tournent en croissant puis vont se poser plus loin ----
 const birdBodyG = new THREE.BoxGeometry(0.09, 0.08, 0.24);
@@ -8749,7 +8929,7 @@ window.render_game_to_text = () => JSON.stringify({
 });
 window.__game = { structs, rebuildHouse, towers, outline,
   ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
-  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; } };
+  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built

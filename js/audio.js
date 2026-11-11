@@ -55,6 +55,34 @@ export function sfx(name, vol = 1, pan = 0) {
     case 'shotgun': noise(o, t, 0.45, 'lowpass', 1500, 0.6, 0.003, 1.2); tone(o, t, 0.2, 'sine', 110, 35, 1.0); break;
     case 'sniper': noise(o, t, 0.08, 'highpass', 3000, 0.7, 0.001, 0.9); noise(o, t, 0.8, 'lowpass', 900, 0.5, 0.005, 1.1); tone(o, t, 0.35, 'sine', 90, 30, 1.0); break;
     case 'pick': noise(o, t, 0.12, 'bandpass', 700, 1.5, 0.002, 0.9); tone(o, t, 0.08, 'triangle', 260, 140, 0.3); break;
+    // --- impacts de pioche différenciés : chaque matériau a sa signature
+    // (pitch, filtration, résonance) et chaque coup varie légèrement
+    // (détune aléatoire) pour ne jamais sonner deux fois pareil.
+    case 'pickWood': { const p = 0.93 + Math.random() * 0.13; // bois : mat, sourd, épais
+      noise(o, t, 0.11, 'bandpass', 640 * p, 1.4, 0.002, 0.9);
+      tone(o, t, 0.09, 'triangle', 255 * p, 135, 0.4);
+      tone(o, t + 0.012, 0.05, 'sine', 135 * p, 92, 0.3); break; }
+    case 'pickStone': { const p = 0.93 + Math.random() * 0.13; // pierre : claquement sec, brillant
+      noise(o, t, 0.08, 'bandpass', 1750 * p, 2.2, 0.001, 0.85);
+      tone(o, t, 0.045, 'square', 430 * p, 310, 0.2);
+      noise(o, t + 0.012, 0.11, 'lowpass', 950 * p, 0.8, 0.004, 0.4); break; }
+    case 'pickMetal': { const p = 0.93 + Math.random() * 0.13; // métal : clang qui sonne, deux partiels
+      tone(o, t, 0.16, 'triangle', 760 * p, 690, 0.32);
+      tone(o, t, 0.11, 'sine', 1280 * p, 1210, 0.22);
+      noise(o, t, 0.05, 'highpass', 2600 * p, 0.8, 0.001, 0.4); break; }
+    case 'critWood': { const p = 1.22 + Math.random() * 0.13; // crit : même matériau, plus fort, plus haut, qui sonne
+      noise(o, t, 0.14, 'bandpass', 900 * p, 1.6, 0.001, 1.0);
+      tone(o, t, 0.12, 'triangle', 330 * p, 175, 0.5);
+      tone(o, t + 0.02, 0.14, 'sine', 880 * p, 1500, 0.2); break; }
+    case 'critStone': { const p = 1.22 + Math.random() * 0.13;
+      noise(o, t, 0.1, 'bandpass', 2300 * p, 2.4, 0.001, 0.95);
+      tone(o, t, 0.06, 'square', 560 * p, 400, 0.24);
+      tone(o, t + 0.02, 0.16, 'sine', 950 * p, 1900, 0.22); break; }
+    case 'critMetal': { const p = 1.22 + Math.random() * 0.13;
+      tone(o, t, 0.22, 'triangle', 990 * p, 880, 0.38);
+      tone(o, t, 0.16, 'sine', 1660 * p, 1560, 0.26);
+      tone(o, t + 0.02, 0.2, 'sine', 1320 * p, 2600, 0.18);
+      noise(o, t, 0.06, 'highpass', 3200 * p, 0.9, 0.001, 0.45); break; }
     case 'swing': noise(o, t, 0.15, 'bandpass', 1800, 2.0, 0.04, 0.25); break;
     case 'hit': tone(o, t, 0.06, 'square', 1500, 1500, 0.12); break;
     case 'head': tone(o, t, 0.09, 'square', 2400, 2400, 0.14); tone(o, t + 0.03, 0.08, 'sine', 3200, 3200, 0.12); break;

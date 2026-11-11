@@ -6,6 +6,14 @@ Battle royale web complet en Three.js, jouable dans le navigateur et installable
 
 Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Requin, Le Yacht, La Grotte, La Plateforme) patrouillés par des Ombres et cinq boss mythiques (Midas, Skye, Meowscles, Brutus, TNTina). Chaque boss et chaque Ombre possède désormais son circuit propre : 22 rondes spatialement distinctes, avec des secteurs et des vitesses différents. Les boss lâchent une arme mythique et une carte d'accès qui ouvre le coffre-fort de leur POI (ligne bleue guide sur la carte). Les cabines téléphoniques rouges donnent un déguisement d'Ombre ; tirer ou être touché le casse.
 
+## Feel de la pioche
+
+- **Sons d'impact différenciés** : l'audio reste 100 % synthétisé, mais chaque matériau (bois, pierre, métal) a sa signature — pitch, filtration, résonance — et les crits montent le tout d'un cran. Chaque coup est légèrement détuné au hasard pour ne jamais sonner deux fois pareil.
+- **Aspiration du loot** : les matériaux récoltés (arbres, rochers, murs, butin au sol) volent en arc depuis le point de récolte jusqu'à leur compteur HUD, qui pulse à chaque arrivée avec un petit « plip ». Le total affiché rattrape la valeur réelle au fil des arrivées ; une dépense recolle immédiatement.
+- **Traînée de frappe** : un arc lumineux en éventail suit la tête de la pioche pendant le coup (ruban additif, comme l'anneau d'impact), étroit à la queue et large à la tête, lisible même à distance. Il claque au moment de la frappe puis s'éteint vite au retour.
+
+Le script `.github/scripts/qa-loot-trail.cjs` couvre ces trois ajouts : visibilité du ruban pendant le coup, vol des icônes et rattrapage du compteur, câblage des six variantes de sons.
+
 ## Agence, voitures et eau
 
 - **Sous-sol B1** : archives et local technique séparés, couloir vers le coffre, poteaux, conduites, éclairage, signalétique et garde-corps d'escalier. Les deux pièces, le scanner et la remontée au hall sont accessibles sans saut.

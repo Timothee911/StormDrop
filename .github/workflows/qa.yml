@@ -158,6 +158,17 @@ jobs:
           pkill -f "http.server 8090" 2>/dev/null || true
           exit $STATUS
 
+      - name: Test frappe de pioche (sons, aspiration du loot, traînée)
+        id: loottrail
+        run: |
+          set -e
+          STATUS=0
+          nohup python3 -m http.server 8090 > /tmp/server7.log 2>&1 &
+          sleep 2
+          node .github/scripts/qa-loot-trail.cjs || STATUS=1
+          pkill -f "http.server 8090" 2>/dev/null || true
+          exit $STATUS
+
       - name: Rapport QA
         if: always()
         run: |
