@@ -510,3 +510,17 @@ body.touch:has(#tPieces.on) #prompt { visibility: hidden; }
 #matFly .mf-metal svg { fill: #a9c4de; }
 .mat.pulse { animation: matPulse .28s ease-out; }
 @keyframes matPulse { 0% { transform: scale(1); } 35% { transform: scale(1.18); box-shadow: 0 0 16px rgba(255, 210, 63, .55); } 100% { transform: scale(1); } }
+
+/* ---- Ping, siphon, à terre & réanimation ---- */
+#pingLbl { position: absolute; transform: translate(-50%, -100%); color: #fff; font-weight: 800; font-size: 14px; padding: 2px 8px; border-radius: 3px; display: none; pointer-events: none; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+#pingLbl.p-enemy { background: #ff4d6a; box-shadow: 0 0 0 2px rgba(255,77,106,.35); animation: pingPulse .9s ease-in-out infinite; }
+#pingLbl.p-loot { background: #1f8fd6; border-bottom: 3px solid var(--pc, #4fc3ff); }
+@keyframes pingPulse { 50% { box-shadow: 0 0 0 7px rgba(255,77,106,0); } }
+#siphonPop { position: absolute; left: 50%; top: 40%; transform: translate(-50%, 0); font-weight: 900; font-size: 22px; color: #5fe35f; text-shadow: 0 2px 4px rgba(0,0,0,.6); opacity: 0; pointer-events: none; }
+#siphonPop.on { animation: siphonUp 1.2s ease-out; }
+@keyframes siphonUp { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.8); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -30px) scale(1); } }
+#useBar.revive #useFill { background: linear-gradient(90deg, #ff8a3d, #ffd23f); }
+#hud.downed #vignette { opacity: .85 !important; filter: grayscale(.6); }
+#hud.downed #hotbar, #hud.downed #buildbar, #hud.downed #crosshair { opacity: .25; }
+.tm.down { border-left-color: #ff8a3d; animation: tmDown 1s ease-in-out infinite; } .tm.down .tm-n { color: #ffb37a; } .tm.down .tm-bars .h { background: #ff8a3d !important; } .tm.down .tm-bars .s { width: 0 !important; }
+@keyframes tmDown { 50% { background: rgba(255,138,61,.25); } }
