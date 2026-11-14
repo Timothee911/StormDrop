@@ -3343,6 +3343,7 @@ function onAction(code) {
   if (paused) return;
   if (is('map')) { bigmapOpen = !bigmapOpen; document.getElementById('bigmap').classList.toggle('hidden', !bigmapOpen); syncTouchUI(); if (bigmapOpen && lockApi) lockApi.unlock(); else tryLock(); }
   if (!player.alive) return;
+  if (player.downed) { if (is('marker')) placeMarkerAhead(); return; }
   if (player.mode === 'drive') { if (is('interact')) exitVehicle(player); if (is('jump') && player.vehicle) sfx('horn', 0.6); return; }
   if (is('jump')) {
     if (player.mode === 'bus') jumpFromBus(player);
@@ -3645,6 +3646,13 @@ function harvestRock(r, ch, crit, from) {
 }
 function damageChar(t, dmg, attacker, head, wname, silent) {
   if (!t.alive) return false;
+  if (t.downed) { // à terre : plus de bouclier, chaque balle entame la jauge de saignement
+    if (attacker && attacker !== t && attacker.team !== undefined && attacker.team === t.team) return false;
+    t.downHp -= dmg; t.lastHitBy = attacker; t.hurtT = 0.3;
+    if (attacker && attacker.isPlayer && !silent) dmgNumber(_hp.copy(t.pos).add(_v2.set(0, 0.6, 0)), dmg, '');
+    if (t.downHp <= 0) { kill(t, attacker || t.downBy, wname); return true; }
+    return false;
+  }
   if (t.isPlayer && top1Pending) return false; // top 1 scellé : plus rien ne peut te tuer pendant le ralenti
   if (attacker && attacker !== t && attacker.team !== undefined && attacker.team === t.team) return false;
   let shieldHit = t.shield > 0; const orig = dmg;
@@ -3655,14 +3663,78 @@ function damageChar(t, dmg, attacker, head, wname, silent) {
   t.lastHitBy = attacker; t.hurtT = 0.3;
   if (t.isPlayer) { hurtFlash = 0.6; sfx('hurt', 0.7); if (attacker) { hurtDir = Math.atan2(attacker.pos.x - t.pos.x, attacker.pos.z - t.pos.z); hurtDirT = 1.3; } if (t.disguise) setDisguise(t, false, true); }
   else onBotDamaged(t, attacker);
-  if (t.hp <= 0) { kill(t, attacker, wname); return true; }
+  if (t.hp <= 0) { if (canGoDown(t)) { goDown(t, attacker); return true; } kill(t, attacker, wname); return true; }
   return false;
+}
+// =====================================================================
+// À TERRE & RÉANIMATION (Duo / Escouade) : un perso qui tombe à 0 PV alors
+// qu'un coéquipier tient encore debout rampe au sol au lieu de mourir. Sa
+// jauge de saignement (100) fond toute seule ; un coéquipier qui reste 5 s à
+// côté de lui le relève avec 30 PV. Quand plus personne n'est debout dans
+// l'équipe, tous les joueurs à terre sont éliminés d'un coup.
+// =====================================================================
+const REVIVE_T = 5, BLEED = 4.5, DOWN_HP = 100;
+const isUp = (c) => c.alive && !c.downed;
+function teamHasUpright(team, except) { for (const c of chars) if (c !== except && c.team === team && !c.hench && isUp(c) && c.mode !== 'bus') return true; return false; }
+function canGoDown(t) {
+  return TEAM_SIZE > 1 && !t.hench && !t.boss && !t.downed && (t.mode === 'ground' || t.mode === 'drive') && !matchOver && teamHasUpright(t.team, t);
+}
+function goDown(t, attacker) {
+  if (t.vehicle) exitVehicle(t);
+  t.downed = true; t.hp = 0; t.shield = 0; t.downHp = DOWN_HP; t.downBy = attacker && attacker !== t ? attacker : null;
+  t.using = null; t.reloading = 0; t.emoting = null; t.reviveBy = null; t.reviveT = 0; t.crouchToggle = false; t.slideT = 0;
+  if (t.disguise) setDisguise(t, false, true);
+  burst(_v1.copy(t.pos).add(_v2.set(0, 0.8, 0)), 0xff8a3d, 16, 4, 0.2, 0.3, 0.8);
+  if (t.isPlayer) {
+    setBuildModeOff(); cancelEdit(); mouse.l = mouse.r = false;
+    showCenter('À TERRE', `Rampe vers ton équipe · ${REVIVE_T} s de réanimation`, 2.4); sfx('hurt', 1);
+  } else if (attacker && attacker.isPlayer) {
+    sfx('elim', 0.45); showCenter(`${t.name} à terre`, 'Achève-le avant que son équipe le relève', 1.6); addXP('Mise à terre', 75);
+  } else if (t.team === player.team) addKillFeedText(`<b>${t.name}</b> <span class="w">est à terre</span>`);
+  // les ennemis proches qui le voient vont l'achever
+}
+function reviveChar(t, by) {
+  t.downed = false; t.hp = 30; t.shield = 0; t.downHp = 0; t.reviveT = 0; t.reviveBy = null; t.downBy = null; t.hurtT = 0;
+  if (by && by.reviving === t) by.reviving = null;
+  burst(_v1.copy(t.pos).add(_v2.set(0, 1, 0)), 0x5fe35f, 26, 5, 0.2, 0.4, 1);
+  if (t.isPlayer) { showCenter('RÉANIMÉ', `${by ? by.name : 'Ton équipe'} t'a relevé`, 1.8); sfx('heal', 0.9); }
+  else if (by && by.isPlayer) { showCenter('COÉQUIPIER RÉANIMÉ', t.name, 1.6); sfx('heal', 0.8); addXP('Réanimation', 150); stats.revives = (stats.revives || 0) + 1; }
+  else if (t.team === player.team) addKillFeedText(`<b>${by ? by.name : ''}</b> <span class="w">a relevé</span> <b>${t.name}</b>`);
+}
+// progression d'une réanimation : appelée chaque frame par le réanimateur
+function reviveStep(by, t, dt) {
+  if (!t || !t.alive || !t.downed || !isUp(by) || by.mode !== 'ground' || Math.hypot(t.pos.x - by.pos.x, t.pos.z - by.pos.z) > 2.8 || Math.abs(t.pos.y - by.pos.y) > 2) { if (t && t.reviveBy === by) { t.reviveBy = null; t.reviveT = 0; } by.reviving = null; return false; }
+  if (t.reviveBy && t.reviveBy !== by && t.reviveBy.reviving === t) return false; // déjà pris en charge
+  t.reviveBy = by; t.reviveT += dt; by.reviving = t;
+  if (t.reviveT >= REVIVE_T) reviveChar(t, by);
+  return true;
+}
+function updateDowned(ch, dt) {
+  if (!ch.downed || !ch.alive) return;
+  if (!ch.reviveBy) ch.downHp -= BLEED * dt; // la réanimation suspend le saignement
+  else if (ch.reviveBy.reviving !== ch) { ch.reviveBy = null; ch.reviveT = 0; }
+  if (ch.downHp <= 0) kill(ch, ch.downBy, 'saignement');
+}
+// élimination à la dernière ligne : si plus personne n'est debout, les blessés tombent avec
+function wipeDowned(team, attacker) {
+  if (TEAM_SIZE <= 1 || teamHasUpright(team)) return;
+  for (const c of chars) if (c.alive && c.downed && c.team === team) kill(c, c.downBy || attacker, 'équipe éliminée');
+}
+// siphon : chaque élimination rend 50 (PV d'abord, puis bouclier)
+function siphon(ch) {
+  if (!ch || !isUp(ch) || ch.hench) return;
+  let n = 50; const h = Math.min(n, 100 - ch.hp); ch.hp += h; n -= h; ch.shield = Math.min(100, ch.shield + n);
+  if (ch.isPlayer) { const el = document.getElementById('siphonPop'); if (el) { el.classList.remove('on'); void el.offsetWidth; el.classList.add('on'); } }
 }
 let hurtFlash = 0, hurtDir = 0, hurtDirT = 0, spectateTarget = null;
 const milestones = {};
 function setBuildModeOff() { buildMode = false; for (const k in ghosts) ghosts[k].visible = false; updateBuildBar(); }
 function kill(t, attacker, wname) {
-  t.alive = false; t.hp = 0;
+  if (!t.alive) return;
+  const wasDowned = t.downed;
+  t.alive = false; t.hp = 0; t.downed = false; t.downHp = 0;
+  if (t.reviving) { t.reviving.reviveBy = null; t.reviving.reviveT = 0; t.reviving = null; }
+  if (attacker && attacker !== t && !t.hench && attacker.team !== t.team) siphon(attacker);
   const alive = chars.filter((c) => c.alive && !c.hench).length;
   // les hommes de main ne comptent pas dans les éliminations ni le classement
   if (attacker && attacker !== t && !t.hench) attacker.kills++;
@@ -3704,6 +3776,13 @@ function kill(t, attacker, wname) {
     if (!player.alive && spectateTarget === t) spectateTarget = mates.find((m) => m.alive) || (attacker && attacker.alive ? attacker : null);
   }
   leaderboard.push({ name: t.name, kills: t.kills, team: t.team, place: t.hench ? null : (teams.has(t.team) ? null : teams.size + 1), by: attacker && attacker !== t ? attacker.name : 'Tempête' });
+  if (!t.hench && !wasDowned) wipeDowned(t.team, attacker);
+}
+function addKillFeedText(html) {
+  const kf = document.getElementById('killfeed');
+  const d = document.createElement('div'); d.className = 'kf mine'; d.innerHTML = html; kf.prepend(d);
+  while (kf.children.length > 6) kf.lastChild.remove();
+  setTimeout(() => { d.style.opacity = '0'; setTimeout(() => d.remove(), 700); }, 5000);
 }
 function addKillFeed(a, t, w) {
   const kf = document.getElementById('killfeed');
@@ -3854,7 +3933,23 @@ function steerWalls(ch, wish) {
   }
   ch.avoidX = 0; // cerné de toutes parts : le débloquage existant (saut/rampe/nouveau cap) prend le relais
 }
+// bot à terre : il rampe vers le coéquipier debout le plus proche, en s'éloignant de son agresseur
+function botDownedThink(b, dt) {
+  let best = null, bd = 1e9;
+  for (const c of chars) { if (c === b || c.team !== b.team || !isUp(c) || c.hench) continue; const d = Math.hypot(c.pos.x - b.pos.x, c.pos.z - b.pos.z); if (d < bd) { bd = d; best = c; } }
+  const wish = _bw.set(0, 0, 0);
+  if (best && bd > 1.6 && !b.reviveBy) { wish.set(best.pos.x - b.pos.x, 0, best.pos.z - b.pos.z).normalize(); b.yaw = lerpAngle(b.yaw, Math.atan2(-wish.x, -wish.z), Math.min(1, dt * 4)); }
+  const sp = RUN * 0.28;
+  b.vel.x = lerp(b.vel.x, wish.x * sp, Math.min(1, 10 * dt)); b.vel.z = lerp(b.vel.z, wish.z * sp, Math.min(1, 10 * dt));
+}
+// coéquipier à terre à secourir : le plus proche à moins de 80 m
+function downedMateFor(b) {
+  let best = null, bd = 80;
+  for (const c of chars) { if (c === b || !c.alive || !c.downed || c.team !== b.team) continue; if (c.reviveBy && c.reviveBy !== b) continue; const d = Math.hypot(c.pos.x - b.pos.x, c.pos.z - b.pos.z); if (d < bd) { bd = d; best = c; } }
+  return best;
+}
 function botThink(b, dt) {
+  if (b.downed) { b.target = null; b.reviving = null; botDownedThink(b, dt); return; }
   b.think -= dt; b.buildCd -= dt; b.react -= dt;
   if (b.think <= 0) {
     b.think = rand(0.3, 0.6);
@@ -3872,15 +3967,23 @@ function botThink(b, dt) {
       }
       const best = c1 && canSee(b, c1) ? c1 : c2 && canSee(b, c2) ? c2 : c3 && canSee(b, c3) ? c3 : null;
       if (best) { b.target = best; b.react = rand(0.8, 1.6) * DIFF.react; }
+      // ennemi signalé par le joueur : les coéquipiers le prennent pour cible
+      if (b.mate && ping.on && ping.kind === 'enemy' && ping.target.alive && ping.target.pos.distanceTo(b.pos) < 90 && b.target !== ping.target) { b.target = ping.target; b.react = rand(0.3, 0.6) * DIFF.react; }
     } else {
       b.seeing = canSee(b, b.target);
       if (!b.seeing) b.lostT += 0.45; else b.lostT = 0;
     }
+    // secours : un coéquipier à terre passe avant le butin et la balade
+    b.reviveGoal = TEAM_SIZE > 1 && !b.hench ? downedMateFor(b) : null;
     // waypoint selection
     const outside = Math.hypot(b.pos.x - storm.cx, b.pos.z - storm.cz) > storm.r - 6;
     const outNext = Math.hypot(b.pos.x - storm.nx, b.pos.z - storm.nz) > storm.nr - 4;
     if (storm.phase >= 0 && (outside || (outNext && b.wpKind !== 'storm'))) {
       b.wp = randomLandPoint(storm.nx, storm.nz, Math.max(4, storm.nr * 0.6)); b.wpKind = 'storm';
+    } else if (b.reviveGoal) {
+      b.wp = b.reviveGoal.pos; b.wpKind = 'revive';
+    } else if (b.mate && !b.target && mateGoal() && Math.hypot(mateGoal().x - b.pos.x, mateGoal().z - b.pos.z) > 6) {
+      const g = mateGoal(); b.wp = randomLandPoint(g.x, g.z, 3); b.wpKind = 'ping';
     } else if (b.lootGoal && b.lootGoal.valid()) {
       b.wp = b.lootGoal.pos; b.wpKind = 'loot';
     } else if (b.mate && player.alive && player.mode !== 'bus' && Math.hypot(player.pos.x - b.pos.x, player.pos.z - b.pos.z) > 10) {
@@ -3910,6 +4013,17 @@ function botThink(b, dt) {
   if (b.healing > 0) { b.healing -= dt; if (b.healing <= 0) { b.healing = 0; if (b.heals > 0) { b.heals--; b.shield = Math.min(100, b.shield + 50); } } }
   if (b.hitT > 0) b.hitT = Math.max(0, b.hitT - dt);
   botBuildQueue(b, dt); botBoxEdit(b, dt);
+  const rg = b.reviveGoal;
+  if (rg && (!rg.alive || !rg.downed)) b.reviveGoal = null;
+  else if (rg && (!b.target || b.seeing === false || Math.hypot(rg.pos.x - b.pos.x, rg.pos.z - b.pos.z) < 3)) {
+    const dx = rg.pos.x - b.pos.x, dz = rg.pos.z - b.pos.z, d = Math.hypot(dx, dz);
+    b.yaw = lerpAngle(b.yaw, Math.atan2(-dx, -dz), Math.min(1, dt * 6));
+    if (d > 1.7) { wish.set(dx / d, 0, dz / d); steerWalls(b, wish); }
+    else if (!reviveStep(b, rg, dt)) b.reviveGoal = null;
+    b.vel.x = lerp(b.vel.x, wish.x * speed, Math.min(1, 12 * dt)); b.vel.z = lerp(b.vel.z, wish.z * speed, Math.min(1, 12 * dt));
+    return;
+  }
+  if (b.reviving) { if (b.reviving.reviveBy === b) { b.reviving.reviveBy = null; b.reviving.reviveT = 0; } b.reviving = null; }
   if (b.rampRush > 0 && b.target && b.target.alive) { botRampStep(b, dt); }
   else if (b.target && b.target.alive && b.mode === 'ground' && b.buildCd <= 0 && b.target.pos.y > b.pos.y + 3 && b.target.pos.distanceTo(b.pos) < 40 && MR() < dt * 0.25 * DIFF.aim) { b.rampRush = rand(1.5, 3); b.buildCd = rand(8, 14); }
   if (b.target && b.target.alive && b.seeing !== false) {
@@ -3938,7 +4052,7 @@ function botThink(b, dt) {
       if (b.burst < -rand(1.2, 2.4) * DIFF.react) b.burst = rand(0.5, 1.1);
       if (b.burst > 0 || W.melee) {
         _o.copy(b.pos); _o.y += 1.55;
-        _v3.copy(tp); _v3.y += rand(0.9, 1.7);
+        _v3.copy(tp); _v3.y += b.target.downed ? rand(0.15, 0.5) : rand(0.9, 1.7);
         const dist = _o.distanceTo(_v3);
         // tir prédictif : on mène la cible mobile comme un vrai joueur
         _v3.addScaledVector(b.target.vel, Math.min(0.7, dist / 110));
@@ -4070,7 +4184,7 @@ function henchThink(h, dt) {
       if (h.burst < -rand(1.2, 2.2)) h.burst = rand(0.5, 1.1);
       if (h.burst > 0 || W.melee) {
         _o.copy(h.pos); _o.y += 1.55;
-        _v3.copy(tp); _v3.y += rand(0.9, 1.7);
+        _v3.copy(tp); _v3.y += h.target.downed ? rand(0.15, 0.5) : rand(0.9, 1.7);
         const dist = _o.distanceTo(_v3);
         _v2.subVectors(_v3, _o).normalize();
         const err = (0.06 + dist * 0.001) / (h.skill * DIFF.aim) + (h.target.vel.lengthSq() > 9 ? 0.03 : 0);
@@ -6578,7 +6692,57 @@ function setMarker(x, z) {
   if (marker.on && Math.hypot(marker.pos.x - x, marker.pos.z - z) < 4) { marker.on = false; marker.mesh.visible = false; sfx('click', 0.5); return; }
   marker.on = true; marker.pos.set(x, terrainH(x, z), z); marker.mesh.position.copy(marker.pos); marker.mesh.visible = true; sfx('edit', 0.6);
 }
+// PING : la touche marqueur vise d'abord un ennemi près du réticule (rouge,
+// suivi en direct, tes coéquipiers IA l'engagent), puis un objet/coffre
+// (bleu, ils vont le chercher) ; sinon elle pose le marqueur de lieu (jaune).
+const ping = { on: false, kind: '', pos: new THREE.Vector3(), target: null, t: 0, label: '' };
+function mateGoal() { return ping.on && ping.kind === 'loot' ? ping.pos : marker.on ? marker.pos : null; }
+function pingAhead() {
+  const d = _v2; camera.getWorldDirection(d);
+  let best = null, bestCos = Math.cos(0.07);
+  for (const c of chars) {
+    if (c.isPlayer || !c.alive || c.team === player.team || c.mode === 'bus' || c.mode === 'drive') continue;
+    const dx = c.pos.x - camera.position.x, dy = c.pos.y + 1 - camera.position.y, dz = c.pos.z - camera.position.z, dist = Math.hypot(dx, dy, dz);
+    if (dist > 250) continue;
+    const cos = (dx * d.x + dy * d.y + dz * d.z) / dist;
+    if (cos > bestCos && canSee(player, c)) { bestCos = cos; best = c; }
+  }
+  if (best) { setPing('enemy', best.pos, best, best.boss ? best.name.toUpperCase() : best.hench ? 'Ombre' : 'Ennemi'); return; }
+  const hit = castRay(camera.position, d, 700, player);
+  const pt = hit ? hit.point : _v1.copy(camera.position).addScaledVector(d, 300);
+  let lb = null, ld = 3;
+  for (const L of loot) { if (!L.alive || L.item.kind === 'ammo' || L.item.kind === 'mats') continue; const dd = L.pos.distanceTo(pt); if (dd < ld) { ld = dd; lb = { pos: L.pos, label: L.item.kind === 'weapon' ? WEAPONS[L.item.id].name : L.item.kind === 'consum' ? CONSUM[L.item.id].name : 'Objet', css: L.item.kind === 'weapon' ? RAR[L.item.rarity].css : '' }; } }
+  for (const c of chests) { if (c.opened) continue; const dd = Math.hypot(c.x - pt.x, c.y - pt.y, c.z - pt.z); if (dd < ld) { ld = dd; lb = { pos: _v3.set(c.x, c.y, c.z), label: 'Coffre' }; } }
+  for (const c of drops) { if (!c.landed || c.opened) continue; const dd = Math.hypot(c.x - pt.x, c.y - pt.y, c.z - pt.z); if (dd < ld + 1) { ld = dd; lb = { pos: _v3.set(c.x, c.y, c.z), label: 'Largage' }; } }
+  if (lb) { setPing('loot', lb.pos, null, lb.label, lb.css); return; }
+  setMarker(pt.x, pt.z);
+  if (marker.on) pingVoice('On se retrouve là-bas');
+}
+function setPing(kind, pos, target, label, css) {
+  if (ping.on && ping.kind === kind && (target ? ping.target === target : ping.pos.distanceTo(pos) < 1.5)) { clearPing(); sfx('click', 0.5); return; }
+  ping.on = true; ping.kind = kind; ping.pos.copy(pos); ping.target = target; ping.t = kind === 'enemy' ? 8 : 25; ping.label = label;
+  const el = document.getElementById('pingLbl'); el.className = 'p-' + kind; el.style.setProperty('--pc', css || '');
+  sfx(kind === 'enemy' ? 'shieldhit' : 'edit', 0.6);
+  pingVoice(kind === 'enemy' ? `${label} repéré !` : `${label} ici`);
+}
+function clearPing() { ping.on = false; ping.target = null; document.getElementById('pingLbl').style.display = 'none'; }
+function pingVoice(txt) { if (mates.some((x) => x.alive && !x.downed)) addKillFeedText(`<b>${player.name}</b> <span class="w">· ${txt}</span>`); }
+function updatePing(dt) {
+  const el = document.getElementById('pingLbl');
+  if (!ping.on || !player) { el.style.display = 'none'; return; }
+  ping.t -= dt;
+  if (ping.kind === 'enemy') { if (!ping.target.alive) { clearPing(); return; } ping.pos.copy(ping.target.pos); }
+  if (ping.t <= 0) { clearPing(); return; }
+  _v1.copy(ping.pos).setY(ping.pos.y + (ping.kind === 'enemy' ? 2.4 : 1.4)).project(camera);
+  if (_v1.z > 1) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.style.left = clamp((_v1.x + 1) / 2 * window.innerWidth, 24, window.innerWidth - 24) + 'px';
+  el.style.top = clamp((1 - _v1.y) / 2 * window.innerHeight, 24, window.innerHeight - 24) + 'px';
+  el.style.opacity = Math.min(1, ping.t);
+  el.textContent = `${ping.label} · ${Math.round(ping.pos.distanceTo(player.pos))} m`;
+}
 function placeMarkerAhead() {
+  if (player && player.alive && player.mode === 'ground') { pingAhead(); return; }
   const d = _v2; camera.getWorldDirection(d);
   const hit = castRay(camera.position, d, 700, player);
   const pt = hit ? hit.point : _v1.copy(camera.position).addScaledVector(d, 300);
@@ -6723,9 +6887,9 @@ function buildTeamHUD() {
 function updateTeamHUD() {
   mates.forEach((m, i) => {
     const e = document.getElementById('tm' + i); if (!e) return;
-    e.classList.toggle('dead', !m.alive);
+    e.classList.toggle('dead', !m.alive); e.classList.toggle('down', !!m.downed);
     e.querySelector('.s').style.width = (m.alive ? m.shield : 0) + '%';
-    e.querySelector('.h').style.width = (m.alive ? Math.max(0, m.hp) : 0) + '%';
+    e.querySelector('.h').style.width = (m.alive ? Math.max(0, m.downed ? m.downHp : m.hp) : 0) + '%';
   });
 }
 window.addEventListener('pointerdown', () => initAudio());
@@ -6744,6 +6908,7 @@ function beginTop1() {
 function startVictory() {
   if (state !== 'playing' || !player.alive) return;
   state = 'victory'; wonMatch = true; matchOver = true;
+  if (player.downed) reviveChar(player, null); // victoire obtenue à terre : on se relève pour l'écran TOP 1
   // la caméra passe devant le perso : on le voit de face pendant les stats
   victoryCam = true; victoryYaw = camYaw;
   // stoppe l'emote (elle ferait tourner le dos du perso à la caméra) et ferme les menus ouverts
@@ -6805,6 +6970,13 @@ function weaponCard(it) {
 }
 function nearestInteract() {
   let best = null, bd = 2.6;
+  // un coéquipier à terre passe avant tout le reste
+  for (const c of chars) {
+    if (c === player || !c.alive || !c.downed || c.team !== player.team) continue;
+    const d = Math.hypot(c.pos.x - player.pos.x, c.pos.z - player.pos.z) + Math.abs(c.pos.y - player.pos.y) * 0.5;
+    if (d < 2.6 && d < bd) { bd = d; best = { type: 'revive', c }; }
+  }
+  if (best) return best;
   for (const L of loot) {
     if (!L.alive || L.item.kind === 'ammo' || L.item.kind === 'mats') continue;
     const d = Math.hypot(L.pos.x - player.pos.x, L.pos.z - player.pos.z) + Math.abs(L.pos.y - player.pos.y) * 0.5;
@@ -6821,7 +6993,9 @@ function nearestInteract() {
 }
 function interact() {
   if (!player.alive || player.mode !== 'ground') return;
+  if (player.downed) return;
   const t = nearestInteract(); if (!t) return;
+  if (t.type === 'revive') { if (player.reviving === t.c) { t.c.reviveBy = null; t.c.reviveT = 0; player.reviving = null; } else { setBuildModeOff(); cancelEdit(); player.reviving = t.c; } return; }
   if (t.type === 'chest') openChest(t.c);
   else if (t.type === 'door') toggleDoor(t.dr);
   else if (t.type === 'vault') openVault(t.v);
@@ -7024,8 +7198,17 @@ function updatePlayer(dt) {
     if (p.grounded) { p.mode = 'ground'; p.manualFall = false; p.parts.glider.visible = false; p.landT = 0.5; p.cool = Math.max(p.cool, 0.3); p.vel.y = 0; sfx('land', 0.6); const poi = inPOI(p.pos.x, p.pos.z, 10); showCenter(poi ? poi.name.toUpperCase() : '', 'Fouille les maisons et les coffres', 2.2); }
     return;
   }
+  if (p.downed) { // à terre : on rampe, rien d'autre
+    p.ads = false; p.sprint = false; p.crouch = false; p.using = null; ghostTarget = null;
+    const sp = RUN * 0.28 * (p.inWater ? 0.7 : 1);
+    p.vel.x = lerp(p.vel.x, wish.x * sp, Math.min(1, 10 * dt)); p.vel.z = lerp(p.vel.z, wish.z * sp, Math.min(1, 10 * dt));
+    p.vel.y -= GRAV * dt * (p.inWater ? 0.22 : 1); if (p.inWater) p.vel.y *= Math.max(0, 1 - 2.6 * dt);
+    physics(p, dt); checkPOIBanner(); return;
+  }
   const W = weaponOf(p);
   if (p.equipT > 0) p.equipT = Math.max(0, p.equipT - dt);
+  // réanimation en cours : on reste près du blessé ; tirer ou construire l'interrompt
+  if (p.reviving) { if (mouse.l || buildMode || editing) { if (p.reviving.reviveBy === p) { p.reviving.reviveBy = null; p.reviving.reviveT = 0; } p.reviving = null; } else reviveStep(p, p.reviving, dt); }
   const ads = mouse.r && !buildMode && !editing && W && !W.melee && p.reloading <= 0 && p.equipT <= 0;
   p.ads = ads;
   if (p.emoting) { p.emoting.t += dt; if (wish.lengthSq() > 0 || mouse.l || down('jump') || buildMode) p.emoting = null; }
@@ -7067,6 +7250,7 @@ function updatePlayer(dt) {
   if (p.grounded) p.noFall = false;
   autoPickups(p);
   updateEdit();
+  if (p.reviving) { ghostTarget = null; checkPOIBanner(); return; } // mains occupées
   // build or fire
   placeCd -= dt;
   if (editing) { ghostTarget = null; }
@@ -7117,6 +7301,7 @@ function updateChar(ch, dt) {
     return;
   }
   ch.cool -= dt; ch.bloom = Math.max(0, ch.bloom - dt * 0.08);
+  updateDowned(ch, dt); if (!ch.alive) return;
   ch.waterAimT = Math.max(0, (ch.waterAimT || 0) - dt);
   if (ch.reloading > 0) { ch.reloading -= dt; if (ch.reloading <= 0) { ch.reloading = 0; finishReload(ch); } }
   // décroissance du coup de pioche : ~0,36 s pour laisser respirer les 4 temps
@@ -7136,7 +7321,7 @@ function updateChar(ch, dt) {
       airControl(ch, wish, dt); physics(ch, dt);
       if (ch.grounded) { ch.mode = 'ground'; ch.parts.glider.visible = false; ch.landT = 0.5; ch.cool = Math.max(ch.cool || 0, 0.3); ch.wp = randomLandPoint(ch.pos.x, ch.pos.z, 25); }
     } else {
-      if (!ch.hench) botLoot(ch, dt);
+      if (!ch.hench && !ch.downed) botLoot(ch, dt);
       if (ch.hench) henchThink(ch, dt); else botThink(ch, dt);
       ch.vel.y -= GRAV * dt;
       physics(ch, dt);
@@ -7148,7 +7333,7 @@ function updateChar(ch, dt) {
   if (storm.phase >= 0 && ch.mode !== 'bus') {
     const out = !matchOver && Math.hypot(ch.pos.x - storm.cx, ch.pos.z - storm.cz) > storm.r;
     ch.inStorm = out;
-    if (out) { ch.stormTick -= dt; if (ch.stormTick <= 0) { ch.stormTick = 1; ch.hp -= storm.dmg; if (ch.isPlayer) { sfx('storm', 0.5); hurtFlash = 0.3; } if (ch.hp <= 0) kill(ch, null, 'tempête'); } }
+    if (out) { ch.stormTick -= dt; if (ch.stormTick <= 0) { ch.stormTick = 1; if (ch.isPlayer) { sfx('storm', 0.5); hurtFlash = 0.3; } if (ch.downed) { ch.downHp -= storm.dmg * 2; if (ch.downHp <= 0) kill(ch, ch.downBy, 'tempête'); } else { ch.hp -= storm.dmg; if (ch.hp <= 0) { if (canGoDown(ch)) goDown(ch, null); else kill(ch, null, 'tempête'); } } } }
     else ch.stormTick = 0.5;
   }
   ch.refreshHeld();
@@ -7458,6 +7643,16 @@ function animateChar(ch, dt) {
   if (ch.crouch && ch.slideT > 0) { m.position.y -= 0.55; P.hipL.rotation.x = 1.25; P.kneeL.rotation.x = -0.15; P.hipR.rotation.x = 0.9; P.kneeR.rotation.x = -1.4; P.torso.rotation.x = -0.45; }
   // accroupi : cuisses vers l'avant, genoux pliés (les pieds restent sous le corps)
   else if (ch.crouch) { m.position.y -= 0.32; P.hipL.rotation.x += 0.95; P.hipR.rotation.x += 0.95; P.kneeL.rotation.x -= 1.65; P.kneeR.rotation.x -= 1.65; P.torso.rotation.x = -0.3; }
+  if (ch.downed) { // à terre : à plat ventre, on rampe en tirant sur les bras
+    const cr = Math.sin(gameT * 6 + ch.pos.x) * Math.min(1, hs / 1.5);
+    m.rotation.x = -1.32; m.position.y += 0.32; P.torso.rotation.set(0, 0, 0);
+    P.shR.rotation.set(2.6 + cr * 0.5, 0, -0.25); P.shL.rotation.set(2.6 - cr * 0.5, 0, 0.25); P.elR.rotation.set(0.5, 0, 0); P.elL.rotation.set(0.5, 0, 0);
+    P.hipL.rotation.set(-cr * 0.35, 0, 0.12); P.hipR.rotation.set(cr * 0.35, 0, -0.12); P.kneeL.rotation.x = -0.3; P.kneeR.rotation.x = -0.3;
+    P.head.rotation.set(-0.9, 0, 0);
+  } else if (ch.reviving) { // genou à terre, mains posées sur le blessé
+    m.position.y -= 0.32; P.hipL.rotation.x = 1.4; P.kneeL.rotation.x = -1.5; P.hipR.rotation.x = 0.2; P.kneeR.rotation.x = -2.0; P.torso.rotation.x = -0.35;
+    const pu = Math.sin(gameT * 9) * 0.1; P.shR.rotation.set(1.3 + pu, 0, 0); P.shL.rotation.set(1.3 - pu, 0, 0); P.elR.rotation.set(0.6, 0, 0); P.elL.rotation.set(0.6, 0, 0);
+  }
   if (ch.hurtT > 0) { ch.hurtT -= dt; }
   // traînée de frappe : arc lumineux qui suit la tête de la pioche
   updatePickTrail(ch, dt);
@@ -7815,6 +8010,7 @@ function updateHUD(dt) {
   hurtFlash = Math.max(0, hurtFlash - dt);
   $('vignette').style.opacity = Math.min(1, hurtFlash * 1.4);
   $('hud').classList.toggle('dead', !player.alive);
+  $('hud').classList.toggle('downed', !!player.downed);
   updateVehicleHUD();
   hurtDirT = Math.max(0, hurtDirT - dt);
   const dd = $('dmgDir'); dd.style.opacity = Math.min(1, hurtDirT * 1.5);
@@ -7856,14 +8052,19 @@ function updateHUD(dt) {
   $('stormInfo').classList.toggle('closing', storm.phase >= 0 && storm.phase < PHASES.length && storm.stage !== 'wait');
   // prompt
   const pr = $('prompt');
-  if (player.alive && player.mode === 'ground') {
+  if (player.alive && player.downed) { pr.style.display = 'block'; pr.innerHTML = player.reviveBy ? `${player.reviveBy.name} te relève…` : 'À TERRE · rampe vers un coéquipier'; }
+  else if (player.alive && player.reviving) pr.style.display = 'none'; // la barre de réanimation porte déjà l'info
+  else if (player.alive && player.mode === 'ground') {
     const t = nearestInteract();
-    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (player.keycards && player.keycards[t.v.poi.key] ? 'Ouvrir le coffre-fort' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
+    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'revive' ? (player.reviving === t.c ? `Annuler la réanimation de ${t.c.name}` : `Réanimer ${t.c.name}`) : t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (player.keycards && player.keycards[t.v.poi.key] ? 'Ouvrir le coffre-fort' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
     else pr.style.display = 'none';
   } else if (player.alive && player.mode === 'drive') { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> Descendre · ${Math.round(Math.abs(player.vehicle.speed) * 3.6)} km/h`; }
   else pr.style.display = 'none';
   const ub = $('useBar');
-  if (player.using) { ub.style.display = 'block'; $('useLabel').textContent = CONSUM[player.using.item.id].name + '…'; $('useFill').style.width = (player.using.t / player.using.dur * 100) + '%'; }
+  ub.classList.toggle('revive', !!(player.downed || player.reviving));
+  if (player.downed) { ub.style.display = 'block'; if (player.reviveBy) { $('useLabel').textContent = 'Réanimation'; $('useFill').style.width = (player.reviveT / REVIVE_T * 100) + '%'; } else { $('useLabel').textContent = `Saignement · ${Math.ceil(player.downHp / BLEED)} s`; $('useFill').style.width = Math.max(0, player.downHp) + '%'; } }
+  else if (player.reviving) { ub.style.display = 'block'; $('useLabel').textContent = `Réanimation de ${player.reviving.name} · ${keyLabel(BIND.interact)} annuler`; $('useFill').style.width = (player.reviving.reviveT / REVIVE_T * 100) + '%'; }
+  else if (player.using) { ub.style.display = 'block'; $('useLabel').textContent = CONSUM[player.using.item.id].name + '…'; $('useFill').style.width = (player.using.t / player.using.dur * 100) + '%'; }
   else if (player.reloading > 0 && W && !W.melee) { ub.style.display = 'block'; $('useLabel').textContent = 'Rechargement'; $('useFill').style.width = (100 - player.reloading / (W.reload * RAR[player.item.rarity].reload) * 100) + '%'; }
   else ub.style.display = 'none';
   $('busHint').style.display = player.mode === 'bus' ? 'block' : 'none';
@@ -8092,6 +8293,7 @@ function drawMap(ctx, size, cx, cz, viewW, full) {
   }
   for (const v of vehicles) { const [x, z] = w2m(v.pos.x, v.pos.z, cx, cz, scale, size); if (x < 0 || z < 0 || x > size || z > size) continue; ctx.fillStyle = v.kind === 'car' ? '#ff6a3d' : '#ffffff'; ctx.beginPath(); ctx.arc(x, z, full ? 4 : 3, 0, 7); ctx.fill(); }
   for (const m of mates) { if (!m.alive || m.mode === 'bus') continue; const [x, z] = w2m(m.pos.x, m.pos.z, cx, cz, scale, size); ctx.fillStyle = '#5fe3ff'; ctx.strokeStyle = '#003a55'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, z, 5, 0, 7); ctx.fill(); ctx.stroke(); }
+  if (ping.on) { const [x, z] = w2m(ping.pos.x, ping.pos.z, cx, cz, scale, size); ctx.fillStyle = ping.kind === 'enemy' ? '#ff4d6a' : '#4fc3ff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, z, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   if (marker.on) { const [x, z] = w2m(marker.pos.x, marker.pos.z, cx, cz, scale, size); ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, z - 12); ctx.lineTo(x + 6, z - 4); ctx.lineTo(x, z + 2); ctx.lineTo(x - 6, z - 4); ctx.closePath(); ctx.fill(); ctx.stroke(); }
   for (const d of drops) { if (d.opened) continue; const [x, z] = w2m(d.x, d.z, cx, cz, scale, size); ctx.fillStyle = '#3fa9ff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.fillRect(x - 5, z - 5, 10, 10); ctx.strokeRect(x - 5, z - 5, 10, 10); }
   // bus
@@ -8842,7 +9044,7 @@ function step(dt) {
     // Un top 1 est décidé : la zone et le monde entier sont figés, seul le perso bouge encore.
     // (les portes aussi sont gelées : plus rien ne bouge)
     updatePlayer(dt);
-    updateMarker(dt);
+    updateMarker(dt); updatePing(dt);
     frameN++;
     for (const c of chars) if (c.isPlayer) updateChar(c, dt);
     return;
@@ -8869,7 +9071,7 @@ function step(dt) {
   updateImpostors();
   if (frameN % 180 === 0 && loot.length > 150) { let j = 0; for (let i = 0; i < loot.length; i++) if (loot[i].alive) loot[j++] = loot[i]; loot.length = j; }
   updatePadsVents(dt);
-  updateMarker(dt);
+  updateMarker(dt); updatePing(dt);
   updateDayNight(dt);
   updateAmbient(dt);
   updateRipples(dt);
@@ -8928,7 +9130,7 @@ window.render_game_to_text = () => JSON.stringify({
 });
 window.__game = { structs, rebuildHouse, towers, outline,
   ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
-  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool };
+  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; } };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built

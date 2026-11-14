@@ -14,6 +14,14 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 Le script `.github/scripts/qa-loot-trail.cjs` couvre ces trois ajouts : visibilité du ruban pendant le coup, vol des icônes et rattrapage du compteur, câblage des six variantes de sons.
 
+## Jeu d'équipe : à terre, réanimation, siphon et pings
+
+- **À terre (Duo / Escouade)** : tomber à 0 PV alors qu'un coéquipier tient encore debout met à terre au lieu d'éliminer. On rampe lentement, sans arme ni construction, pendant que la jauge de saignement (100) fond toute seule (environ 22 s) ; les balles et la tempête l'entament aussi. Quand plus personne n'est debout dans l'équipe, tous les blessés sont éliminés d'un coup. Les ennemis visent plus bas pour achever un joueur à terre.
+- **Réanimation** : <kbd>E</kbd> près d'un coéquipier à terre lance 5 s de réanimation (barre orange, le saignement est suspendu) ; tirer, construire ou s'éloigner l'interrompt. Il revient avec 30 PV. Les IA (alliées comme ennemies) vont relever leurs blessés quand leur cible ne les voit pas, et les blessés rampent vers le coéquipier le plus proche. +150 XP par réanimation, +75 XP par mise à terre.
+- **Siphon** : chaque élimination rend 50 (PV d'abord, puis bouclier), ce qui récompense l'agressivité.
+- **Pings** : la touche marqueur (<kbd>N</kbd>, renommée « Ping / marqueur ») signale d'abord un ennemi près du réticule (étiquette rouge qui le suit 8 s, les coéquipiers IA l'engagent), puis une arme, un coffre ou un largage (étiquette bleue, ils vont la chercher), sinon elle pose le marqueur de lieu jaune, que les coéquipiers rejoignent. Les pings apparaissent aussi sur la mini-carte.
+- **QA** : `.github/scripts/qa-revive-ping.cjs` (15 contrôles) couvre la mise à terre, le saignement, la réanimation par l'IA et par le joueur, l'élimination en cascade, le siphon et les trois sortes de pings.
+
 ## La Grotte sous la montagne
 
 - **Vrai relief** : la caverne vit désormais sous une vraie montagne — le pic est intégré au terrain lui-même (`terrainH`, sommet visible ~38 m au-dessus du plateau à 13,4 m), flancs rocheux praticables jusqu'au sommet. Les massifs stylisés qui formaient l'ancienne « montagne » deviennent le noyau interne, entièrement enterré.

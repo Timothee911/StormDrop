@@ -24,7 +24,8 @@ Les touches sont définies par position physique : le jeu affiche automatiquemen
 | Viser (ADS) | clic droit avec une arme | clic droit |
 | Recharger / Interagir | R / E | R / E |
 | Changer d'épaule | H | H |
-| Grande carte / Marqueur | , / N (clic sur la carte) | M / N |
+| Grande carte / Ping (ennemi, objet, lieu) | , / N (clic sur la carte) | M / N |
+| Réanimer un coéquipier à terre | E (5 s) | E (5 s) |
 | Emote | B | B |
 
 ## Contenu principal
