@@ -6097,15 +6097,14 @@ function buildSpyPOI(p) {
     gshell(KX - 13.5, -2, KZ, 1.4, WH, 28.6, ROCK_B);
     // paroi est : REMPLACÉE par la FAÇADE CRÂNE (voir plus bas) — la bouche du
     // crâne est l'entrée sèche, face à l'océan
-    // ---- MONTAGNE : silhouette rocheuse qui recouvre la caverne et le
-    // crâne. Structure porteuse : les massifs gshell de la voûte (avec
-    // colliders) forment la base, puis des étages supérieurs raccordés
-    // montent jusqu'au sommet (~29). La CHEMINÉE EST FERMÉE : un massif
-    // central bouche l'ancien trou béant à chaque étage — plus d'ouverture
-    // vers l'île, la grotte vit sous une vraie montagne. La bouche du crâne
-    // EST (x 281,8-284,2, z 159,5-170,5) reste libre : c'est l'unique entrée.
-    // Les massifs EST restent RACCOURCIS pour ne jamais couvrir la façade du
-    // crâne : c'est elle qui fait face à l'océan.
+    // ---- MONTAGNE : le relief du terrain (world.js terrainH, pic visible
+    // ~38 m) est LA montagne — ces massifs gshell en sont le NOYAU INTERNE :
+    // étages 0-1 (voûte, colliders, sommet ~22) et étages 2-3 (dôme/crêtes,
+    // sommet ~29) restent entièrement ENTERRÉS sous le terrain. La CHEMINÉE
+    // EST FERMÉE : un massif central bouche l'ancien trou béant à chaque
+    // étage. La bouche du crâne EST (x 281,8-284,2, z 159,5-170,5) reste
+    // libre : c'est l'unique entrée, au fond d'une gorge que le canyon sec
+    // découpe dans le flanc est de la montagne.
     {
       const CX = KX, CZ = KZ;
       const ROCK = 0x5b6472, ROCK_D = 0x4e5663;

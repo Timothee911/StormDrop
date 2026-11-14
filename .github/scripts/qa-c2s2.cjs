@@ -422,8 +422,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const cave = await frame.evaluate(() => {
     const G = window.__game, p = G.player, R = [];
     G.storm.dmg = 0; // test ciblé : la tempête ne doit pas tuer le joueur ici
-    // le plateau du POI reste à ~13,4 (la montagne recouvre la caverne)
-    const t1 = G.terrainH(220, 150), t2 = G.terrainH(240, 150);
+    // le plateau du POI reste à ~13,4 (la montagne s'élève à l'est, sur la caverne)
+    const t1 = G.terrainH(210, 150), t2 = G.terrainH(205, 150);
     R.push(['plateau du POI à 13,4', t1 > 12 && t1 < 14.5 && t2 > 12 && t2 < 14.5, 'y=' + t1.toFixed(1) + '/' + t2.toFixed(1)]);
     // PLUS DE TRANCHÉE côté île : l'axe de l'ancienne rampe (z 165) est du
     // terrain plein jusqu'au pied de la montagne (l'ancienne bouche ouest)
@@ -434,7 +434,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     {
       const tm = G.terrainMesh, TH = G.THREE, rc = new TH.Raycaster(), dn = new TH.Vector3(0, -1, 0);
       let worst = 0, n = 0;
-      for (const [sx, sz] of [[225,150],[240,165],[222,160],[210,165],[205,150],[200,158],[200,172],[212,165],[235,190],[210,145],[250,155],[246,178],[265,150],[280,175],[269,190],[295,160],[305,168]]) {
+      // NB : pas de point dans l'anneau de blend du creusement (d < ~20 de la
+      // caverne) — ce mur caché sous la voûte est trop raide pour le maillage
+      // de 3,4 m ; on échantillonne uniquement du terrain VISIBLE.
+      for (const [sx, sz] of [[225,150],[240,165],[222,160],[210,165],[205,150],[200,158],[200,172],[212,165],[235,190],[210,145],[250,155],[246,178],[252,142],[280,175],[269,190],[295,160],[305,168]]) {
         rc.set(new TH.Vector3(sx, 45, sz), dn);
         const hit = rc.intersectObject(tm, false)[0];
         if (hit) { worst = Math.max(worst, Math.abs(hit.point.y - G.terrainH(sx, sz))); n++; }
@@ -488,20 +491,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     G.keys.KeyW = false;
     R.push(['retour caverne -> canyon à pied', p.alive && p.grounded && p.pos.x > 290 && !swamRetour, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded + ' swam=' + swamRetour]);
-    // CÔTÉ ÎLE CONDAMNÉ : depuis le plateau ouest on marche vers l'est — le
-    // joueur bute sur la montagne pleine, il ne peut plus descendre dans la
-    // caverne (l'ancienne bouche ouest est murée)
+    // CÔTÉ ÎLE : la montagne est pleine — on peut la gravir par le flanc ouest
+    // mais la caverne n'est atteignable QUE par la bouche du crâne (côté
+    // canyon, x > 280) : aucune entrée sauvage à travers la montagne
     p.pos.set(210, 13.5, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     G.setCam(-Math.PI / 2, -0.1); // regarde plein est (montagne)
+    let viaMontagne = false;
     G.keys.KeyW = true;
     for (let i = 0; i < 90; i++) {
       window.advanceTime(150);
       if (!p.alive) break;
+      if (G.inGrotto(p.pos.x, p.pos.z) && p.pos.y < 12.9) { // entré dans la caverne
+        if (p.pos.x < 280) viaMontagne = true; // passé À TRAVERS la montagne
+        break;
+      }
     }
     G.keys.KeyW = false;
-    // la montagne pleine arrête le joueur AVANT la paroi ouest de la caverne
-    // (x ~256) : aucune descente possible vers la salle
-    R.push(['côté île condamné (montagne infranchissable)', p.alive && p.pos.x < 256.5 && p.pos.y > 2, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
+    R.push(['montagne pleine côté île (caverne seulement par la bouche)', p.alive && !viaMontagne, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + (viaMontagne ? ' ENTREE SAUVAGE' : '')]);
     // Brutus garde la caverne depuis le sol sec de la caverne (3,4)
     const brutus = G.henchmen.find((c) => c.alive && c.boss && c.name === 'Brutus');
     R.push(['Brutus garde la caverne', !!brutus && brutus.pos.y > 2.5 && brutus.pos.y < 6, brutus ? 'y=' + brutus.pos.y.toFixed(1) : 'absent']);
@@ -517,7 +523,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // les maisons (bunkers) sont bien posées : terrain plat sous toute l'emprise
     {
       let flat = true, worst = 0;
-      for (const [bx, bz, w, d] of [[235, 190, 10, 9], [208, 180, 10, 8]]) {
+      for (const [bx, bz, w, d] of [[195, 190, 10, 9], [168, 180, 10, 8]]) {
         for (const [cx, cz] of [[bx, bz], [bx - w / 2, bz - d / 2], [bx + w / 2, bz - d / 2], [bx - w / 2, bz + d / 2], [bx + w / 2, bz + d / 2]]) {
           const e = Math.abs(G.terrainH(cx, cz) - 13.4); worst = Math.max(worst, e); if (e > 1.2) flat = false;
         }

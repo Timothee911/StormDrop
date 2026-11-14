@@ -98,6 +98,21 @@ export function terrainH(x, z) {
       h += (p.h - h) * t;
     }
   }
+  // LA MONTAGNE DE LA GROTTE : un vrai pic (sommet visible ~38 m, l'analytique
+  // 52 étant creusé sous la caverne) au nord-ouest de l'île, au-dessus de la
+  // salle. Le profil en t^1.3 donne des flancs rocheux praticables (le joueur
+  // peut la gravir) qui dominent largement les massifs stylisés de la voûte —
+  // ceux-ci deviennent le noyau interne, entièrement enterré. Les creusements
+  // qui suivent (trou de la caverne puis canyon sec) s'appliquent APRÈS : la
+  // voûte reste enterrée et le canyon découpe le flanc est en gorge ouverte.
+  {
+    const d = Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ);
+    const R = 62, PEAK = 52;
+    if (d < R) {
+      const t = 1 - smooth(0, R, d);
+      h = Math.max(h, GROTTO.bowlH + (PEAK - GROTTO.bowlH) * Math.pow(t, 1.3));
+    }
+  }
   // La Grotte : le terrain s'abaisse légèrement sous l'empreinte de la caverne
   // pour ne jamais traverser son sol — ce creusement est CACHÉ sous la voûte
   // rocheuse (plus de cheminée : la montagne est pleine au-dessus de la salle).
@@ -140,11 +155,11 @@ export function inPOI(x, z, pad = 0) {
 }
 
 // La Grotte : caverne SÈCHE (sol 3,4, au-dessus du niveau de la mer) entièrement
-// cachée sous la montagne rocheuse. PLUS D'OUVERTURE CÔTÉ ÎLE : la rampe à ciel
-// ouvert et la cheminée sont supprimées, la voûte est pleine. La seule entrée
-// est la bouche du crâne géant (façade EST face à l'océan), au bout d'un canyon
-// sec qui descend vers la mer.
-//   bowlH          : hauteur du plateau du POI (13,4)
+// cachée sous une VRAIE MONTAGNE (pic de ~43 m, voir terrainH). PLUS D'OUVERTURE
+// CÔTÉ ÎLE : la rampe à ciel ouvert et la cheminée sont supprimées, la voûte est
+// pleine. La seule entrée est la bouche du crâne géant (façade EST face à
+// l'océan), au bout d'un canyon sec qui découpe la montagne en gorge.
+//   bowlH          : hauteur du plateau du POI (13,4), pied de la montagne
 //   holeX/Z, holeHX/HZ, holeY : creusement du terrain SOUS la caverne (empreinte
 //                              cachée sous la voûte rocheuse, jamais visible)
 //   cavernX/Z, cavernR, floor1 : caverne (sol 3,4 AU-DESSUS de la mer,

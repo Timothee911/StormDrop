@@ -14,6 +14,13 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 Le script `.github/scripts/qa-loot-trail.cjs` couvre ces trois ajouts : visibilité du ruban pendant le coup, vol des icônes et rattrapage du compteur, câblage des six variantes de sons.
 
+## La Grotte sous la montagne
+
+- **Vrai relief** : la caverne vit désormais sous une vraie montagne — le pic est intégré au terrain lui-même (`terrainH`, sommet visible ~38 m au-dessus du plateau à 13,4 m), flancs rocheux praticables jusqu'au sommet. Les massifs stylisés qui formaient l'ancienne « montagne » deviennent le noyau interne, entièrement enterré.
+- **Gorge du crâne** : le canyon sec découpe le flanc est de la montagne en gorge — les parois rocheuses montent de chaque côté du chemin d'accès, et la bouche du crâne géant reste l'unique entrée, au fond de la gorge face à l'océan.
+- **Cartes à jour** : la mini-carte et la grande carte sont régénérées depuis le terrain, la montagne y apparaît avec son relief ombré (gris roche sur les flancs).
+- **QA** : la section Grotte de `qa-c2s2.cjs` vérifie que la caverne reste inaccessible autrement que par la bouche du crâne (test de traversée du flanc ouest), que le sol rendu épouse le sol physique et que le canyon se remonte à pied sec.
+
 ## Agence, voitures et eau
 
 - **Sous-sol B1** : archives et local technique séparés, couloir vers le coffre, poteaux, conduites, éclairage, signalétique et garde-corps d'escalier. Les deux pièces, le scanner et la remontée au hall sont accessibles sans saut.
