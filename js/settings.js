@@ -7,7 +7,7 @@ export const ACTIONS = [
   ['edit', 'Éditer une pièce', 'KeyG'], ['matCycle', 'Changer de matériau', 'KeyT'], ['shoulder', 'Changer d\u2019épaule', 'KeyH'],
   ['emote', 'Emote', 'KeyB'], ['map', 'Grande carte', 'KeyM'], ['marker', 'Placer un marqueur', 'KeyN'],
 ];
-export const DEFAULTS = { sens: 1, adsSens: 1, fov: 80, volume: 0.8, music: 0.5, quality: 'haute', viewDist: 1, outline: 1, outlineW: 1, binds: Object.fromEntries(ACTIONS.map((a) => [a[0], a[2]])) };
+export const DEFAULTS = { sens: 1, adsSens: 1, fov: 80, volume: 0.8, music: 0.5, quality: 'haute', viewDist: 1, outline: 1, outlineW: 1, fx: 1, binds: Object.fromEntries(ACTIONS.map((a) => [a[0], a[2]])) };
 const KEY = 'stormdrop-settings-v2';
 export function loadSettings() {
   let s = {};
@@ -36,6 +36,7 @@ export function settingsForm(root, s, onChange) {
     <label>Musique <b data-v="music"></b><input data-k="music" type="range" min="0" max="1" step="0.05"></label>
     <label>Qualité graphique <select data-k="quality">${q.map((x) => `<option value="${x}">${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}</select></label>
     <label>Contours cartoon <select data-k="outline"><option value="1">Activés</option><option value="0">Désactivés</option></select></label>
+    <label>Effets visuels (halo, brume, couleurs) <select data-k="fx"><option value="1">Activés</option><option value="0">Désactivés</option></select></label>
     <label>Épaisseur des contours <b data-v="outlineW"></b><input data-k="outlineW" type="range" min="0.5" max="2.5" step="0.1"></label>
     <label>Distance d’affichage <b data-v="viewDist"></b><input data-k="viewDist" type="range" min="0.5" max="1.5" step="0.05"></label>
   </div>
@@ -44,7 +45,7 @@ export function settingsForm(root, s, onChange) {
   root.querySelectorAll('[data-k]').forEach((el) => {
     const k = el.dataset.k; el.value = s[k];
     const lab = root.querySelector(`[data-v="${k}"]`); if (lab) lab.textContent = fmt(k, s[k]);
-    el.oninput = el.onchange = () => { s[k] = el.tagName === 'SELECT' ? (k === 'outline' ? +el.value : el.value) : +el.value; if (lab) lab.textContent = fmt(k, s[k]); saveSettings(s); onChange && onChange(s, k); };
+    el.oninput = el.onchange = () => { s[k] = el.tagName === 'SELECT' ? (k === 'outline' || k === 'fx' ? +el.value : el.value) : +el.value; if (lab) lab.textContent = fmt(k, s[k]); saveSettings(s); onChange && onChange(s, k); };
   });
   root.querySelectorAll('.st-tabs button').forEach((b) => b.onclick = () => {
     root.querySelectorAll('.st-tabs button').forEach((x) => x.classList.toggle('on', x === b));
