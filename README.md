@@ -6,6 +6,15 @@ Battle royale web complet en Three.js, jouable dans le navigateur et installable
 
 Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Requin, Le Yacht, La Grotte, La Plateforme) patrouillés par des Ombres et cinq boss mythiques (Midas, Skye, Meowscles, Brutus, TNTina). Chaque boss et chaque Ombre possède désormais son circuit propre : 22 rondes spatialement distinctes, avec des secteurs et des vitesses différents. Les boss lâchent une arme mythique et une carte d'accès qui ouvre le coffre-fort de leur POI (ligne bleue guide sur la carte). Les cabines téléphoniques rouges donnent un déguisement d'Ombre ; tirer ou être touché le casse.
 
+## Graphismes en jeu
+
+- **Perspective aérienne** : le lointain (montagnes, îles, côtes) se fond progressivement dans la couleur de l'horizon du moment (bleu le jour, orangé au coucher, bleu nuit la nuit), ce qui donne de la profondeur sans cacher le gameplay proche. Désactivée en plongée.
+- **Halo lumineux** (qualité haute) : le soleil, la lune et les reflets du soleil sur l'eau débordent en douceur.
+- **Étalonnage** : couleurs un peu plus vives, hautes lumières chaudes, ombres légèrement froides et vignette douce.
+- **Ciel** : voile de cirrus en altitude qui dérive lentement, aux bords dorés près du soleil et au crépuscule, et lueur chaude au ras de l'horizon au lever et au coucher.
+- **Ombres de nuages** qui glissent sur l'île de jour.
+- Nouveau réglage **Paramètres > Général > Effets visuels** pour tout désactiver. En qualité basse, ces effets restent coupés.
+
 ## Feel de la pioche
 
 - **Sons d'impact différenciés** : l'audio reste 100 % synthétisé, mais chaque matériau (bois, pierre, métal) a sa signature — pitch, filtration, résonance — et les crits montent le tout d'un cran. Chaque coup est légèrement détuné au hasard pour ne jamais sonner deux fois pareil.

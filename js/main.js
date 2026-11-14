@@ -83,9 +83,12 @@ const MR = Math.random;
 // =====================================================================
 const canvas = document.getElementById('game');
 // the outline pass resolves its own anti-aliased target, so canvas MSAA would be wasted work
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !SET.outline, powerPreference: 'high-performance' });
 const LOWQ = /lowq/.test(location.search) || SET.quality === 'basse';
 const HIGHQ = SET.quality === 'haute' && !LOWQ;
+// hors qualité basse, l'image passe toujours par le post-traitement (contours et effets visuels),
+// qui résout son propre anticrénelage : le MSAA du canvas ne sert alors qu'en basse qualité sans contours
+const CANVAS_AA = LOWQ && !SET.outline;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: CANVAS_AA, powerPreference: 'high-performance' });
 function applyPixelRatio() { renderer.setPixelRatio(LOWQ ? Math.min(window.devicePixelRatio, 0.75) : HIGHQ ? Math.min(window.devicePixelRatio, 2.5) : Math.min(window.devicePixelRatio, 1.6)); }
 applyPixelRatio();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -101,7 +104,14 @@ scene.fog = new THREE.Fog(0x16608e, 1e8, 2e8); // brouillard « invisible » au-
 const camera = new THREE.PerspectiveCamera(SET.fov, window.innerWidth / window.innerHeight, 0.1, 30000); // portée très longue : la mer et les décors lointains vont jusqu'à l'horizon
 // cartoon outlines (post-process, one extra full-screen pass)
 function syncLin() { const l = outline.linear ? 1 : 0; if (skyMat) skyMat.uniforms.lin.value = l; if (storm.mesh) storm.mesh.material.uniforms.lin.value = l; }
-const outline = createOutline(renderer, { enabled: !!SET.outline, width: SET.outlineW || 1, fadeNear: 70 * SET.viewDist, fadeFar: 260 * SET.viewDist, samples: LOWQ ? 0 : HIGHQ ? 4 : 2, canvasAA: !SET.outline });
+const outline = createOutline(renderer, { enabled: !!SET.outline, width: SET.outlineW || 1, fadeNear: 70 * SET.viewDist, fadeFar: 260 * SET.viewDist, samples: LOWQ ? 0 : HIGHQ ? 4 : 2, canvasAA: CANVAS_AA, fx: SET.fx !== 0 && !LOWQ, bloom: HIGHQ ? 1 : 0 });
+// perspective aérienne : le lointain se fond dans la couleur d'horizon du moment (désactivée en plongée)
+function updateHaze() {
+  const U = outline.uniforms;
+  U.hazeCol.value.copy(FOG_COL);
+  U.hazeMax.value = camUnderwater ? 0 : 0.42;
+  U.hazeNear.value = 140 * SET.viewDist; U.hazeFar.value = 950 * SET.viewDist;
+}
 scene.add(camera);
 
 window.addEventListener('resize', () => {
@@ -115,15 +125,28 @@ let skyMat = null, sunDisc = null, stars = null;
   const g = new THREE.SphereGeometry(1200, 32, 16);
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(0x3d8ae8) }, mid: { value: new THREE.Color(0xa6dcff) }, bot: { value: FOG_COL }, lin: { value: 0 }, sunDir: { value: new THREE.Vector3(0.5, 0.7, 0.35).normalize() }, glow: { value: 1 } },
+    uniforms: { top: { value: new THREE.Color(0x3d8ae8) }, mid: { value: new THREE.Color(0xa6dcff) }, bot: { value: FOG_COL }, lin: { value: 0 }, sunDir: { value: new THREE.Vector3(0.5, 0.7, 0.35).normalize() }, glow: { value: 1 }, t: { value: 0 } },
     vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-    fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bot; uniform float lin; uniform vec3 sunDir; uniform float glow; varying vec3 vP;
+    fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bot; uniform float lin; uniform vec3 sunDir; uniform float glow; uniform float t; varying vec3 vP;
+      float sh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float sn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(sh(i), sh(i + vec2(1.0, 0.0)), f.x), mix(sh(i + vec2(0.0, 1.0)), sh(i + vec2(1.0, 1.0)), f.x), f.y); }
       void main(){
         float h = vP.y; vec3 u = mix(mid, top, smoothstep(0.05, 0.75, h));
         // halo around the sun, warmer when it is low
         float sd = max(dot(normalize(vP), sunDir), 0.0);
         vec3 gc = mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.95, 0.82), smoothstep(0.05, 0.5, sunDir.y));
         u += gc * (pow(sd, 6.0) * 0.28 + pow(sd, 48.0) * 0.45) * glow;
+        // lueur chaude au ras de l'horizon quand le soleil est bas, plus forte de son côté
+        float low = 1.0 - smoothstep(0.0, 0.38, sunDir.y);
+        float side = pow(max(dot(normalize(vec3(vP.x, 0.0, vP.z) + 1e-4), normalize(vec3(sunDir.x, 0.0, sunDir.z) + 1e-4)), 0.0), 3.0);
+        u += vec3(1.0, 0.52, 0.28) * exp(-max(h, 0.0) * 8.0) * low * (0.18 + 0.55 * side) * glow;
+        // voile de cirrus en altitude : dérive lente, bords dorés près du soleil et au crépuscule
+        vec2 cp = vP.xz / (vP.y + 0.2) * 1.4 + vec2(t * 0.004, t * 0.0026);
+        float cn = sn(cp) * 0.55 + sn(cp * 2.3 + 7.0) * 0.3 + sn(cp * 5.3 + 3.0) * 0.15;
+        float cov = smoothstep(0.5, 0.82, cn) * smoothstep(0.04, 0.3, h) * (1.0 - smoothstep(0.7, 1.0, h)) * mix(0.35, 1.0, clamp(glow, 0.0, 1.0));
+        vec3 ccol = mix(u * 0.75 + vec3(0.32), gc * 1.05, clamp(pow(sd, 3.0) * 0.6 + low * 0.45, 0.0, 1.0)) * mix(0.42, 1.0, clamp(glow, 0.0, 1.0));
+        u = mix(u, ccol, cov * 0.55);
         if (lin > 0.5) u = pow(u, vec3(2.2));
         vec3 c = h > 0.0 ? u : bot;
         c = mix(bot, c, smoothstep(-0.02, 0.3, h)); // wide haze band melting into the fog
@@ -266,6 +289,9 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.18, 1.02, 0.62), dry * 0.55);
         vec3 fn = normalize(cross(dFdx(vWP), dFdy(vWP)));
         diffuseColor.rgb *= mix(0.84, 1.0, smoothstep(0.62, 0.92, abs(fn.y)));
+        // ombres des nuages qui glissent lentement sur l'île (de jour seulement)
+        float cs = tn(vWP.xz * 0.004 + vec2(uT * 0.0055, uT * 0.0035)) * 0.65 + tn(vWP.xz * 0.011 - vec2(uT * 0.004, -uT * 0.006) + 9.0) * 0.35;
+        diffuseColor.rgb *= 1.0 - smoothstep(0.56, 0.72, cs) * 0.2 * (1.0 - uNight);
         float wl = -0.08 + 0.12 * sin(uT * 1.3 + vWP.x * 0.07 + vWP.z * 0.05);
         float foam = smoothstep(0.32, 0.04, abs(vWP.y - wl)) * (0.75 + 0.25 * tn(vWP.xz * 1.3 + uT * 0.6));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.97, 0.99, 1.0), foam * 0.8);
@@ -3420,6 +3446,7 @@ function openGameSettings() {
     if (k === 'binds') refreshBindLabels();
     if (k === 'outline') outline.enabled = !!st.outline;
     if (k === 'outlineW') outline.width = st.outlineW;
+    if (k === 'fx') outline.fx = !!st.fx && !LOWQ;
     if (k === 'viewDist') { outline.uniforms.fadeNear.value = 70 * st.viewDist; outline.uniforms.fadeFar.value = 260 * st.viewDist; }
     if (k === 'quality') $('gsNote').textContent = 'La qualité graphique s\'applique à la prochaine partie.';
   });
@@ -8997,7 +9024,7 @@ function updateDayNight(dt) {
   const sx = Math.cos(ang) * 110, sy = Math.max(35, Math.abs(el) * 130), sz = 50;
   SUN_OFF.set(sx, sy, sz);
   if (skyMat) { skyMat.uniforms.sunDir.value.set(Math.cos(ang) * 800, Math.abs(el) * 800, el > 0 ? 350 : -350).normalize(); skyMat.uniforms.glow.value = el > 0 ? 1 : 0.2; }
-  if (sunDisc) { sunDisc.position.set(Math.cos(ang) * 800, Math.max(-100, el * 800), 350); sunDisc.lookAt(0, 0, 0); sunDisc.material.color.set(el > 0 ? 0xfff6c8 : 0xdfe8ff); if (el <= 0) sunDisc.position.set(-Math.cos(ang) * 800, -el * 800, -350); }
+  if (sunDisc) { sunDisc.position.set(Math.cos(ang) * 800, Math.max(-100, el * 800), 350); sunDisc.lookAt(0, 0, 0); sunDisc.material.color.set(el > 0 ? 0xfff6c8 : 0xdfe8ff).multiplyScalar(el > 0 ? 6 : 1.8); /* > 1 : le soleil (et la lune) déclenchent le halo lumineux */ if (el <= 0) sunDisc.position.set(-Math.cos(ang) * 800, -el * 800, -350); }
   renderer.toneMappingExposure = 1.1 + night * 0.25;
   const lampOn = night > 0.4;
   for (const c of chests) if (!c.opened && lampOn && c.light.intensity) c.light.intensity *= 1.4;
@@ -9049,7 +9076,7 @@ function step(dt) {
     for (const c of chars) if (c.isPlayer) updateChar(c, dt);
     return;
   }
-  waterT.value += dt; windT.value += dt;
+  waterT.value += dt; windT.value += dt; if (skyMat) skyMat.uniforms.t.value = waterT.value;
   updateBus(dt);
   updateStorm(dt);
   if (player.mode === 'bus' && bus.active) { player.pos.copy(bus.pos); }
@@ -9107,7 +9134,7 @@ function frame() {
     const lp = player.alive ? player.pos : camera.position;
     sunLight.position.copy(lp).add(SUN_OFF); sunLight.target.position.copy(lp);
   } else { sunLight.position.copy(SUN_OFF).multiplyScalar(1.5); sunLight.target.position.set(0, 0, 0); }
-  syncLin(); outline.render(scene, camera);
+  syncLin(); updateHaze(); outline.render(scene, camera);
   updateConfetti(dt);
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 0.5) { $('perf').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }

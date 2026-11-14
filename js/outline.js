@@ -9,6 +9,7 @@ precision highp float;
 uniform sampler2D tColor; uniform sampler2D tDepth;
 uniform vec2 texel; uniform float cNear; uniform float cFar; uniform float thick;
 uniform vec3 lineColor; uniform float strength; uniform float fadeNear; uniform float fadeFar; uniform float useAlpha;
+uniform float fx; uniform float bloom; uniform vec3 hazeCol; uniform float hazeNear; uniform float hazeFar; uniform float hazeMax;
 varying vec2 vUv;
 float viewZ(float d) { float z = d * 2.0 - 1.0; return 2.0 * cNear * cFar / (cFar + cNear - z * (cFar - cNear)); }
 void main() {
@@ -29,8 +30,36 @@ void main() {
   e *= 1.0 - smoothstep(fadeNear, fadeFar, z0);
   e *= step(z0, cFar * 0.98);
   e *= strength;
-  // light grade: a touch more saturation for the sunny cartoon look
-  vec3 g = mix(vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), c.rgb, 1.05);
+  vec3 g = c.rgb;
+  if (fx > 0.5) {
+    // halo lumineux (bloom) : seules les zones très brillantes (soleil, reflets sur l'eau,
+    // éclairs, flammes) débordent en douceur sur leur entourage
+    if (bloom > 0.0) {
+      vec3 b = vec3(0.0);
+      vec2 r1 = texel * 9.0 * max(1.0, thick), r2 = r1 * 2.3;
+      for (int i = 0; i < 6; i++) {
+        float a = float(i) * 1.0472 + 0.35;
+        vec2 dir = vec2(cos(a), sin(a));
+        vec3 s1 = texture2D(tColor, vUv + dir * r1).rgb, s2 = texture2D(tColor, vUv + dir * r2).rgb;
+        b += s1 * smoothstep(2.4, 5.0, dot(s1, vec3(0.2126, 0.7152, 0.0722)));
+        b += s2 * smoothstep(2.4, 5.0, dot(s2, vec3(0.2126, 0.7152, 0.0722))) * 0.6;
+      }
+      g += b * (bloom / 9.6);
+    }
+    // perspective aérienne : le lointain se fond dans la couleur de l'horizon (le ciel n'est pas touché)
+    float isSky = step(cFar * 0.98, z0);
+    g = mix(g, hazeCol, smoothstep(hazeNear, hazeFar, z0) * hazeMax * (1.0 - isSky));
+    // étalonnage : couleurs plus vives, hautes lumières chaudes, ombres légèrement froides
+    float L = dot(g, vec3(0.2126, 0.7152, 0.0722));
+    g = mix(vec3(L), g, 1.14);
+    g *= mix(vec3(0.94, 0.98, 1.07), vec3(1.05, 1.0, 0.93), smoothstep(0.04, 0.7, L));
+    // vignette douce
+    vec2 vd = vUv - 0.5;
+    g *= 1.0 - dot(vd, vd) * 0.42;
+  } else {
+    // light grade: a touch more saturation for the sunny cartoon look
+    g = mix(vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), c.rgb, 1.05);
+  }
   vec3 col = mix(max(g, 0.0), lineColor, e);
   float a = useAlpha > 0.5 ? max(c.a, e) : 1.0;
   gl_FragColor = vec4(col, a);
@@ -50,6 +79,8 @@ export function createOutline(renderer, opts = {}) {
       cNear: { value: 0.1 }, cFar: { value: 1000 }, thick: { value: 1 },
       lineColor: { value: new THREE.Color(opts.color ?? 0x0d0a24) }, strength: { value: opts.strength ?? 0.9 },
       fadeNear: { value: opts.fadeNear ?? 60 }, fadeFar: { value: opts.fadeFar ?? 220 }, useAlpha: { value: opts.alpha ? 1 : 0 },
+      fx: { value: 0 }, bloom: { value: opts.bloom ?? 0 }, hazeCol: { value: new THREE.Color(0xbfe6ff) },
+      hazeNear: { value: 120 }, hazeFar: { value: 900 }, hazeMax: { value: 0 },
     },
   });
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); quad.frustumCulled = false;
@@ -59,6 +90,7 @@ export function createOutline(renderer, opts = {}) {
   const strength = opts.strength ?? 0.9;
   const O = {
     enabled: opts.enabled ?? true, width: opts.width ?? 1,
+    fx: !!opts.fx, // effets visuels : halo, perspective aérienne, étalonnage, vignette
     uniforms: mat.uniforms,
     // without canvas MSAA the scene keeps going through the anti-aliased target, lines just switch off
     get linear() { return O.enabled || opts.canvasAA === false; },
@@ -72,6 +104,7 @@ export function createOutline(renderer, opts = {}) {
       // keep lines about the same on-screen thickness on high-DPI screens
       U.thick.value = Math.max(0.5, O.width * renderer.getPixelRatio());
       U.strength.value = O.enabled ? strength : 0;
+      U.fx.value = O.fx ? 1 : 0;
       renderer.setRenderTarget(rt); renderer.render(scene, camera);
       renderer.setRenderTarget(null); renderer.render(qScene, qCam);
     },
