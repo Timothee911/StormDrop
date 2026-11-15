@@ -98,8 +98,8 @@ export function terrainH(x, z) {
       h += (p.h - h) * t;
     }
   }
-  // LA MONTAGNE DE LA GROTTE : un vrai pic (sommet visible ~38 m, l'analytique
-  // 52 étant creusé sous la caverne) au nord-ouest de l'île, au-dessus de la
+  // LA MONTAGNE DE LA GROTTE : un vrai pic (crête visible ~32 m, l'analytique
+  // 44 étant creusé en cratère au-dessus de la caverne) au-dessus de la
   // salle. Le profil en t^1.3 donne des flancs rocheux praticables (le joueur
   // peut la gravir) qui dominent largement les massifs stylisés de la voûte —
   // ceux-ci deviennent le noyau interne, entièrement enterré. Les creusements
@@ -107,7 +107,7 @@ export function terrainH(x, z) {
   // voûte reste enterrée et le canyon découpe le flanc est en gorge ouverte.
   {
     const d = Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ);
-    const R = 62, PEAK = 52;
+    const R = 62, PEAK = 44;
     if (d < R) {
       const t = 1 - smooth(0, R, d);
       h = Math.max(h, GROTTO.bowlH + (PEAK - GROTTO.bowlH) * Math.pow(t, 1.3));
@@ -124,6 +124,16 @@ export function terrainH(x, z) {
       const t = smooth(0, GROTTO.holeBlend, d);
       h = GROTTO.holeY + (h - GROTTO.holeY) * t * t * t;
     }
+  }
+  // LAGON INTÉRIEUR de la Grotte (coin nord-est de la caverne) : le terrain
+  // plonge sous le niveau de la mer pour que l'eau apparaisse dans le bassin.
+  // Le creusement déborde sous les dalles rocheuses (cachées) pour que le
+  // maillage rendu reste bien au fond dans tout le bassin.
+  {
+    const dx = Math.max(0, GROTTO.digX0 - x, x - GROTTO.digX1);
+    const dz = Math.max(0, GROTTO.digZ0 - z, z - GROTTO.digZ1);
+    const d = Math.hypot(dx, dz);
+    if (d < 1.5) h = Math.min(h, GROTTO.lagFloor + (h - GROTTO.lagFloor) * smooth(0, 1.5, d));
   }
   // Canyon sec de la Grotte : palier plat à floor1 devant la façade du crâne
   // puis pente continue qui descend vers la mer — on entre à pied sec, sans
@@ -155,10 +165,10 @@ export function inPOI(x, z, pad = 0) {
 }
 
 // La Grotte : caverne SÈCHE (sol 3,4, au-dessus du niveau de la mer) entièrement
-// cachée sous une VRAIE MONTAGNE (pic de ~43 m, voir terrainH). PLUS D'OUVERTURE
-// CÔTÉ ÎLE : la rampe à ciel ouvert et la cheminée sont supprimées, la voûte est
-// pleine. La seule entrée est la bouche du crâne géant (façade EST face à
-// l'océan), au bout d'un canyon sec qui découpe la montagne en gorge.
+// cachée sous une VRAIE MONTAGNE (voir terrainH). Deux entrées, comme la
+// Grotte d'origine : le grand PUITS au fond du cratère sommital (on s'y jette
+// depuis le sommet) et la bouche du crâne géant (façade EST face à l'océan), au
+// bout d'un canyon sec qui découpe la montagne en gorge.
 //   bowlH          : hauteur du plateau du POI (13,4), pied de la montagne
 //   holeX/Z, holeHX/HZ, holeY : creusement du terrain SOUS la caverne (empreinte
 //                              cachée sous la voûte rocheuse, jamais visible)
@@ -174,6 +184,11 @@ export const GROTTO = {
   cavernX: 269, cavernZ: 165, cavernR: 13.5, floor1: 3.4,
   mouthHalfZ: 5.5,
   coveX0: 280, coveX1: 303, coveFlatX1: 287, coveW0: 9, coveW1: 16, coveBlend: 8, coveSeaFloor: -3.5,
+  // PUITS : grande ouverture au sommet de la montagne, on tombe dans la caverne
+  shaftX0: 266, shaftX1: 272, shaftZ0: 162, shaftZ1: 168,
+  // LAGON intérieur : bassin visible (lag*) et creusement du terrain (dig*)
+  lagX0: 272, lagX1: 280.3, lagZ0: 152.2, lagZ1: 158.5, lagFloor: -3.5,
+  digX0: 271, digX1: 281.5, digZ0: 150.5, digZ1: 160,
 };
 // Sous-sol de l'Agence (bâtiment centré en 0,0) : empreinte de la cave et
 // hauteur du plancher de la cave. Le terrain y est abaissé (AGENCY_BASE.floor)
@@ -203,8 +218,9 @@ export function grottoCamCeil(x, z) {
   // bouche du crâne : le mur frontal (y 8,8) coiffe le passage, la caméra
   // reste sous le visage (x 281,3-284,7, côté océan)
   if (x > GROTTO.coveX0 + 1.3 && x < GROTTO.coveX0 + 4.7 && Math.abs(z - GROTTO.cz) < GROTTO.mouthHalfZ + 1) return 7.9;
-  // caverne : massifs de voûte de 12,9 à 17,9 — la voûte est PLEINE (plus de
-  // cheminée), la caméra reste sous les massifs
+  // puits : ouvert jusqu'au ciel, la caméra suit librement
+  if (x > GROTTO.shaftX0 + 0.6 && x < GROTTO.shaftX1 - 0.6 && z > GROTTO.shaftZ0 + 0.6 && z < GROTTO.shaftZ1 - 0.6) return null;
+  // caverne : massifs de voûte de 12,9 à 17,9, la caméra reste sous les massifs
   if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < GROTTO.cavernR + 2) return 12;
   return null;
 }

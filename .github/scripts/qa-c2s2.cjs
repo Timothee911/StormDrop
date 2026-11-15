@@ -415,10 +415,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   check('grappin tiré et propulse le joueur', grap.fired === true && grap.vel > 8, JSON.stringify(grap));
 
-  // --- 9bis. La Grotte : caverne SÈCHE entièrement cachée sous la montagne —
-  // plus d'ouverture côté île (tranchée et cheminée condamnées), la seule
-  // entrée est la bouche du crâne au fond d'un canyon sec qui descend vers la
-  // mer. Le sol de la caverne est surélevé (3,4) : on n'y nage jamais ---
+  // --- 9bis. La Grotte : base de l'Ombre cachée sous une montagne rocheuse.
+  // Entrées : la bouche du crâne (à pied sec, depuis le canyon côté mer) et le
+  // grand puits du sommet. Sol de la salle à 3,4 ; seul le lagon intérieur
+  // (coin nord-est) est en eau ---
   const cave = await frame.evaluate(() => {
     const G = window.__game, p = G.player, R = [];
     G.storm.dmg = 0; // test ciblé : la tempête ne doit pas tuer le joueur ici
@@ -446,21 +446,63 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     // les hommes de main ne perturbent pas la marche de test (Brutus reste en place)
     for (const c of G.chars) if (c.alive && c.hench && !c.boss) G.damage(c, 999999, null, false, 'test');
-    // LA GROTTE EST CACHÉE : la voûte est PLEINE — un raycast vers le ciel
-    // depuis 5 points du sol de la caverne doit toucher la roche (jamais le
-    // ciel), et depuis le sommet de l'ancienne cheminée le raycast vers le bas
-    // s'arrête sur la montagne (plus de trou béant)
+    // VOÛTE ET PUITS : la caverne reste couverte par la montagne partout, SAUF
+    // sous le grand puits central (x 266-272, z 162-168) qui s'ouvre jusqu'au
+    // ciel — comme la vraie base, on s'y jette depuis le sommet
     {
       const TH = G.THREE, rc = new TH.Raycaster(), up = new TH.Vector3(0, 1, 0);
       let covered = 0;
-      for (const [sx, sz] of [[269,165],[263,160],[274,170],[262,168],[275,158]]) {
+      for (const [sx, sz] of [[258,165],[263,160],[274,170],[262,168],[275,158]]) {
         rc.set(new TH.Vector3(sx, 3.9, sz), up); rc.far = 14;
         if (rc.intersectObject(G.grottoRockMesh, false)[0]) covered++;
       }
-      R.push(['voûte pleine au-dessus de la caverne (5 rayons)', covered === 5, covered + '/5 couverts']);
+      R.push(['voûte rocheuse au-dessus de la caverne (5 rayons)', covered === 5, covered + '/5 couverts']);
+      rc.set(new TH.Vector3(269, 3.9, 165), up); rc.far = 60;
+      const sky = rc.intersectObject(G.grottoRockMesh, false)[0];
+      R.push(['puits ouvert jusqu\'au ciel', !sky, sky ? 'roche à ' + sky.distance.toFixed(1) + ' m' : 'ciel']);
       rc.set(new TH.Vector3(269, 32, 165), new TH.Vector3(0, -1, 0)); rc.far = 40;
-      const top = rc.intersectObject(G.grottoRockMesh, false)[0];
-      R.push(['ancienne cheminée fermée (montagne pleine)', !!top && top.distance < 15, top ? 'roche à ' + top.distance.toFixed(1) + ' m sous le sommet' : 'aucune roche']);
+      const fl = rc.intersectObject(G.grottoRockMesh, false)[0];
+      R.push(['puits : du sommet au sol de la caverne', !!fl && Math.abs(fl.point.y - 3.4) < 0.3, fl ? 'sol à y=' + fl.point.y.toFixed(1) : 'aucun sol']);
+    }
+    // SAUT DANS LE PUITS : depuis le cratère sommital on tombe sur la cible
+    // d'atterrissage de la caverne, sans dégâts de chute
+    {
+      p.pos.set(269, 24, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = false;
+      const hp0 = p.hp + p.shield;
+      window.advanceTime(3000);
+      R.push(['saut dans le puits -> caverne sans dégâts', p.alive && p.grounded && Math.abs(p.pos.y - 3.4) < 0.5 && p.hp + p.shield >= hp0, 'y=' + p.pos.y.toFixed(1) + ' pv ' + hp0 + '->' + (p.hp + p.shield)]);
+    }
+    // LAGON intérieur : on y nage, et l'escalier immergé permet d'en ressortir
+    {
+      p.pos.set(272.5, -0.9, 155); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = false;
+      window.advanceTime(300);
+      const swims = p.inWater;
+      G.setCam(Math.PI, 0); // plein sud : vers la première marche
+      G.keys.KeyW = true; window.advanceTime(1800); G.keys.KeyW = false;
+      G.setCam(-Math.PI / 2, 0); // plein est : on gravit l'escalier
+      G.keys.KeyW = true;
+      for (let i = 0; i < 40 && p.pos.y < 3.2; i++) window.advanceTime(150);
+      window.advanceTime(300);
+      G.keys.KeyW = false;
+      R.push(['lagon : nage puis sortie par l\'escalier', swims && p.alive && !p.inWater && p.pos.y > 3.2, 'nage=' + swims + ' x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
+      // pont supérieur de la base de l'Ombre praticable (7,55)
+      p.pos.set(266, 7.8, 156.5); p.vel.set(0, 0, 0); p.grounded = false;
+      window.advanceTime(400);
+      R.push(['base de l\'Ombre : pont supérieur praticable', p.grounded && Math.abs(p.pos.y - 7.55) < 0.3, 'y=' + p.pos.y.toFixed(1)]);
+      // escalier de la base : du sol de la caverne au pont supérieur
+      p.pos.set(257.5, 3.6, 169.2); p.vel.set(0, 0, 0); p.grounded = true;
+      G.setCam(0, -0.1); // plein nord
+      G.keys.KeyW = true;
+      for (let i = 0; i < 60 && !(p.pos.z < 159.5 && p.pos.y > 7.3); i++) window.advanceTime(150);
+      G.keys.KeyW = false;
+      R.push(['escalier de la base -> pont supérieur', p.alive && p.grounded && p.pos.y > 7.3, 'z=' + p.pos.z.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
+      // passerelle qui traverse la caverne : du pont au tablier sud
+      p.pos.set(263, 7.8, 158.5); p.vel.set(0, 0, 0); p.grounded = true;
+      G.setCam(Math.PI, -0.1);
+      G.keys.KeyW = true;
+      for (let i = 0; i < 60 && p.pos.z < 176.3; i++) window.advanceTime(150);
+      G.keys.KeyW = false;
+      R.push(['passerelle : pont de la base -> tablier sud', p.alive && p.pos.z > 175.8 && p.pos.y > 6.9, 'z=' + p.pos.z.toFixed(1) + ' y=' + p.pos.y.toFixed(1)]);
     }
     // ENTRÉE UNIQUE À PIED SEC : depuis le canyon (bas de la pente, côté mer)
     // on remonte jusqu'à la caverne EN PASSANT DANS LA BOUCHE DU CRÂNE — le
@@ -496,18 +538,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // canyon, x > 280) : aucune entrée sauvage à travers la montagne
     p.pos.set(210, 13.5, 165); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     G.setCam(-Math.PI / 2, -0.1); // regarde plein est (montagne)
-    let viaMontagne = false;
+    let viaMontagne = false, prevIn = false;
     G.keys.KeyW = true;
     for (let i = 0; i < 90; i++) {
       window.advanceTime(150);
       if (!p.alive) break;
-      if (G.inGrotto(p.pos.x, p.pos.z) && p.pos.y < 12.9) { // entré dans la caverne
-        if (p.pos.x < 280) viaMontagne = true; // passé À TRAVERS la montagne
+      const inG = G.inGrotto(p.pos.x, p.pos.z);
+      if (inG && p.pos.y < 12.9) { // entré dans la caverne
+        // entrée légitime : par le haut (puits, on était déjà au-dessus de
+        // l'empreinte) ou par la bouche du crâne ; sinon à travers la roche
+        if (!prevIn && p.pos.x < 280) viaMontagne = true;
         break;
       }
+      prevIn = inG;
     }
     G.keys.KeyW = false;
-    R.push(['montagne pleine côté île (caverne seulement par la bouche)', p.alive && !viaMontagne, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + (viaMontagne ? ' ENTREE SAUVAGE' : '')]);
+    R.push(['montagne pleine côté île (caverne par la bouche ou le puits)', p.alive && !viaMontagne, 'x=' + p.pos.x.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + (viaMontagne ? ' ENTREE SAUVAGE' : '')]);
     // Brutus garde la caverne depuis le sol sec de la caverne (3,4)
     const brutus = G.henchmen.find((c) => c.alive && c.boss && c.name === 'Brutus');
     R.push(['Brutus garde la caverne', !!brutus && brutus.pos.y > 2.5 && brutus.pos.y < 6, brutus ? 'y=' + brutus.pos.y.toFixed(1) : 'absent']);

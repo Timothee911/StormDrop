@@ -22,12 +22,23 @@ Le script `.github/scripts/qa-loot-trail.cjs` couvre ces trois ajouts : visibili
 - **Pings** : la touche marqueur (<kbd>N</kbd>, renommée « Ping / marqueur ») signale d'abord un ennemi près du réticule (étiquette rouge qui le suit 8 s, les coéquipiers IA l'engagent), puis une arme, un coffre ou un largage (étiquette bleue, ils vont la chercher), sinon elle pose le marqueur de lieu jaune, que les coéquipiers rejoignent. Les pings apparaissent aussi sur la mini-carte.
 - **QA** : `.github/scripts/qa-revive-ping.cjs` (15 contrôles) couvre la mise à terre, le saignement, la réanimation par l'IA et par le joueur, l'élimination en cascade, le siphon et les trois sortes de pings.
 
-## La Grotte sous la montagne
+## La Grotte : base de l'Ombre sous la montagne
 
-- **Vrai relief** : la caverne vit désormais sous une vraie montagne — le pic est intégré au terrain lui-même (`terrainH`, sommet visible ~38 m au-dessus du plateau à 13,4 m), flancs rocheux praticables jusqu'au sommet. Les massifs stylisés qui formaient l'ancienne « montagne » deviennent le noyau interne, entièrement enterré.
-- **Gorge du crâne** : le canyon sec découpe le flanc est de la montagne en gorge — les parois rocheuses montent de chaque côté du chemin d'accès, et la bouche du crâne géant reste l'unique entrée, au fond de la gorge face à l'océan.
-- **Cartes à jour** : la mini-carte et la grande carte sont régénérées depuis le terrain, la montagne y apparaît avec son relief ombré (gris roche sur les flancs).
-- **QA** : la section Grotte de `qa-c2s2.cjs` vérifie que la caverne reste inaccessible autrement que par la bouche du crâne (test de traversée du flanc ouest), que le sol rendu épouse le sol physique et que le canyon se remonte à pied sec.
+Refaite pour se rapprocher de la Grotte du Chapitre 2 Saison 2 :
+
+- **Montagne rocheuse** : roche brun-gris nue avec de la mousse sur les replats (plus de neige ni de sapins), sommet en cratère.
+- **Le puits** : une grande ouverture au fond du cratère, bordée d'un cadre noir à bandes jaunes et de feux rouges, plonge droit dans la caverne. On s'y jette depuis le sommet et on atterrit sur la cible rouge sans dégâts de chute.
+- **Deux entrées** : le puits par le haut, et la bouche du crâne géant à pied sec, au bout du canyon côté océan.
+- **Base de l'Ombre** : bâtiment de métal noir sur deux niveaux adossé à la paroi nord. Au rez-de-chaussée, une armurerie vitrée avec des écrans ; à l'étage, une salle de contrôle et le bureau noir et or de Brutus. Un escalier y monte, et une passerelle traverse la caverne jusqu'au tablier du mur sud.
+- **Lagon intérieur** : bassin d'eau de mer alimenté par la cascade, éclairé en cyan, avec une vedette de l'Ombre amarrée et un escalier immergé pour en ressortir à la nage.
+- **Coffre-fort** déplacé dans le coin sud-est de la salle.
+- **QA** : la section Grotte de `qa-c2s2.cjs` vérifie plusieurs choses :
+  - la voûte couvre la salle partout sauf au-dessus du puits, qui s'ouvre jusqu'au ciel ;
+  - le saut dans le puits se fait sans dégâts ;
+  - on peut nager dans le lagon et en ressortir ;
+  - l'escalier de la base, le pont supérieur et la passerelle sont praticables ;
+  - le canyon se remonte toujours à pied sec ;
+  - on ne traverse jamais la roche du flanc ouest.
 
 ## Agence, voitures et eau
 
