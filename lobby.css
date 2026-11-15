@@ -1411,3 +1411,46 @@ body[data-tab="pass"] #page-pass {
   .reward .pc-lvl { font-size: 10px; bottom: 18px; padding: 1px 4px; }
   #page-pass .pass-content .pass-track .reward .lock, #page-pass .pass-content .pass-track .reward .check { top: 17px; }
 }
+
+/* Pages de catégorie : fond doré, gros personnage au centre, récompenses
+   gratuites en gris et payantes (premium) en jaune. */
+body[data-tab="pass"].pass-cat #bg {
+  background:
+    radial-gradient(ellipse 46% 62% at 52% 42%, rgba(255, 246, 196, .95), rgba(255, 246, 196, 0) 70%),
+    linear-gradient(180deg, #e9c23c 0%, #d6a51c 45%, #a87a0c 100%);
+}
+body[data-tab="pass"].pass-cat #bg::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 18%; height: 46%; opacity: .2; filter: blur(3px);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 400' preserveAspectRatio='none'%3E%3Cg fill='%235a3c00'%3E%3Crect x='40' y='170' width='150' height='230'/%3E%3Crect x='80' y='120' width='14' height='60'/%3E%3Cpath d='M300 400V210h260v190z'/%3E%3Cpath d='M330 210a100 100 0 0 1 200 0z'/%3E%3Crect x='425' y='60' width='10' height='70'/%3E%3Cpath d='M425 60h50v28h-50z'/%3E%3Crect x='620' y='150' width='240' height='250'/%3E%3Cpath d='M620 150l120-70 120 70z'/%3E%3Crect x='900' y='190' width='120' height='210'/%3E%3Cpath d='M1040 400V230a70 70 0 0 1 140 0v170z'/%3E%3Crect x='960' y='110' width='10' height='80'/%3E%3Cpath d='M970 110h46v26h-46z'/%3E%3C/g%3E%3C/svg%3E") center bottom / 100% 100% no-repeat;
+}
+body[data-tab="pass"].pass-cat .bg-glow { background: radial-gradient(circle, rgba(255, 250, 210, .55), rgba(255, 220, 90, .15) 50%, transparent 72%); }
+body[data-tab="pass"].pass-cat #topbar { background: linear-gradient(180deg, rgba(70, 48, 0, .7), rgba(70, 48, 0, 0)); }
+
+/* infos de la récompense en haut à gauche, comme l'écran de récompense */
+#page-pass .pass-content .pass-left { gap: 6px; }
+#page-pass .pass-content .pass-left h1 { order: -2; font-size: 20px; margin: 0; }
+#page-pass .pass-content .pass-left .pass-season, #page-pass .pass-content .pass-left .pass-sub { display: none; }
+#page-pass .pass-content .pass-left .pass-preview { order: -1; margin: 4px 0 6px; padding: 0; border: 0; background: none; }
+#page-pass .pass-content .pass-preview .pp-name { font-size: clamp(28px, 3vw, 48px); line-height: 1; text-shadow: 0 3px 0 rgba(80, 50, 0, .45); }
+#page-pass .pass-content .pass-preview .pp-type { font-size: 15px; font-weight: 800; }
+#page-pass .pass-content .pass-status { background: rgba(60, 40, 0, .55); border-color: rgba(255, 240, 180, .4); }
+.pr-req { display: flex; flex-direction: column; gap: 5px; }
+.pr-req .req { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 10px; font: 900 13px/1.2 var(--font-display); letter-spacing: .5px; color: #fff; background: #e8197a; transform: skewX(-8deg); }
+.pr-req .req svg { width: 13px; height: 13px; }
+.pr-req .req.ok { background: #1b9b4a; }
+
+/* cartes : gratuites en gris, premium en jaune */
+#page-pass .pass-content .pass-track-wrap { background: rgba(40, 26, 0, .38); border-color: rgba(255, 240, 180, .35); box-shadow: none; }
+#page-pass .pass-content .pass-track .reward.free { background: linear-gradient(180deg, #e6e6e6, #9b9b9b); border-color: #d4d4d4; }
+#page-pass .pass-content .pass-track .reward.prem { background: linear-gradient(180deg, #fff07a, #e2ad00); border-color: #ffe14a; }
+#page-pass .pass-content .pass-track .reward.free .pc-tag { background: #7a7a7a; color: #fff; }
+#page-pass .pass-content .pass-track .reward.prem .pc-tag { background: #ffd400; color: #3a2600; }
+#page-pass .pass-content .pass-track .reward.free .rw-label { background: #5c5c5c; color: #fff; }
+#page-pass .pass-content .pass-track .reward.prem .rw-label { background: #8a6400; color: #fff; }
+#page-pass .pass-content .pass-track .reward.free.locked::after { background: rgba(60, 60, 60, .25); }
+#page-pass .pass-content .pass-track .reward.prem.locked::after { background: rgba(110, 70, 0, .2); }
+#page-pass .pass-content .pass-track .reward .lock { background: #e8197a; }
+#page-pass .pass-content .pass-track .reward.sel { border-color: #fff; box-shadow: 0 0 0 3px #fff, 0 8px 22px rgba(60, 40, 0, .45); }
+@media (min-width: 901px) and (pointer: fine) {
+  #page-pass .pass-content .pass-track .reward { height: clamp(120px, 21vh, 200px); }
+}

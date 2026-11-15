@@ -223,7 +223,7 @@ function buildChar() {
 function playEmote(id) { emoteId = id; emoteT = 0; }
 let previewMode = null; // 'pickaxe' | 'glider'
 // camera placement per tab: [charScreenX offset (world units), cam distance, look height]
-const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 8.2, h: 0.8 }, passHome: { x: 0, d: 6.6, h: 1.3 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
+const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: -0.15, d: 4.6, h: 1.22 }, passHome: { x: 0, d: 6.6, h: 1.3 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
 let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
@@ -514,6 +514,16 @@ function renderPass() {
   if (r.cat === 'eclats') pp.innerHTML = `<span class="pp-rar" style="background:#3fa9ff">MONNAIE</span><div class="pp-name">${r.amount} Éclats</div><div class="pp-type">Utilisables dans la boutique</div><div class="pp-tier">${tierTxt}</div>`;
   else { const it = itemOf(r.cat, r.id), RR = RARITIES[it.rarity]; pp.innerHTML = `<span class="pp-rar" style="background:${RR.color}">${RR.name.toUpperCase()}</span><div class="pp-name">${it.name}</div><div class="pp-type">${TYPE_NAME[r.cat]}</div><div class="pp-tier">${tierTxt}</div>`; }
   showStageItem(r);
+  // conditions de la récompense sélectionnée (bandeaux comme sur l'écran de récompense)
+  const lock = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 9V7A5 5 0 0 0 7 7v2H5v13h14V9zm-8 0V7a3 3 0 0 1 6 0v2z"/></svg>';
+  const req = [];
+  if (passView === 'quete') { if (S.doneCh.size < passQSel) req.push(`TERMINER ${passQSel} DÉFI${passQSel > 1 ? 'S' : ''}`); }
+  else {
+    const t = passView === 'bonus' ? passBSel : passSel.t, prem = passView !== 'bonus' && passSel.k === 'prem';
+    if (prem && !S.passOwned) req.push('PASSE PREMIUM REQUIS');
+    if (S.level < t) req.push('ATTEINDRE LE NIVEAU ' + t);
+  }
+  $('prReq').innerHTML = req.length ? req.map((x) => `<span class="req">${lock}${x}</span>`).join('') : '<span class="req ok">✓ RÉCOMPENSE OBTENUE</span>';
   // panneau droit : niveau et XP
   $('prLvl').textContent = S.level;
   $('prLvl2').textContent = 'NIVEAU ' + S.level;
@@ -528,7 +538,9 @@ function renderPass() {
   $('passBuyBtn').style.display = S.passOwned ? 'none' : '';
   renderPassHome();
   // accueil du passe : héros cadré en pied ; page de catégorie : cadrage serré
-  if (curTab === 'pass') viewT = $('passHome').style.display === 'none' ? VIEWS.pass : VIEWS.passHome;
+  const cat = $('passHome').style.display === 'none';
+  document.body.classList.toggle('pass-cat', cat);
+  if (curTab === 'pass') viewT = cat ? VIEWS.pass : VIEWS.passHome;
 }
 $('ptL').onclick = () => { passPage--; renderPass(); };
 $('ptR').onclick = () => { passPage++; renderPass(); };
