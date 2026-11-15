@@ -738,7 +738,8 @@ function shopToday() {
   const rnd = seeded(hashStr(todayKey()));
   const pool = SHOP_POOL.slice();
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  const skins = pool.filter((p) => p.cat === 'skin');
+  // Kaia Volt est toujours en vedette tant qu'elle n'est pas achetée (elle sort alors du pool)
+  const skins = [...pool.filter((p) => p.cat === 'skin' && p.id === 'kaia'), ...pool.filter((p) => p.cat === 'skin' && p.id !== 'kaia')];
   const featured = skins.slice(0, 3).map((p) => ({ ...p, featured: true }));
   // la boutique propose chaque jour au moins deux objets de chaque catégorie :
   // tenues, sacs à dos, pioches, planeurs et emotes
