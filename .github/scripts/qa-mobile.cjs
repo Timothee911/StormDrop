@@ -65,6 +65,8 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     await page.tap(`#lkGrid [data-id="${skin}"]`);
     check('casier : équiper une tenue au toucher', await page.$eval(`#lkGrid [data-id="${skin}"]`, e => e.classList.contains('eq')));
     await tabTo('pass');
+    check('passe : accueil avec les 5 catégories visibles', await page.$$eval('#bpTiles .bp-tile', ts => ts.length === 5 && ts.every(t => t.getBoundingClientRect().height > 40)));
+    await page.tap('#bpTiles [data-open-pass="main"]');
     await page.$eval('#passTrack', e => e.scrollIntoView({ block: 'center' }));
     await page.waitForFunction(() => document.getElementById('passTrack').getBoundingClientRect().top < innerHeight, { polling: 50 });
     await page.$eval('#passTrack [data-k="free"]', e => e.scrollIntoView({ block: 'center' }));

@@ -56,7 +56,7 @@ La Plateforme flotte désormais EN PLEINE MER (l'îlot dessous a été retiré d
 - Physique sur tous les objets : mobilier, coffres, caisses de munitions, largages, pads, cheminées d'air et décor des POI sont solides (murs fins infranchissables même à grande vitesse grâce aux sous-pas).
 - La zone apparaît 1 min après la fin du bus, bouge pour la première fois 2 min après son activation et se referme bien plus lentement ; dégâts 1, puis 2 à la moitié des joueurs, 5 au quart, 15 à 5 survivants.
 - Chute libre tête en avant les mains vides (la pioche ne sort qu'après la réception) et mains accrochées aux poignées du parachute à l'ouverture.
-- Passe de combat : 10 000 XP par niveau, boutique quotidienne couvrant les cinq catégories (tenues, sacs à dos, pioches, planeurs, emotes), tenue de base : la Recrue.
+- Passe de combat : 10 000 XP par niveau. Écran d'accueil avec le héros de la saison au centre, récompenses obtenues et pages terminées à gauche, niveau (barre segmentée), achat de niveau, Passe Premium et prochaine récompense à droite, et cinq catégories en bas (récompenses du passe, piste gratuite, piste premium, pass bonus, pass quête). Une récompense par niveau, en pages de 6 (2 gratuites : il suffit d'atteindre le niveau indiqué ; 4 premium : niveau + Passe Premium). Pages de catégorie : infos à gauche, personnage au centre, niveau et achats à droite, récompenses en bas avec pagination. Boutique quotidienne couvrant les cinq catégories (tenues, sacs à dos, pioches, planeurs, emotes), tenue de base : la Recrue.
 - 50 / 100 joueurs, Solo / Duo / Escouade avec coéquipiers IA, lobby complet (boutique, passe de combat, défis, casier, paramètres, touches AZERTY/QWERTY).
 
 ## Lancer en local

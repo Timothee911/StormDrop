@@ -1126,92 +1126,6 @@ body[data-tab="pass"] #page-pass {
 }
 
 
-/* Écran d'accueil du passe : uniquement trois grandes catégories */
-#page-pass .pass-home {
-  width: 100%;
-  min-height: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: clamp(24px,5vh,54px);
-  padding: clamp(20px,4vw,64px);
-  position: relative;
-  z-index: 3;
-}
-#page-pass .pass-home-heading { max-width: 760px; }
-#page-pass .pass-home-heading h1 {
-  margin: 18px 0 8px;
-  color: #fff4d9;
-  font-size: clamp(28px,4vw,54px);
-  text-shadow: 0 4px 12px rgba(70,20,0,.45);
-}
-#page-pass .pass-home-heading p {
-  color: #fff1d7;
-  font-size: clamp(15px,1.5vw,20px);
-  text-shadow: 0 2px 5px rgba(65,18,0,.65);
-}
-#page-pass .pass-home-cards {
-  display: grid;
-  grid-template-columns: repeat(3,minmax(0,1fr));
-  gap: clamp(12px,2vw,26px);
-  width: min(100%,1200px);
-  margin: 0 auto;
-}
-#page-pass .pass-home-card {
-  min-height: clamp(220px,34vh,340px);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: clamp(16px,2vw,28px);
-  text-align: left;
-  color: #fff;
-  border: 2px solid rgba(255,235,190,.68);
-  border-radius: 4px;
-  box-shadow: 0 12px 30px rgba(55,16,0,.35), inset 0 0 50px rgba(255,255,255,.08);
-  position: relative;
-  overflow: hidden;
-  transition: transform .18s ease, filter .18s ease;
-}
-#page-pass .pass-home-card::before {
-  content:'';
-  position:absolute; inset:0;
-  background: radial-gradient(ellipse at 50% 20%,rgba(255,230,170,.65),transparent 42%),linear-gradient(145deg,#b7782c,#e69a32 52%,#68330f);
-  z-index:0;
-}
-#page-pass .pass-home-card.bonus::before {
-  background: radial-gradient(ellipse at 50% 20%,rgba(255,230,255,.5),transparent 42%),linear-gradient(145deg,#67418b,#ad69bd 52%,#35204f);
-}
-#page-pass .pass-home-card.quest::before {
-  background: radial-gradient(ellipse at 50% 20%,rgba(210,255,255,.5),transparent 42%),linear-gradient(145deg,#216c71,#38aaa0 52%,#123e4b);
-}
-#page-pass .pass-home-card > * { position:relative; z-index:1; }
-#page-pass .pass-home-card:hover { transform:translateY(-7px); filter:brightness(1.12); }
-#page-pass .pass-card-art {
-  align-self:center;
-  font-size:clamp(58px,8vw,104px);
-  line-height:1;
-  color:rgba(255,246,214,.9);
-  text-shadow:0 6px 18px rgba(45,12,0,.45);
-  margin-bottom:auto;
-}
-#page-pass .pass-home-card strong {
-  font-family:var(--font-display);
-  font-size:clamp(18px,1.7vw,25px);
-  text-shadow:0 3px 5px rgba(0,0,0,.55);
-}
-#page-pass .pass-home-card small { font-size:clamp(12px,1vw,15px); color:#fff5e5; }
-#page-pass .pass-card-open {
-  margin-top:8px;
-  padding:10px 14px;
-  background:rgba(30,15,8,.72);
-  border:1px solid rgba(255,239,204,.6);
-  font-weight:900;
-  font-size:12px;
-  letter-spacing:.8px;
-}
 #page-pass .pass-content {
   flex:1;
   min-height:0;
@@ -1288,10 +1202,6 @@ body[data-tab="pass"] #page-pass {
 #page-pass .pass-content .tier.single .reward { height:clamp(150px,22vh,220px); }
 #page-pass .pass-content .reward .rw-label { font-size:12px; padding:5px; }
 @media(max-width:760px) {
-  #page-pass .pass-home { padding:100px 14px 20px; gap:22px; }
-  #page-pass .pass-home-cards { grid-template-columns:1fr; gap:10px; }
-  #page-pass .pass-home-card { min-height:130px; padding:14px; }
-  #page-pass .pass-card-art { font-size:38px; align-self:flex-start; }
   #page-pass .pass-content .pass-layout { grid-template-columns:1fr; max-height:22%; }
   #page-pass .pass-content .pass-right { display:none; }
   #page-pass .pass-content .pass-track { grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
@@ -1300,280 +1210,259 @@ body[data-tab="pass"] #page-pass {
 }
 
 
-/* Passe : catégories plus compactes pour libérer la place au personnage */
-#page-pass .pass-home {
-  justify-content: center;
-  gap: clamp(14px,2.5vh,28px);
-  padding: clamp(16px,2.5vw,38px);
+/* -------------------------------------------------------------------------
+   PASSE DE COMBAT — écran d'accueil : progression à gauche, héros au centre,
+   niveau et achats à droite, catégories de récompenses en bas.
+   ------------------------------------------------------------------------- */
+#page-pass .bp-home {
+  flex: 1; min-height: 0; position: relative; z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(240px, 27vw) minmax(0, 1fr) minmax(250px, 24vw);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "left . right" "tiles tiles tiles";
+  gap: clamp(8px, 1.6vh, 18px) clamp(12px, 2vw, 32px);
+  padding: clamp(6px, 2vh, 26px) clamp(6px, 1.4vw, 24px) 0;
+  pointer-events: none; /* la scène 3D reste manipulable entre les panneaux */
 }
-#page-pass .pass-home-heading h1 {
-  font-size: clamp(24px,3vw,42px);
-  margin: 10px 0 5px;
+#page-pass .bp-home > * { pointer-events: auto; }
+#page-pass .bp-home[style*="none"] { display: none; }
+.bp-left { grid-area: left; align-self: start; display: flex; flex-direction: column; gap: clamp(8px, 1.4vh, 14px); }
+.bp-season { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; font: 900 clamp(14px, 1.3vw, 19px)/1 var(--font-display); letter-spacing: 1px; color: #ffe14a; text-shadow: 0 2px 0 rgba(90, 30, 0, .55); }
+.bp-crest { display: grid; place-items: center; width: 34px; height: 34px; color: #6b2a00; font-size: 20px; background: linear-gradient(160deg, #fff3a8, #ffb21d 60%, #d37400); clip-path: polygon(50% 0, 100% 22%, 92% 78%, 50% 100%, 8% 78%, 0 22%); }
+.bp-title { margin: 0; font: 900 clamp(30px, 3.4vw, 54px)/.98 var(--font-display); color: #fff; text-shadow: 0 4px 0 rgba(90, 28, 0, .45), 0 8px 22px rgba(80, 20, 0, .35); letter-spacing: .5px; }
+.bp-title span { display: block; }
+.bp-lead { margin: 0; max-width: 330px; font-weight: 800; font-size: clamp(13px, 1.1vw, 17px); color: #fff8ec; text-shadow: 0 2px 4px rgba(70, 20, 0, .7); }
+.bp-stat { display: flex; align-items: center; gap: 12px; }
+.bp-ring { --p: 0; position: relative; flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; color: #fff;
+  background: conic-gradient(#ffd23f calc(var(--p) * 1%), rgba(80, 25, 0, .55) 0); }
+.bp-ring::before { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #8a3208; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); }
+.bp-ring svg { position: relative; width: 20px; height: 20px; }
+.bp-stat b { display: block; font: 900 clamp(20px, 1.8vw, 28px)/1 var(--font-display); color: #fff; text-shadow: 0 2px 0 rgba(80, 25, 0, .5); }
+.bp-stat small { display: block; font-weight: 900; font-size: clamp(11px, .85vw, 13px); letter-spacing: .6px; color: #ffe14a; text-shadow: 0 1px 2px rgba(70, 20, 0, .7); }
+
+.bp-right { grid-area: right; align-self: start; display: flex; flex-direction: column; gap: 8px; }
+.bp-lvlrow { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); color: #fff; text-shadow: 0 2px 0 rgba(80, 25, 0, .5); }
+.bp-shield { display: grid; place-items: center; width: 40px; height: 44px; background: linear-gradient(160deg, #fff3a8, #ffb21d 60%, #d37400); clip-path: polygon(50% 0, 100% 18%, 100% 62%, 50% 100%, 0 62%, 0 18%); }
+.bp-shield b { font-size: 18px; color: #6b2a00; text-shadow: none; }
+.bp-lvltxt { font-size: clamp(20px, 1.7vw, 27px); }
+.bp-next { margin-left: auto; font-size: 15px; color: #ffe14a; }
+.bp-xphead { display: flex; justify-content: space-between; gap: 8px; font-weight: 900; font-size: 12px; letter-spacing: .4px; color: #fff; text-shadow: 0 1px 2px rgba(70, 20, 0, .8); }
+.bp-xphead span:first-child { color: #ffe14a; }
+.bp-seg { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; height: 12px; }
+.bp-seg i { --f: 0; border-radius: 1px; background: linear-gradient(90deg, #26c6ff calc(var(--f) * 100%), rgba(60, 18, 0, .6) 0); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18); }
+.bp-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 10px 9px; border-radius: 3px; font-family: var(--font-display); transition: transform .12s, filter .12s; }
+.bp-btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.07); }
+.bp-btn b { font-size: clamp(16px, 1.35vw, 21px); letter-spacing: .5px; }
+.bp-btn small { display: inline-flex; align-items: center; gap: 5px; font: 900 10.5px/1.1 var(--font-body, inherit); letter-spacing: .5px; }
+.bp-btn .coin { width: 14px; height: 14px; }
+.bp-btn .coin::after { inset: 3px; }
+.bp-buylvl { margin-top: 4px; color: #2a1600; background: linear-gradient(180deg, #fff35a, #ffd400); box-shadow: 0 4px 0 #b88a00, 0 8px 18px rgba(70, 20, 0, .3); }
+.bp-buylvl:disabled { opacity: .55; cursor: default; }
+.bp-premium { color: #fff; background: linear-gradient(180deg, #2fa8ff, #1563e0); box-shadow: 0 4px 0 #0c3f96, 0 8px 18px rgba(70, 20, 0, .3); text-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
+.bp-premium.owned { background: linear-gradient(180deg, #49e07d, #1b9b4a); box-shadow: 0 4px 0 #0f6b30; cursor: default; }
+.bp-upnext { display: flex; align-items: center; gap: 10px; margin-top: 4px; padding: 7px; cursor: pointer; background: rgba(70, 22, 2, .62); border: 1px solid rgba(255, 225, 160, .45); border-radius: 3px; color: #fff; }
+.bp-upnext:hover { background: rgba(90, 30, 4, .75); }
+.bp-upnext .reward { flex: none; width: 54px; height: 54px; cursor: inherit; }
+.bp-upnext .reward .rw-label { display: none; }
+.bp-upnext .eclats-art b { font-size: 12px; }
+.bp-upnext small { display: block; font-weight: 900; font-size: 10px; letter-spacing: .8px; color: #ffe14a; }
+.bp-upnext b { display: block; font-family: var(--font-display); font-size: 16px; line-height: 1.1; }
+.bp-upnext span { font-size: 12px; font-weight: 700; opacity: .85; }
+
+.bp-hero { position: absolute; left: 50%; bottom: calc(clamp(118px, 22vh, 200px) + 14px); transform: translateX(-50%); z-index: 1; text-align: center; pointer-events: none; color: #fff; text-shadow: 0 2px 6px rgba(60, 15, 0, .8); }
+.bp-hero span { display: inline-block; padding: 2px 8px; font-weight: 900; font-size: 10px; letter-spacing: 1px; color: #fff; text-shadow: none; }
+.bp-hero b { display: block; font: 900 clamp(22px, 2vw, 32px)/1.1 var(--font-display); }
+.bp-hero small { font-weight: 800; font-size: 12px; }
+
+.bp-tiles { grid-area: tiles; position: relative; z-index: 2; display: grid; grid-template-columns: 1.55fr repeat(4, minmax(0, 1fr)); gap: clamp(6px, .8vw, 12px); height: clamp(118px, 22vh, 200px); }
+.bp-tile { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; padding: 0; text-align: left; color: #fff; border: 2px solid rgba(255, 255, 255, .25); border-radius: 3px; box-shadow: 0 10px 24px rgba(60, 15, 0, .35); transition: transform .15s, border-color .15s, filter .15s; }
+.bp-tile:hover { transform: translateY(-5px); border-color: #fff; filter: brightness(1.08); }
+.bp-tile::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 15%, rgba(255, 255, 255, .35), transparent 55%), linear-gradient(150deg, #ffb52e, #f06d0a 60%, #8c2a00); }
+.bp-tile.t-free::before { background: radial-gradient(ellipse at 50% 15%, rgba(255, 255, 255, .35), transparent 55%), linear-gradient(150deg, #5fd0ff, #2380d6 60%, #123b80); }
+.bp-tile.t-prem::before { background: radial-gradient(ellipse at 50% 15%, rgba(255, 255, 255, .35), transparent 55%), linear-gradient(150deg, #ffe066, #e3a400 60%, #7a4a00); }
+.bp-tile.t-bonus::before { background: radial-gradient(ellipse at 50% 15%, rgba(255, 255, 255, .3), transparent 55%), linear-gradient(150deg, #c07cff, #7b3fd1 60%, #3a1a72); }
+.bp-tile.t-quest::before { background: radial-gradient(ellipse at 50% 15%, rgba(255, 255, 255, .3), transparent 55%), linear-gradient(150deg, #4fe0c4, #1c9c8e 60%, #0c4b4f); }
+.bp-tile-art { position: absolute; inset: 24px 4px 26px; display: flex; justify-content: center; align-items: flex-end; }
+.bp-tile-art img { flex: 0 1 auto; min-width: 0; height: 100%; max-height: none; object-fit: contain; object-position: center bottom; margin: 0 -6%; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .4)); transition: transform .2s; }
+.bp-tile:hover .bp-tile-art img { transform: scale(1.05); }
+.bp-tile-prog { position: absolute; top: 6px; left: 6px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: 2px; background: rgba(20, 6, 0, .7); font-weight: 900; font-size: 11px; letter-spacing: .4px; }
+.bp-tile-prog svg { width: 10px; height: 10px; }
+.bp-tile.done .bp-tile-prog { background: #1b9b4a; }
+.bp-tile.locked .bp-tile-prog { background: #e2a400; color: #2a1600; }
+.bp-tile.locked .bp-tile-prog svg path { fill: #2a1600; }
+.bp-tile-name { position: relative; display: block; padding: 6px 8px; background: #fff; color: #1b1b2a; font: 900 clamp(11px, 1vw, 15px)/1.1 var(--font-display); letter-spacing: .4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bp-tile-name em { font-style: normal; color: #e86a00; }
+.bp-tile.t-free .bp-tile-name em { color: #1d7fd8; }
+.bp-tile.t-prem .bp-tile-name em { color: #c28a00; }
+.bp-tile.t-bonus .bp-tile-name em { color: #7b3fd1; }
+.bp-tile.t-quest .bp-tile-name em { color: #13998a; }
+
+/* Mobile / tactile : le personnage reste en fond, panneaux compacts en haut,
+   catégories en bandeau défilant en bas. */
+@media (max-width: 900px), (pointer: coarse) {
+  #page-pass .bp-home { position: relative; z-index: 2; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "left right" "tiles tiles"; gap: 8px; padding: 8px 8px 8px; }
+  .bp-left, .bp-right { padding: 8px 10px; border-radius: 8px; background: rgba(70, 20, 2, .55); gap: 6px; }
+  .bp-season { font-size: 10px; } .bp-crest { width: 22px; height: 22px; font-size: 13px; }
+  .bp-title { font-size: 19px; } .bp-lead { display: none; }
+  .bp-ring { width: 30px; height: 30px; } .bp-ring::before { inset: 3px; } .bp-ring svg { width: 13px; height: 13px; }
+  .bp-stat { gap: 7px; } .bp-stat b { font-size: 15px; } .bp-stat small { font-size: 8.5px; }
+  .bp-shield { width: 28px; height: 31px; } .bp-shield b { font-size: 13px; } .bp-lvltxt { font-size: 15px; } .bp-next { font-size: 11px; }
+  .bp-xphead { font-size: 9px; } .bp-seg { height: 8px; gap: 2px; }
+  .bp-btn { padding: 6px 4px; } .bp-btn b { font-size: 12px; } .bp-btn small { font-size: 8px; }
+  .bp-upnext { display: none; }
+  .bp-hero { bottom: 150px; } .bp-hero b { font-size: 20px; }
+  .bp-tiles { display: flex; height: 132px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 2px; }
+  .bp-tile { flex: 0 0 132px; scroll-snap-align: start; }
+  .bp-tile.t-main { flex-basis: 200px; }
 }
-#page-pass .pass-home-heading p { font-size: clamp(13px,1.2vw,17px); }
-#page-pass .pass-home-cards {
-  width: min(76%,900px);
-  gap: clamp(10px,1.4vw,18px);
+@media (max-width: 900px) and (max-height: 440px), (pointer: coarse) and (max-height: 440px) {
+  #page-pass .bp-home { grid-template-columns: minmax(0, 210px) minmax(0, 1fr) minmax(0, 220px); grid-template-areas: "left . right" "tiles tiles tiles"; gap: 6px; padding: 6px 8px; }
+  .bp-left, .bp-right { padding: 6px 8px; gap: 4px; overflow: hidden; }
+  .bp-stat:last-child, .bp-season, .bp-hero, .bp-xphead { display: none; }
+  .bp-title { font-size: 14px; } .bp-title span { display: inline; } .bp-title span::before { content: ' '; }
+  .bp-ring { width: 24px; height: 24px; } .bp-ring svg { width: 11px; height: 11px; } .bp-stat b { font-size: 13px; } .bp-stat small { font-size: 7.5px; }
+  .bp-lvlrow { gap: 6px; } .bp-shield { width: 22px; height: 25px; } .bp-shield b { font-size: 11px; } .bp-lvltxt { font-size: 13px; }
+  .bp-seg { height: 6px; }
+  .bp-btn { padding: 4px; gap: 1px; } .bp-btn b { font-size: 11px; } .bp-btn small { font-size: 7px; }
+  .bp-tiles { height: 92px; } .bp-tile { flex-basis: 110px; } .bp-tile.t-main { flex-basis: 160px; }
+  .bp-tile-art { inset: 18px 2px 20px; } .bp-tile-name { padding: 3px 4px; font-size: 10px; } .bp-tile-prog { top: 3px; left: 3px; padding: 1px 4px; font-size: 9px; }
 }
-#page-pass .pass-home-card {
-  min-height: clamp(145px,22vh,225px);
-  padding: clamp(12px,1.5vw,20px);
-  gap: 7px;
-}
-#page-pass .pass-card-art { font-size: clamp(42px,5.5vw,72px); }
-#page-pass .pass-home-card strong { font-size: clamp(15px,1.35vw,20px); }
-#page-pass .pass-home-card small { font-size: clamp(11px,.9vw,13px); }
-#page-pass .pass-card-open { padding: 7px 10px; font-size: 10px; }
-@media(max-width:760px) {
-  #page-pass .pass-home { padding: 82px 12px 14px; gap: 14px; }
-  #page-pass .pass-home-cards { width: min(100%,520px); grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
-  #page-pass .pass-home-card { min-height: 112px; padding: 9px 7px; gap: 5px; }
-  #page-pass .pass-card-art { font-size: 30px; }
-  #page-pass .pass-home-card strong { font-size: 11px; }
-  #page-pass .pass-home-card small { display:none; }
-  #page-pass .pass-card-open { font-size: 8px; padding: 5px 4px; }
+
+@media (max-width: 900px), (pointer: coarse) { #page-pass::before { display: none; } }
+@media (max-width: 900px) and (max-height: 360px), (pointer: coarse) and (max-height: 360px) {
+  .bp-btn small { display: none; }
+  .bp-tiles { height: 82px; }
 }
 
 
-/* Cartes du passe : personnages premium et boutons placés plus bas */
-#page-pass .pass-home-cards {
-  transform: translateY(clamp(24px, 5vh, 62px));
-}
-#page-pass .pass-home-card {
-  overflow: hidden;
-  position: relative;
-  justify-content: flex-end;
-  padding-top: 14px;
-}
-#page-pass .pass-card-skins {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: clamp(2px, .5vw, 8px);
-  width: 100%;
-  min-height: clamp(105px, 17vh, 175px);
-  margin: auto 0 2px;
-}
-#page-pass .pass-home-skin {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: 118px;
-  height: 100%;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-}
-#page-pass .pass-home-skin img {
-  display: block;
-  width: 100%;
-  height: clamp(95px, 15vh, 155px);
-  object-fit: contain;
-  object-position: center bottom;
-  filter: drop-shadow(0 5px 8px rgba(0,0,0,.45));
-}
-#page-pass .pass-home-skin small {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: clamp(9px, .8vw, 12px);
-  font-weight: 800;
-  text-transform: uppercase;
-  text-shadow: 0 2px 4px #000;
-}
-@media(max-width:760px) {
-  #page-pass .pass-home-cards { transform: translateY(16px); }
-  #page-pass .pass-card-skins { min-height: 70px; gap: 1px; }
-  #page-pass .pass-home-skin img { height: 76px; }
-  #page-pass .pass-home-skin small { font-size: 7px; }
-}
+/* Pages de catégorie : infos à gauche, personnage au centre, niveau et achats
+   en haut à droite, récompenses EN BAS par pages de 6 (2 gratuites, 4 premium). */
+#page-pass .pass-content .pass-track-wrap { display: flex; flex-direction: column; gap: 8px; align-items: stretch; overflow: visible; }
+#page-pass .pass-pager { display: flex; align-items: center; gap: 10px; }
+#page-pass .pass-pager .pt-arrow { display: grid !important; place-items: center; position: static; width: 34px; height: 30px; flex: none; font-size: 22px; line-height: 1; transform: none; }
+#page-pass .pass-pager .pt-arrow:disabled { opacity: .35; cursor: default; }
+#page-pass .pass-pager b { font-family: var(--font-display); font-size: 16px; letter-spacing: .6px; color: #fff; }
+#page-pass .pp-dots { display: flex; gap: 5px; }
+#page-pass .pp-dots button { width: 22px; height: 6px; padding: 0; border-radius: 3px; background: rgba(255, 255, 255, .25); }
+#page-pass .pp-dots button.done { background: #3ddc6a; }
+#page-pass .pp-dots button.on { background: #ffe14a; box-shadow: 0 0 0 1px #fff; }
+#page-pass .pp-hint { margin-left: auto; font-weight: 800; font-size: 12px; letter-spacing: .4px; color: #ffe0a0; }
+#page-pass .pass-content .pass-track { display: grid !important; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(6px, .8vw, 12px); overflow: visible; padding: 0; height: auto; }
+#page-pass .pass-content .pass-track .reward { width: auto; height: clamp(130px, 25vh, 230px); border-width: 2px; border-radius: 3px; }
+#page-pass .pass-content .pass-track .reward.free { border-color: #4fb8ff; }
+#page-pass .pass-content .pass-track .reward.prem { border-color: #f2c94c; }
+#page-pass .pass-content .pass-track .reward.sel { border-color: #fff; box-shadow: 0 0 0 2px #ffe14a, 0 0 18px rgba(255, 225, 74, .45); transform: translateY(-4px); }
+#page-pass .pass-content .pass-track .reward.cur .pc-lvl { background: #ffe14a; color: #2a1600; }
+#page-pass .pass-content .pass-track .reward img { inset: 18px 0 22px; height: calc(100% - 40px); }
+#page-pass .pass-content .pass-track .reward .rw-label { font-size: 12px; padding: 4px; }
+#page-pass .pass-content .pass-track .r-eclats .eclats-art { top: 18px; bottom: 22px; height: auto; }
+#page-pass .pass-content .pass-track .reward .lock, #page-pass .pass-content .pass-track .reward .check { top: 22px; }
+.reward .pc-tag { position: absolute; top: 0; left: 0; right: 0; z-index: 2; height: 18px; font: 900 10px/18px var(--font-body); letter-spacing: 1px; text-align: center; color: #2a1600; background: #f2c94c; }
+.reward.free .pc-tag { background: #4fb8ff; color: #06233d; }
+.reward.bonus .pc-tag { background: #b77cff; color: #fff; }
+.reward.quete .pc-tag { background: #39c9b0; color: #062d28; }
+.reward .pc-lvl { position: absolute; left: 4px; bottom: 26px; z-index: 2; padding: 2px 6px; border-radius: 2px; background: rgba(10, 4, 0, .78); font-family: var(--font-display); font-size: 13px; color: #fff; }
+.reward.locked .pc-lvl { color: #ffd98a; }
 
-
-/* Cartes catégories : skins agrandis, cartes plus compactes et abaissées */
-#page-pass .pass-home-cards {
-  width: min(70%, 820px);
-  gap: clamp(9px, 1.2vw, 16px);
-  transform: translateY(clamp(40px, 8vh, 88px));
-}
-#page-pass .pass-home-card {
-  min-height: clamp(175px, 27vh, 265px);
-  padding: 9px clamp(8px, 1vw, 14px);
-  gap: 4px;
-}
-#page-pass .pass-card-skins {
-  flex: 1 1 auto;
-  min-height: clamp(145px, 23vh, 225px);
-  margin: 0;
-  align-items: stretch;
-  gap: 0;
-}
-#page-pass .pass-home-skin {
-  max-width: none;
-  flex: 1 1 0;
-  min-height: 0;
-}
-#page-pass .pass-home-skin img {
-  height: clamp(145px, 23vh, 225px);
-  width: 100%;
-  object-fit: contain;
-  transform: scale(1.12);
-  transform-origin: center bottom;
-}
-#page-pass .pass-home-skin small { font-size: clamp(8px, .7vw, 10px); }
-#page-pass .pass-home-card strong { font-size: clamp(13px, 1.1vw, 17px); }
-#page-pass .pass-home-card small { font-size: 10px; }
-#page-pass .pass-card-open { margin-top: 2px; padding: 5px 8px; font-size: 9px; }
-@media(max-width:760px) {
-  #page-pass .pass-home-cards {
-    width: min(100%, 480px);
-    transform: translateY(24px);
-    gap: 5px;
+@media (min-width: 901px) and (pointer: fine) {
+  #page-pass .pass-content {
+    display: grid !important; grid-template-columns: minmax(250px, 24%) minmax(0, 1fr) minmax(250px, 24%);
+    grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px clamp(12px, 1.6vw, 24px); padding: 4px clamp(12px, 1.6vw, 24px) 12px;
+    pointer-events: none;
   }
-  #page-pass .pass-home-card { min-height: 128px; padding: 6px 4px; }
-  #page-pass .pass-card-skins { min-height: 88px; }
-  #page-pass .pass-home-skin img { height: 92px; transform: scale(1.08); }
-  #page-pass .pass-home-skin small { font-size: 6px; }
-  #page-pass .pass-home-card strong { font-size: 9px; }
-  #page-pass .pass-card-open { padding: 4px 3px; font-size: 7px; }
+  #page-pass .pass-content[style*="none"] { display: none !important; }
+  #page-pass .pass-content > *, #page-pass .pass-content .pass-left, #page-pass .pass-content .pass-right { pointer-events: auto; }
+  #page-pass .pass-content .pass-back { grid-column: 1; grid-row: 1; align-self: center; }
+  #page-pass .pass-content .pass-layout { display: contents; }
+  #page-pass .pass-content .pass-left { grid-column: 1; grid-row: 2; align-self: stretch; max-height: none; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+  #page-pass .pass-content .pass-left .pass-preview { display: block; margin-top: auto; }
+  #page-pass .pass-content .pass-left .pass-season { white-space: nowrap; font-size: 12px; }
+  #page-pass .pass-content .pass-right { grid-column: 3; grid-row: 1 / 3; align-self: start; display: flex !important; flex-direction: column; align-items: stretch; gap: 8px; padding: 0; }
+  #page-pass .pass-content .pr-level { flex: none; min-width: 0; padding: 6px 10px; }
+  #page-pass .pass-content .pr-level .lvl-badge { width: 38px; height: 38px; font-size: 18px; }
+  #page-pass .pass-content .pr-xp-head { font-size: 15px; }
+  #page-pass .pass-content .pr-xp-next { font-size: 11px; }
+  #page-pass .pass-content .buy-level { flex: none; justify-content: center; padding: 8px 12px; }
+  #page-pass .pass-content .buy-level .bl-sub { display: none; }
+  #page-pass .pass-content .pass-buy { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; }
+  #page-pass .pass-content .pass-buy .pb-text { display: none; }
+  #page-pass .pass-content .pass-buy .pb-title { font-size: 13px; white-space: nowrap; }
+  #page-pass .pass-content .pass-track-wrap { grid-column: 1 / -1; grid-row: 3; flex: none; min-height: 0; padding: 8px 10px 10px; }
+}
+@media (max-width: 900px), (pointer: coarse) {
+  body[data-tab="pass"] #page-pass { padding: 0; }
+  #page-pass .pass-content { position: relative; z-index: 2; padding: 6px 8px 8px; gap: 6px; pointer-events: none; }
+  #page-pass .pass-content > * { pointer-events: auto; }
+  #page-pass .pass-content .pass-back { padding: 6px 10px; font-size: 11px; }
+  #page-pass .pass-content .pass-layout { display: none; }
+  #page-pass .pass-content .pass-track-wrap { flex: none; height: auto; margin-top: auto; padding: 6px; gap: 5px; overflow: visible; }
+  #page-pass .pass-pager { gap: 6px; }
+  #page-pass .pass-pager .pt-arrow { width: 30px; height: 26px; font-size: 18px; }
+  #page-pass .pass-pager b { font-size: 12px; }
+  #page-pass .pp-dots button { width: 14px; height: 5px; }
+  #page-pass .pp-hint { font-size: 9px; }
+  #page-pass .pass-content .pass-track { gap: 5px; }
+  #page-pass .pass-content .pass-track .reward { height: clamp(90px, 27dvh, 150px); }
+  #page-pass .pass-content .pass-track .reward .rw-label { font-size: 9px; padding: 2px; }
+  #page-pass .pass-content .pass-track .reward img { inset: 14px 0 16px; height: calc(100% - 30px); }
+  #page-pass .pass-content .pass-track .r-eclats .eclats-art { top: 14px; bottom: 16px; }
+  #page-pass .pass-content .pass-track .r-eclats .eclats-art b { display: none; }
+  .reward .pc-tag { height: 14px; font-size: 8px; line-height: 14px; }
+  .reward .pc-lvl { font-size: 10px; bottom: 18px; padding: 1px 4px; }
+  #page-pass .pass-content .pass-track .reward .lock, #page-pass .pass-content .pass-track .reward .check { top: 17px; }
 }
 
+/* Pages de catégorie : fond doré, gros personnage au centre, récompenses
+   gratuites en gris et payantes (premium) en jaune. */
+body[data-tab="pass"].pass-cat #bg {
+  background:
+    radial-gradient(ellipse 46% 62% at 52% 42%, rgba(255, 246, 196, .95), rgba(255, 246, 196, 0) 70%),
+    linear-gradient(180deg, #e9c23c 0%, #d6a51c 45%, #a87a0c 100%);
+}
+body[data-tab="pass"].pass-cat #bg::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 18%; height: 46%; opacity: .2; filter: blur(3px);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 400' preserveAspectRatio='none'%3E%3Cg fill='%235a3c00'%3E%3Crect x='40' y='170' width='150' height='230'/%3E%3Crect x='80' y='120' width='14' height='60'/%3E%3Cpath d='M300 400V210h260v190z'/%3E%3Cpath d='M330 210a100 100 0 0 1 200 0z'/%3E%3Crect x='425' y='60' width='10' height='70'/%3E%3Cpath d='M425 60h50v28h-50z'/%3E%3Crect x='620' y='150' width='240' height='250'/%3E%3Cpath d='M620 150l120-70 120 70z'/%3E%3Crect x='900' y='190' width='120' height='210'/%3E%3Cpath d='M1040 400V230a70 70 0 0 1 140 0v170z'/%3E%3Crect x='960' y='110' width='10' height='80'/%3E%3Cpath d='M970 110h46v26h-46z'/%3E%3C/g%3E%3C/svg%3E") center bottom / 100% 100% no-repeat;
+}
+body[data-tab="pass"].pass-cat .bg-glow { background: radial-gradient(circle, rgba(255, 250, 210, .55), rgba(255, 220, 90, .15) 50%, transparent 72%); }
+body[data-tab="pass"].pass-cat #topbar { background: linear-gradient(180deg, rgba(70, 48, 0, .7), rgba(70, 48, 0, 0)); }
 
-/* Accueil du passe : cartes alignées à gauche, sans noms, tenues plus imposantes */
-#page-pass .pass-home-cards {
-  width: min(78%, 960px);
-  margin-left: 0;
-  margin-right: auto;
-  transform: translateY(clamp(40px, 8vh, 88px));
-  gap: clamp(10px, 1.4vw, 20px);
-}
-#page-pass .pass-home-card {
-  min-height: clamp(205px, 31vh, 300px);
-}
-#page-pass .pass-card-skins {
-  min-height: clamp(180px, 28vh, 260px);
-  align-items: stretch;
-}
-#page-pass .pass-home-skin {
-  overflow: visible;
-}
-#page-pass .pass-home-skin img {
-  height: clamp(180px, 28vh, 260px);
-  width: 145%;
-  max-width: none;
-  flex: 1 1 auto;
-  transform: scale(1.28);
-  transform-origin: center bottom;
-}
-#page-pass .pass-home-skin small { display: none !important; }
-@media(max-width:760px) {
-  #page-pass .pass-home-cards {
-    width: min(100%, 480px);
-    margin-left: 0;
-    margin-right: auto;
-    transform: translateY(24px);
-  }
-  #page-pass .pass-home-card { min-height: 145px; }
-  #page-pass .pass-card-skins { min-height: 112px; }
-  #page-pass .pass-home-skin img {
-    height: 112px;
-    width: 145%;
-    transform: scale(1.22);
-  }
-}
+/* infos de la récompense en haut à gauche, comme l'écran de récompense */
+#page-pass .pass-content .pass-left { gap: 6px; }
+#page-pass .pass-content .pass-left h1 { order: -2; font-size: 20px; margin: 0; }
+#page-pass .pass-content .pass-left .pass-season, #page-pass .pass-content .pass-left .pass-sub { display: none; }
+#page-pass .pass-content .pass-left .pass-preview { order: -1; margin: 4px 0 6px; padding: 0; border: 0; background: none; }
+#page-pass .pass-content .pass-preview .pp-name { font-size: clamp(28px, 3vw, 48px); line-height: 1; text-shadow: 0 3px 0 rgba(80, 50, 0, .45); }
+#page-pass .pass-content .pass-preview .pp-type { font-size: 15px; font-weight: 800; }
+#page-pass .pass-content .pass-status { background: rgba(60, 40, 0, .55); border-color: rgba(255, 240, 180, .4); }
+.pr-req { display: flex; flex-direction: column; gap: 5px; }
+.pr-req .req { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 10px; font: 900 13px/1.2 var(--font-display); letter-spacing: .5px; color: #fff; background: #e8197a; transform: skewX(-8deg); }
+.pr-req .req svg { width: 13px; height: 13px; }
+.pr-req .req.ok { background: #1b9b4a; }
 
-
-/* Ajustement final des personnages sur les trois cartes du passe */
-#page-pass .pass-home-card {
-  min-height: clamp(245px, 38vh, 340px);
-  overflow: hidden;
-}
-#page-pass .pass-card-skins {
-  min-height: clamp(205px, 32vh, 285px);
-  height: clamp(205px, 32vh, 285px);
-  align-items: flex-end;
-  justify-content: center;
-  gap: 0;
-  overflow: visible;
-}
-#page-pass .pass-home-skin {
-  flex: 1 1 0;
-  height: 100%;
-  min-width: 0;
-  overflow: visible;
-  justify-content: flex-end;
-}
-#page-pass .pass-home-skin img {
-  display: block;
-  height: 100%;
-  width: 160%;
-  max-width: none;
-  object-fit: contain;
-  object-position: center bottom;
-  transform: none;
-  transform-origin: center bottom;
-}
-/* Les deux cartes avec un seul personnage : tête et corps entièrement visibles */
-#page-pass .pass-home-card:has(.pass-card-skins .pass-home-skin:only-child) .pass-home-skin img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center bottom;
-  transform: none;
-}
-@media(max-width:760px) {
-  #page-pass .pass-home-card { min-height: 170px; }
-  #page-pass .pass-card-skins {
-    height: 125px;
-    min-height: 125px;
-  }
-  #page-pass .pass-home-skin img {
-    height: 125px;
-    width: 160%;
-    transform: none;
-  }
-  #page-pass .pass-home-card:has(.pass-card-skins .pass-home-skin:only-child) .pass-home-skin img {
-    width: 100%;
-    height: 125px;
-  }
+/* cartes : gratuites en gris, premium en jaune */
+#page-pass .pass-content .pass-track-wrap { background: rgba(40, 26, 0, .38); border-color: rgba(255, 240, 180, .35); box-shadow: none; }
+#page-pass .pass-content .pass-track .reward.free { background: linear-gradient(180deg, #e6e6e6, #9b9b9b); border-color: #d4d4d4; }
+#page-pass .pass-content .pass-track .reward.prem { background: linear-gradient(180deg, #fff07a, #e2ad00); border-color: #ffe14a; }
+#page-pass .pass-content .pass-track .reward.free .pc-tag { background: #7a7a7a; color: #fff; }
+#page-pass .pass-content .pass-track .reward.prem .pc-tag { background: #ffd400; color: #3a2600; }
+#page-pass .pass-content .pass-track .reward.free .rw-label { background: #5c5c5c; color: #fff; }
+#page-pass .pass-content .pass-track .reward.prem .rw-label { background: #8a6400; color: #fff; }
+#page-pass .pass-content .pass-track .reward.free.locked::after { background: rgba(60, 60, 60, .25); }
+#page-pass .pass-content .pass-track .reward.prem.locked::after { background: rgba(110, 70, 0, .2); }
+#page-pass .pass-content .pass-track .reward .lock { background: #e8197a; }
+#page-pass .pass-content .pass-track .reward.sel { border-color: #fff; box-shadow: 0 0 0 3px #fff, 0 8px 22px rgba(60, 40, 0, .45); }
+@media (min-width: 901px) and (pointer: fine) {
+  #page-pass .pass-content .pass-track .reward { height: clamp(120px, 21vh, 200px); }
 }
 
-
-/* Pass de combat : cinq skins beaucoup plus grands */
-#page-pass .pass-home-card:has([data-open-pass="main"]) {
-  min-height: clamp(330px, 48vh, 440px);
-}
-#page-pass .pass-home-card:has([data-open-pass="main"]) .pass-card-skins {
-  height: clamp(290px, 42vh, 380px);
-  min-height: clamp(290px, 42vh, 380px);
-  align-items: flex-end;
-  gap: 0;
-}
-#page-pass .pass-home-card:has([data-open-pass="main"]) .pass-home-skin {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 100%;
-}
-#page-pass .pass-home-card:has([data-open-pass="main"]) .pass-home-skin img {
-  height: 100%;
-  width: 210%;
-  max-width: none;
-  object-fit: contain;
-  object-position: center bottom;
-  transform: none;
-}
-@media(max-width:760px) {
-  #page-pass .pass-home-card:has([data-open-pass="main"]) {
-    min-height: 230px;
-  }
-  #page-pass .pass-home-card:has([data-open-pass="main"]) .pass-card-skins {
-    height: 180px;
-    min-height: 180px;
-  }
-  #page-pass .pass-home-card:has([data-open-pass="main"]) .pass-home-skin img {
-    height: 180px;
-    width: 210%;
-  }
+/* Cartes du passe sans bandeau GRATUIT / PREMIUM ; tenues en gros plan */
+#page-pass .pass-content .pass-track .reward img { inset: 4px 0 22px; height: calc(100% - 26px); }
+#page-pass .pass-content .pass-track .reward.c-skin img { inset: 0 0 22px; height: calc(100% - 22px); object-fit: cover; object-position: center top; }
+#page-pass .pass-content .pass-track .reward .lock, #page-pass .pass-content .pass-track .reward .check { top: 5px; }
+#page-pass .pass-content .pass-track .r-eclats .eclats-art { top: 0; }
+@media (max-width: 900px), (pointer: coarse) {
+  #page-pass .pass-content .pass-track .reward img { inset: 2px 0 16px; height: calc(100% - 18px); }
+  #page-pass .pass-content .pass-track .reward.c-skin img { inset: 0 0 16px; height: calc(100% - 16px); }
+  #page-pass .pass-content .pass-track .reward .lock, #page-pass .pass-content .pass-track .reward .check { top: 3px; }
+  #page-pass .pass-content .pass-track .r-eclats .eclats-art { top: 0; }
 }

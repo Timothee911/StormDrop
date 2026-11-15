@@ -118,22 +118,30 @@
 
 <!-- BATTLE PASS -->
 <section class="page" id="page-pass">
-  <div class="pass-home" id="passHome">
-    <div class="pass-home-heading">
-      <div class="pass-season">CHAPITRE 2 · SAISON 2 — TOP SECRET</div>
-      <h1>CHOISIS TES RÉCOMPENSES</h1>
-      <p>Choisis une catégorie pour découvrir toutes ses récompenses en grand.</p>
+  <div class="mobile-stage" id="passStage" aria-label="Aperçu de la récompense"></div>
+  <div class="bp-home" id="passHome">
+    <div class="bp-left">
+      <div class="bp-season"><span class="bp-crest">★</span>SAISON 2 · TOP SECRET</div>
+      <h1 class="bp-title">PASSE DE COMBAT<span>RÉCOMPENSES</span></h1>
+      <p class="bp-lead">Monte de niveau en jouant pour débloquer les récompenses de la Saison 2 !</p>
+      <div class="bp-stat"><span class="bp-ring" id="bpRingRew"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></span><div><b id="bpRew">0 / 0</b><small>RÉCOMPENSES OBTENUES</small></div></div>
+      <div class="bp-stat"><span class="bp-ring" id="bpRingPages"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 5.5C10.3 4.3 7.9 4 5 4v14c2.9 0 5.3.3 7 1.5 1.7-1.2 4.1-1.5 7-1.5V4c-2.9 0-5.3.3-7 1.5zM11 17c-1.4-.6-3.1-.9-5-1V6c1.9.1 3.6.4 5 1.1V17zm7-1c-1.9.1-3.6.4-5 1V7.1c1.4-.7 3.1-1 5-1.1v10z"/></svg></span><div><b id="bpPages">0 / 8</b><small>PAGES TERMINÉES</small></div></div>
     </div>
-    <div class="pass-home-cards">
-      <button class="pass-home-card main" data-open-pass="main">
-        <span class="pass-card-art">★</span><strong>PASSE DE COMBAT</strong><small>Les récompenses des 30 paliers</small><span class="pass-card-open">VOIR LES OBJETS →</span>
-      </button>
-      <button class="pass-home-card bonus" data-open-pass="bonus">
-        <span class="pass-card-art">✦</span><strong>PASS BONUS</strong><small>Les récompenses supplémentaires</small><span class="pass-card-open">VOIR LES OBJETS →</span>
-      </button>
-      <button class="pass-home-card quest" data-open-pass="quete">
-        <span class="pass-card-art">⚡</span><strong>PASS QUÊTE</strong><small>Les récompenses des défis</small><span class="pass-card-open">VOIR LES OBJETS →</span>
-      </button>
+    <div class="bp-right">
+      <div class="bp-lvlrow"><span class="bp-shield"><b id="bpLvl">1</b></span><span class="bp-lvltxt">NIVEAU <b id="bpLvl2">1</b></span><span class="bp-next" id="bpNextLvl">→ 2</span></div>
+      <div class="bp-xphead"><span id="bpXpLeft">10 000 XP</span><span id="bpXpTo">jusqu'au niveau 2</span></div>
+      <div class="bp-seg" id="bpSeg"></div>
+      <button class="bp-btn bp-buylvl" id="bpBuyLvl"><b>ACHETER UN NIVEAU</b><small><i class="coin"></i> 150 · RÉCOMPENSE IMMÉDIATE</small></button>
+      <button class="bp-btn bp-premium" id="bpPremium"><b>PASSE PREMIUM</b><small><i class="coin"></i> 950 · TOUTES LES TENUES DES AGENTS</small></button>
+      <div class="bp-upnext" id="bpUpNext"></div>
+    </div>
+    <div class="bp-hero" id="bpHero"></div>
+    <div class="bp-tiles" id="bpTiles">
+      <button class="bp-tile t-main" data-open-pass="main"><span class="bp-tile-art" data-skins="brutus,tntina,meowscles,skye,midas"></span><span class="bp-tile-prog"></span><span class="bp-tile-name"><em>RÉCOMPENSES</em> DU PASSE</span></button>
+      <button class="bp-tile t-free" data-open-pass="free"><span class="bp-tile-art" data-skins="jardin,surf"></span><span class="bp-tile-prog"></span><span class="bp-tile-name"><em>PISTE</em> GRATUITE</span></button>
+      <button class="bp-tile t-prem" data-open-pass="premium"><span class="bp-tile-art" data-skins="ombre,midas"></span><span class="bp-tile-prog"></span><span class="bp-tile-name"><em>PISTE</em> PREMIUM</span></button>
+      <button class="bp-tile t-bonus" data-open-pass="bonus"><span class="bp-tile-art" data-skins="cyber"></span><span class="bp-tile-prog"></span><span class="bp-tile-name"><em>PASS</em> BONUS</span></button>
+      <button class="bp-tile t-quest" data-open-pass="quete"><span class="bp-tile-art" data-skins="roi"></span><span class="bp-tile-prog"></span><span class="bp-tile-name"><em>PASS</em> QUÊTE</span></button>
     </div>
   </div>
   <div class="pass-content" id="passContent" style="display:none">
@@ -147,6 +155,7 @@
       <div class="pass-preview" id="passPreview"></div>
     </div>
     <div class="pass-right">
+      <div class="pr-req" id="prReq"></div>
       <div class="pr-level">
         <div class="lvl-badge big"><span id="prLvl">1</span></div>
         <div class="pr-xp">
@@ -163,11 +172,15 @@
       </div>
     </div>
   </div>
-  <div class="mobile-stage" id="passStage" aria-label="Aperçu de la récompense"></div>
   <div class="pass-track-wrap">
-    <button class="pt-arrow l" id="ptL" aria-label="Précédent">‹</button>
+    <div class="pass-pager">
+      <button class="pt-arrow l" id="ptL" aria-label="Page précédente">‹</button>
+      <b id="ppLabel">PAGE 1 / 5</b>
+      <div class="pp-dots" id="ppDots"></div>
+      <span class="pp-hint">2 gratuites · 4 premium par page</span>
+      <button class="pt-arrow r" id="ptR" aria-label="Page suivante">›</button>
+    </div>
     <div class="pass-track" id="passTrack"></div>
-    <button class="pt-arrow r" id="ptR" aria-label="Suivant">›</button>
   </div>
   </div>
 </section>

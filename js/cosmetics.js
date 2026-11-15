@@ -369,8 +369,15 @@ function backpackStraps(torso, color, z, yTop = 0.72, yBot = 0.3, sx = 0.15, ry 
   for (const s of [-1, 1]) {
     const b = rbox(torso, 0.06, h, 0.03, s * sx, cy, z, m, 0.012); // sangle sur le sac
     b.rotation.x = rx; b.rotation.y = s * ry; // ry : épouse les objets ronds
-    onChest(torso, 0.05, 0.34, 0.022, s * 0.16, 0.49, m, 0.008); // sangle poitrine
+    if (!PACK_ALONE) onChest(torso, 0.05, 0.34, 0.022, s * 0.16, 0.49, m, 0.008); // sangle poitrine
   }
+}
+// Sac à dos seul (vignettes) : sans personnage ni sangles de poitrine
+let PACK_ALONE = false;
+export function makeBackpack(id) {
+  const g = new THREE.Group(); PACK_ALONE = true;
+  try { buildBackpack(g, id); } finally { PACK_ALONE = false; }
+  return g;
 }
 function buildBackpack(torso, id) {
   const B = BACKPACKS[id]; if (!B || id === 'none') return;
