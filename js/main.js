@@ -228,6 +228,7 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   const cols = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
   const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x76cc4a), g2 = new THREE.Color(0x4fae3f), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0xb59262), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x2f8a3a), snowDirt = new THREE.Color(0xc9d3dc);
+  const gRock = new THREE.Color(0x857a6c), gRock2 = new THREE.Color(0x6c6660), gMoss = new THREE.Color(0x5f7a45), gcol = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const h = terrainH(x, z);
@@ -241,6 +242,16 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
     if (inPOI(x, z, -4) && h >= 1.4) c.lerp(bw.snow > 0.5 ? snowDirt : dirt, 0.18 + 0.2 * n);
     if (sl > 1.6 || h > 26) c.lerp(rock, clamp(Math.max((sl - 1.6) * 0.8, (h - 26) / 6), 0, 1));
     if (h > 40) c.lerp(snow, clamp((h - 40) / 4, 0, 1));
+    // montagne de la Grotte : roche brun-gris nue (pas de neige), mousse sur
+    // les replats, comme le massif rocheux de la base de l'Ombre
+    {
+      const gd = Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ);
+      if (gd < 72 && h > 1.4) {
+        const k = 1 - clamp((gd - 52) / 20, 0, 1);
+        gcol.copy(gRock).lerp(gRock2, n).lerp(gMoss, clamp(1 - sl / 1.4, 0, 1) * (0.25 + 0.45 * n));
+        c.lerp(gcol, k * k * (3 - 2 * k));
+      }
+    }
     cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
@@ -1161,6 +1172,7 @@ let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
     const h = terrainH(x, z);
     if (h < 2.2 || h > 34 || r > coastR(x / OVAL_X, z / OVAL_Z) * 0.8) continue;
     if (inPOI(x, z, 6)) continue;
+    if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < 56) continue; // montagne de la Grotte : roche nue
     const bw = biomeW(x, z);
     if (bw.desert > 0.5) { if (R() < 0.82) continue; if (tooClose(x, z)) continue; cpts.push({ x, z, h }); continue; }
     const dens = fbm(x * 0.02 + 40, z * 0.02);
@@ -2134,6 +2146,9 @@ class Char {
 const tmpCols = [];
 // La Grotte : un point situé sous le terrain mais dans l'empreinte de la grotte
 // (cratère, tunnel, caverne) repose sur les colliders rocheux, pas sur le terrain.
+// pied du puits de la Grotte : la cible d'atterrissage amortit la chute (on
+// saute du sommet de la montagne dans la base sans dégâts, comme l'original)
+function grottoPad(c) { return c.pos.y < GROTTO.floor1 + 1 && c.pos.x > GROTTO.shaftX0 - 0.5 && c.pos.x < GROTTO.shaftX1 + 0.5 && c.pos.z > GROTTO.shaftZ0 - 0.5 && c.pos.z < GROTTO.shaftZ1 + 0.5; }
 function underGrotto(x, z, y) { return y < terrainH(x, z) - 0.35 && inGrotto(x, z); }
 function rampH(c, x, z) {
   let t;
@@ -4106,7 +4121,7 @@ function spyPatrol(p, staffIndex = 0) {
     agency: [[0, 7.5], [8, 7.5], [10, 0], [8, -7], [0, -7.5], [-6, -7], [-10, 5], [-6, 7.5]].map(([dx, dz]) => [dx * AGENCY_K, dz * AGENCY_K]), // plan agrandi
     yacht: [[-18, 0], [-12, 0], [-3, 0], [4, 0], [11, 0], [23, 2], [23, -6.2], [11, -6.2], [-6, -6.1], [-18, -5.5]],
     rig: [[-6, 4], [0, 4.6], [6, 4], [6, -4], [0, -4.6], [-6, -4]],
-    grotto: [[-7, 6], [0, 8], [7, 6], [7, -4], [0, -8], [-7, -4]],
+    grotto: [[-7, 5], [1, 6.5], [8, -1], [1, -2.5], [-6, -2.5]], // évite le lagon, la base et le coffre-fort
     // Le Requin : ronde au sol — plage devant la gueule, hélipad à l'est,
     // passage étroit entre l'escalier et le coffre-fort (points alignés pour
     // que les PNJ le traversent sans se coincer), derrière la falaise,
@@ -4635,6 +4650,25 @@ function gshell(x, y, z, w, h, d, hex = 0x5b6472) {
   makeStructBox(x, y, z, w, h, d, CAVE_HIDDEN, { indestructible: true, shadow: false });
   gdeco(BOX, hex, x, y + h / 2, z, w, h, d);
 }
+// base de l'Ombre (Grotte) : métal sombre, vitrages et liserés lumineux, chacun
+// fusionné en UN maillage (3 appels de rendu pour toute la base)
+const gMetal = [], gGlass = [], gGlow = [];
+function mdeco(geo, hex, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, list = gMetal) {
+  _de.set(rx, ry, rz, 'XYZ'); _dq.setFromEuler(_de);
+  _dm.compose(_dp.set(x, y, z), _dq, _ds.set(sx, sy, sz));
+  list.push(colorize(geo.clone().applyMatrix4(_dm), hcol(hex)));
+}
+// bloc métallique praticable : collider indestructible + visuel fusionné (y = base)
+function mshell(x, y, z, w, h, d, hex) {
+  makeStructBox(x, y, z, w, h, d, CAVE_HIDDEN, { indestructible: true, shadow: false });
+  mdeco(BOX, hex, x, y + h / 2, z, w, h, d);
+}
+// vitrage : collider + verre teinté (y = base)
+function gpane(x, y, z, w, h, d) {
+  makeStructBox(x, y, z, w, h, d, CAVE_HIDDEN, { indestructible: true, shadow: false });
+  mdeco(BOX, 0xffffff, x, y + h / 2, z, w, h, d, 0, 0, 0, gGlass);
+}
+const gglow = (hex, x, y, z, w, h, d, geo = BOX) => mdeco(geo, hex, x, y, z, w, h, d, 0, 0, 0, gGlow);
 let grottoRockMesh = null; // exposé à la QA : raycast vers le haut = « caverne couverte »
 function finishGrotto() {
   if (!grottoGeos.length) return;
@@ -4645,6 +4679,15 @@ function finishGrotto() {
   scene.add(mesh);
   grottoRockMesh = mesh;
   grottoGeos.length = 0;
+  const batch = (list, mat, shadow) => {
+    if (!list.length) return;
+    const m = new THREE.Mesh(mergeGeometries(list), mat);
+    list.forEach((x) => x.dispose()); list.length = 0;
+    m.castShadow = shadow; m.receiveShadow = shadow; scene.add(m);
+  };
+  batch(gMetal, new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.55, roughness: 0.42 }), true);
+  batch(gGlass, new THREE.MeshStandardMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.26, metalness: 0.2, roughness: 0.05, depthWrite: false }), false);
+  batch(gGlow, new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }), false);
 }
 // La Plateforme : hauteurs du pont (dessous RIG_DY, dessus RIG_DT) — le POI
 // est EN PLEINE MER (plus d'îlot dessous), les pieds s'ancrent sur les fonds.
@@ -6190,123 +6233,216 @@ function buildSpyPOI(p) {
     // =============================================================
     const G = GROTTO;
     const KX = G.cavernX, KZ = G.cavernZ, FY = G.floor1;
-    const ROCK_A = 0x5b6472, ROCK_B = 0x4e5663, ROCK_C = 0x67707e;
-    // QG de Brutus : plateforme métallique surélevée au nord de la caverne
-    const PX = KX + 4, PZ = KZ - 8, PT = FY + 3.6;
+    const ROCK_A = 0x5b6472, ROCK_B = 0x6a625a, ROCK_C = 0x77706a, ROCK_D = 0x58524c;
+    // couleurs de la base de l'Ombre : métal noir, acier, rouge vif, or
+    const BLK = 0x1b1e25, BLK2 = 0x2a2e37, STEEL = 0x4f5561, RED = 0xff2b2b, GOLD = 0xe0a83a, HAZ = 0xffc21a;
+    // pont supérieur de la base (dessus à PT + 0,55 = 7,55)
+    const PT = FY + 3.6;
 
-    // (plus de rampe creusée dans le terrain côté île : world.js ne creuse plus
-    // que l'empreinte cachée sous la voûte — l'île est pleine autour de la
-    // montagne, l'entrée n'est plus que la bouche du crâne côté mer)
+    // ---- CAVERNE : grande salle sous la montagne (sol 3,4 au-dessus de la mer,
+    // voûte 12,9). Le sol est en trois dalles autour du LAGON (coin nord-est) ;
+    // dalles et parois descendent à -5 pour fermer le bassin sous l'eau.
+    gshell(KX, -5, 169.5, 31, 8.4, 22, ROCK_A);       // dalle sud (z 158,5-180,5)
+    gshell(262.75, -5, 154, 18.5, 8.4, 9, ROCK_A);    // dalle nord-ouest (x 253,5-272)
+    gshell(282.4, -5, 154, 4.2, 8.4, 9, ROCK_A);      // dalle nord-est (x 280,3-284,5)
+    const WH = 20.9;
+    gshell(KX, -5, KZ - 13.5, 28.6, WH, 1.4, ROCK_B); // paroi nord (top 15,9)
+    gshell(KX, -5, KZ + 13.5, 28.6, WH, 1.4, ROCK_B); // paroi sud
+    gshell(KX - 13.5, -5, KZ, 1.4, WH, 28.6, ROCK_B); // paroi ouest (côté île : pleine)
+    // paroi est : la FAÇADE CRÂNE (plus bas) — sa bouche est l'entrée à pied
 
-    // ---- CAVERNE : salle voûtée sous la montagne (sol 3,4 AU-DESSUS de la mer,
-    // voûte ~12,9) — dalle et parois descendent sous le terrain pour qu'aucun
-    // jour ne paraisse entre la salle et le monde extérieur
-    gshell(KX, -2, KZ, 31, 5.4, 31, ROCK_A); // dalle du sol (top à FY = 3,4)
-    const WH = 17.9;
-    gshell(KX, -2, KZ - 13.5, 28.6, WH, 1.4, ROCK_B); // paroi nord (top 15,9)
-    gshell(KX, -2, KZ + 13.5, 28.6, WH, 1.4, ROCK_B); // paroi sud (top 15,9)
-    // paroi ouest : PLEINE (l'ancienne bouche de la rampe est condamnée) —
-    // la montagne est continue côté île, on ne voit plus le ciel depuis la
-    // caverne : la grotte est bien cachée sous la montagne
-    gshell(KX - 13.5, -2, KZ, 1.4, WH, 28.6, ROCK_B);
-    // paroi est : REMPLACÉE par la FAÇADE CRÂNE (voir plus bas) — la bouche du
-    // crâne est l'entrée sèche, face à l'océan
-    // ---- MONTAGNE : le relief du terrain (world.js terrainH, pic visible
-    // ~38 m) est LA montagne — ces massifs gshell en sont le NOYAU INTERNE :
-    // étages 0-1 (voûte, colliders, sommet ~22) et étages 2-3 (dôme/crêtes,
-    // sommet ~29) restent entièrement ENTERRÉS sous le terrain. La CHEMINÉE
-    // EST FERMÉE : un massif central bouche l'ancien trou béant à chaque
-    // étage. La bouche du crâne EST (x 281,8-284,2, z 159,5-170,5) reste
-    // libre : c'est l'unique entrée, au fond d'une gorge que le canyon sec
-    // découpe dans le flanc est de la montagne.
+    // ---- MONTAGNE : le relief du terrain (world.js) est la montagne ; ces
+    // massifs forment la voûte et le fond du cratère sommital. Au centre, LE
+    // PUITS (x 266-272, z 162-168) traverse toute la voûte : comme la vraie
+    // base, on peut se jeter dans la Grotte depuis le sommet de la montagne.
     {
-      const CX = KX, CZ = KZ;
-      const ROCK = 0x5b6472, ROCK_D = 0x4e5663;
-      // ÉTAGE 0 (base, 12.9 -> 17.9) : les 3 massifs historiques (colliders)
-      // + le massif OUEST (condamnation de l'ancienne bouche) + le massif
-      // CENTRAL (fermeture de la cheminée : la voûte est pleine).
-      // Massif est RACCOURCI : il s'arrête derrière la façade du crâne (est).
-      gshell(281.5, 12.9, CZ, 5, 5, 40, ROCK_B);          // massif est (x 279-284)
-      gshell(272, 12.9, CZ - 17.2, 36, 5, 16, ROCK_B);    // massif nord (z 139.8-155.8)
-      gshell(269, 12.9, CZ + 13.85, 30, 5, 9.3, ROCK_B); // massif sud (z 174.2-183.5)
-      gshell(256.5, 12.9, CZ, 4.2, 5, 28.6, ROCK_B);      // massif ouest (x 254.4-258.6)
-      gshell(269, 12.9, CZ, 21.5, 5, 19, ROCK_B);         // massif central (x 258.25-279.75, z 155.5-174.5)
-      // ÉTAGE 1 (17.9 -> 22.4) : CADRE complet autour du massif central
-      gshell(282, 17.9, CZ, 4, 4.5, 40, ROCK_B);          // est (x 280-284)
-      gshell(271, 17.9, CZ - 19, 34, 4.5, 14, ROCK_B);   // nord (z 139-153)
-      gshell(270, 17.9, CZ + 18.5, 28, 4.5, 9, ROCK_B);   // sud (z 179-188)
-      gshell(256.5, 17.9, CZ, 3, 4.5, 34, ROCK_B);        // ouest (x 255-258)
-      gshell(269, 17.9, CZ, 22, 4.5, 28, ROCK_B);         // central (x 258-280, z 151-179)
-      // ÉTAGE 2 (22.4 -> 26.4) : dômes décalés, crête plus étroite
-      gshell(283, 22.4, CZ - 10, 6, 4, 16, ROCK_B);         // dôme NE (x 280-286, z 147-163)
-      gshell(265, 22.4, CZ + 14, 8, 4, 10, ROCK_B);         // dôme SO (x 261-269, z 179-189)
-      gshell(273, 22.4, CZ - 17, 30, 3.5, 5, ROCK_B);        // crête nord (z 140-145)
-      gshell(273, 22.4, CZ + 17, 26, 3.5, 5, ROCK_B);        // crête sud (z 179-184)
-      // ÉTAGE 3 (26.4 -> 29.4) : pointes sommitales
-      gshell(282, 26.4, CZ - 10, 5, 3, 7, ROCK_B);           // pointe NE (x 279.5-284.5)
-      gshell(266, 26.4, CZ + 14, 6, 3, 7, ROCK_B);           // pointe SO (z 179-186)
-      // FACETTES : gdeco pour casser les faces planes et donner du relief
-      // (plaquées sur les étages, jamais dans la bouche — les facettes est
-      // sont calées sur les massifs raccourcis)
-      for (const [bx, bz, by2, bs] of [[13, -14, 19.4, 5.5], [14, 2, 20.4, 6.0], [12, 16, 18.4, 5.0], [-13, -13, 19.4, 5.0], [-16, 8, 20.4, 5.5], [6, -19, 20.4, 4.5], [-3, 19, 19.4, 4.0]])
-        gdeco(PRISM_GEO, ROCK_D, CX + bx, by2, CZ + bz, bs, bs, bs * 1.3, (MR() - 0.5) * 0.6, (MR() - 0.5) * 0.4, 0);
-      // HERBE : tapis vert sur les surfaces supérieures réelles
-      gdeco(BOX, 0x4a9b4f, 283, 26.8, CZ - 10, 6, 0.6, 12);   // dôme NE (x 280-286, z 147-163)
-      gdeco(BOX, 0x4a9b4f, 265, 26.0, CZ + 14, 6, 0.6, 8);   // dôme SO (x 261-269, z 179-189)
-      gdeco(BOX, 0x55884f, 273, 26.2, CZ - 17, 22, 0.5, 4);  // crête nord (z 140-145)
-      gdeco(BOX, 0x55884f, 273, 26.2, CZ + 17, 18, 0.5, 4);  // crête sud (z 179-184)
-      gdeco(BOX, 0x55884f, 282, 29.6, CZ - 10, 4, 0.5, 5);  // pointe NE (x 280-284)
-      gdeco(BOX, 0x55884f, 266, 28.8, CZ + 14, 4.5, 0.5, 5); // pointe SO (z 179-186)
-      gdeco(BOX, 0x55884f, 269, 26.2, CZ, 20, 0.5, 26);     // sommet du massif central (22.4 + herbe)
-      // SAPINS : sur les crêtes réelles (y du sommet du bloc + 0.5) — les
-      // sapins est sont calés sur le massif est raccourci (x 280-284)
-      for (const [tx, tz, hy] of [[11, -10, 21.9], [12, -14, 22.4], [13, -12, 22.9], [12, 2, 21.9], [11, 8, 21.4], [12, 16, 20.9], [4, -20, 21.9], [10, -22, 22.9], [-8, 18, 21.4], [-12, 20, 20.9], [-3, 22, 21.4], [-4, -3, 22.4], [5, 4, 22.4], [1, -8, 22.4]]) {
-        gdeco(PRISM_GEO, 0x2d5a35, CX + tx, hy + 1.8, CZ + tz, 1.4, 3.6, 1.4, 0, (MR() - 0.5) * 0.3, 0);
-        gdeco(PRISM_GEO, 0x4a3423, CX + tx, hy + 0.4, CZ + tz, 0.5, 0.8, 0.5);
+      const CZ = KZ, X0 = G.shaftX0, X1 = G.shaftX1, Z0 = G.shaftZ0, Z1 = G.shaftZ1;
+      // ÉTAGE 0 (12,9 -> 17,9)
+      gshell(281.5, 12.9, CZ, 5, 5, 40, ROCK_B);          // massif est (derrière le crâne)
+      gshell(272, 12.9, CZ - 17.2, 36, 5, 16, ROCK_B);    // massif nord
+      gshell(269, 12.9, CZ + 13.85, 30, 5, 9.3, ROCK_B);  // massif sud
+      gshell(256.5, 12.9, CZ, 4.2, 5, 28.6, ROCK_B);      // massif ouest
+      // massif central PERCÉ par le puits : quatre blocs autour de l'ouverture
+      gshell((258.25 + X0) / 2, 12.9, CZ, X0 - 258.25, 5, 19, ROCK_B);
+      gshell((X1 + 279.75) / 2, 12.9, CZ, 279.75 - X1, 5, 19, ROCK_B);
+      gshell(KX, 12.9, (155.5 + Z0) / 2, X1 - X0, 5, Z0 - 155.5, ROCK_B);
+      gshell(KX, 12.9, (Z1 + 174.5) / 2, X1 - X0, 5, 174.5 - Z1, ROCK_B);
+      // ÉTAGE 1 (17,9 -> 22,4) : fond du cratère, percé lui aussi
+      gshell(282, 17.9, CZ, 4, 4.5, 40, ROCK_B);
+      gshell(271, 17.9, CZ - 19, 34, 4.5, 14, ROCK_B);
+      gshell(270, 17.9, CZ + 18.5, 28, 4.5, 9, ROCK_B);
+      gshell(256.5, 17.9, CZ, 3, 4.5, 34, ROCK_B);
+      gshell((258 + X0) / 2, 17.9, CZ, X0 - 258, 4.5, 28, ROCK_B);
+      gshell((X1 + 280) / 2, 17.9, CZ, 280 - X1, 4.5, 28, ROCK_B);
+      gshell(KX, 17.9, (151 + Z0) / 2, X1 - X0, 4.5, Z0 - 151, ROCK_B);
+      gshell(KX, 17.9, (Z1 + 179) / 2, X1 - X0, 4.5, 179 - Z1, ROCK_B);
+      // comblement ouest : plus de tranchée entre le cratère et le flanc
+      gshell(251, 12.9, CZ, 8, 9.5, 50, ROCK_B);
+      // ÉTAGES 2-3 : bosses rocheuses qui ferment le cratère côté nord-est / sud-ouest
+      gshell(283, 22.4, CZ - 10, 6, 4, 16, ROCK_B);
+      gshell(265, 22.4, CZ + 14, 8, 4, 10, ROCK_B);
+      gshell(273, 22.4, CZ - 17, 30, 3.5, 5, ROCK_B);
+      gshell(273, 22.4, CZ + 17, 26, 3.5, 5, ROCK_B);
+      gshell(282, 26.4, CZ - 10, 5, 3, 7, ROCK_B);
+      gshell(266, 26.4, CZ + 14, 6, 3, 7, ROCK_B);
+      // FACETTES et éboulis : cassent les faces planes, fond du cratère irrégulier
+      for (const [bx, bz, by2, bs] of [[13, -14, 19.4, 5.5], [14, 2, 20.4, 6.0], [12, 16, 18.4, 5.0], [-13, -13, 19.4, 5.0], [-16, 8, 20.4, 5.5], [6, -19, 20.4, 4.5], [-3, 19, 19.4, 4.0], [-17, -4, 19.4, 5.0], [-15, 18, 19.4, 4.6]])
+        gdeco(PRISM_GEO, ROCK_D, KX + bx, by2, CZ + bz, bs, bs, bs * 1.3, (MR() - 0.5) * 0.6, (MR() - 0.5) * 0.4, 0);
+      for (let i = 0; i < 40; i++) {
+        const x = rand(251, 280), z = rand(144, 186);
+        if (x > X0 - 2.2 && x < X1 + 2.2 && z > Z0 - 2.2 && z < Z1 + 2.2) continue; // bord du puits dégagé
+        const sz = rand(0.8, 2.4);
+        gdeco(PRISM_GEO, MR() < 0.5 ? ROCK_C : ROCK_D, x, 22.3, z, sz * 1.3, sz * 0.7, sz, (MR() - 0.5) * 0.3, rand(Math.PI), 0);
       }
-      // la cheminée est FERMÉE : les massifs central (étages 0-1) bouchent
-      // l'ancien trou béant, plus aucun jour au-dessus de la caverne
+      // touffes de mousse sur le fond du cratère
+      for (let i = 0; i < 14; i++) {
+        const x = rand(252, 279), z = rand(146, 184);
+        if (x > X0 - 2.5 && x < X1 + 2.5 && z > Z0 - 2.5 && z < Z1 + 2.5) continue;
+        gdeco(BOX, MR() < 0.5 ? 0x5f7a45 : 0x4f6a3c, x, 22.45, z, rand(1.5, 3.5), 0.12, rand(1.5, 3.5), 0, rand(Math.PI), 0);
+      }
+      // MARGELLE DU PUITS : cadre métallique noir, bandes de danger jaunes et
+      // feux rouges aux angles — on le repère de loin depuis le ciel
+      const RY = 22.4;
+      mshell(KX, RY, Z0 - 0.45, X1 - X0 + 1.8, 0.45, 0.9, BLK);
+      mshell(KX, RY, Z1 + 0.45, X1 - X0 + 1.8, 0.45, 0.9, BLK);
+      mshell(X0 - 0.45, RY, KZ, 0.9, 0.45, Z1 - Z0, BLK);
+      mshell(X1 + 0.45, RY, KZ, 0.9, 0.45, Z1 - Z0, BLK);
+      for (let i = 0; i < 6; i++) {
+        mdeco(BOX, HAZ, X0 + 0.5 + i, RY + 0.47, Z0 - 0.45, 0.45, 0.02, 0.86, 0, 0.6, 0);
+        mdeco(BOX, HAZ, X0 + 0.5 + i, RY + 0.47, Z1 + 0.45, 0.45, 0.02, 0.86, 0, 0.6, 0);
+      }
+      for (const [cx2, cz2] of [[X0 - 0.45, Z0 - 0.45], [X1 + 0.45, Z0 - 0.45], [X0 - 0.45, Z1 + 0.45], [X1 + 0.45, Z1 + 0.45]]) {
+        mdeco(BOX, BLK2, cx2, RY + 0.85, cz2, 0.3, 0.8, 0.3);
+        gglow(RED, cx2, RY + 1.35, cz2, 0.36, 0.3, 0.36);
+      }
+      // parois du puits : anneaux de projecteurs (le puits s'illumine la nuit)
+      for (const yy of [15.2, 20.2]) {
+        gglow(0xfff1c8, KX, yy, Z0 + 0.03, 4, 0.18, 0.06);
+        gglow(0xfff1c8, KX, yy, Z1 - 0.03, 4, 0.18, 0.06);
+      }
+      // colonne de lumière du jour qui tombe dans la caverne
+      const beam = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ color: 0xfff2cc, transparent: true, opacity: 0.025, blending: THREE.AdditiveBlending, depthWrite: false }));
+      beam.scale.set(X1 - X0 - 0.4, 19, Z1 - Z0 - 0.4); beam.position.set(KX, 12.9, KZ); scene.add(beam);
+      // cible d'atterrissage au pied du puits (disque noir, anneau rouge)
+      mdeco(CYL_GEO, BLK, KX, FY + 0.02, KZ, 6.4, 0.04, 6.4);
+      gglow(RED, KX, FY + 0.03, KZ, 7.0, 0.03, 7.0, CYL_GEO);
+      mdeco(CYL_GEO, BLK, KX, FY + 0.045, KZ, 6.0, 0.04, 6.0);
+      gglow(RED, KX, FY + 0.06, KZ, 1.2, 0.03, 1.2, CYL_GEO);
     }
     // roches irrégulières plaquées sur les parois
-    for (const [bx, bz, by2, bs] of [[12.5, -5, 6.4, 2.4], [-12.4, 4, 8.4, 2.8], [-5, 12.5, 4.4, 2.2], [7, -12.4, 10.4, 2.6], [-12.5, -9, 11.4, 2.4], [12.4, 8, 11.2, 2.2]])
+    for (const [bx, bz, by2, bs] of [[12.5, -5, 9.4, 2.4], [-12.4, 4, 8.4, 2.8], [-5, 12.5, 10.4, 2.2], [12.4, 8, 11.2, 2.2], [-12.6, 12, 6.4, 2.4]])
       gdeco(BOX, ROCK_C, KX + bx, by2, KZ + bz, bs, bs * 0.85, bs * 1.2, 0.3, 0.5, 0.2);
-    // stalactites suspendues à la voûte (toutes sous les massifs pleins) + stalagmites
-    for (const [sx2, sz2, sl] of [[15, -10, 2.6], [8, -15, 3.2], [12, -15, 2.2], [3, 12, 2.8], [-9, 11, 2.4], [16, 3, 2.0]])
-      gdeco(PRISM_GEO, 0x8b939e, KX + sx2, 13.0 - sl, KZ + sz2, 1.1, sl, 1.1, Math.PI, 0, 0);
-    for (const [sx2, sz2, sl] of [[6, 6, 1.6], [-8, -4, 2.0], [-2, 9, 1.4], [9, -2, 1.8]])
-      gdeco(PRISM_GEO, 0x8b939e, KX + sx2, FY, KZ + sz2, 1.0, sl, 1.0, 0, 0, 0);
+    // stalactites (hors du puits) et stalagmites (hors des passages)
+    for (const [sx2, sz2, sl] of [[260, 161.5, 2.4], [276, 161, 2.8], [279, 168.5, 2.2], [261, 170, 2.6], [273, 176, 2.0], [277, 153, 2.2]])
+      gdeco(PRISM_GEO, 0x8b939e, sx2, 13.0 - sl, sz2, 1.1, sl, 1.1, Math.PI, 0, 0);
+    for (const [sx2, sz2, sl] of [[281, 176.6, 1.6], [257.2, 171.6, 1.8]])
+      gdeco(PRISM_GEO, 0x8b939e, sx2, FY, sz2, 1.0, sl, 1.0, 0, 0, 0);
 
-    // ---- QG DE BRUTUS : plateforme, piliers, escalier, garde-corps
-    for (const [ox, oz] of [[-4.5, -2.8], [4.5, -2.8], [-4.5, 2.8], [4.5, 2.8]]) gshell(PX + ox, FY, PZ + oz, 0.7, 3.6, 0.7, 0x5a616c);
-    gshell(PX, PT, PZ, 11, 0.55, 7, 0x5a616c);
-    // escalier : descend vers l'OUEST le long du bord ouest de la plateforme —
-    // il ne doit jamais barrer l'axe de la porte d'eau (couloir z 158-172).
-    // Sommet de marche le plus proche de la plateforme à PT+0,55-0,45 (3,1) :
-    // dernier dénivelé de 0,45 m gravissable en marchant (STEP 0,6).
-    for (let i = 0; i < 8; i++) gshell(PX - 5.5 - 0.475 - i * 0.92, PT - 0.9 - 0.45 * i, PZ, 0.95, 1.0, 2.6, 0x5a616c);
-    gdeco(BOX, 0x8a929e, PX, PT + 0.55, PZ - 3.5, 11, 0.9, 0.1);
-    gdeco(BOX, 0x8a929e, PX, PT + 0.55, PZ + 3.5, 11, 0.9, 0.1);
-    gdeco(BOX, 0x8a929e, PX + 5.5, PT + 0.55, PZ, 0.1, 0.9, 7);
-    gdeco(BOX, 0x39424e, PX + 2, PT + 0.55, PZ - 1, 2.6, 0.8, 1.4); // table de commandement
-    gdeco(BOX, 0x39ff88, PX + 2, PT + 1.0, PZ - 1, 1.6, 0.06, 0.9); // écran radar
-    gdeco(BOX, 0x8a6a3a, PX - 3.2, PT + 0.55, PZ + 2, 1.2, 1.1, 1.2); // caisse
-    gdeco(BOX, 0x6b5430, PX - 3.2, PT + 1.65, PZ + 2, 1.0, 0.1, 1.0);
-
-    // ---- CASCADE : elle tombe du bord du massif sud sur le sol de la caverne
-    // (cette fois SÈCHE : la salle est au-dessus de la mer, un petit bassin
-    // turquoise peu profond reçoit l'eau au pied — purement décoratif)
+    // ---- BASE DE L'OMBRE (coin nord-ouest) : bâtiment métallique noir sur
+    // deux niveaux adossé à la paroi — rez-de-chaussée vitré (armurerie,
+    // écrans), pont supérieur avec salle de contrôle et bureau de Brutus,
+    // escalier extérieur et passerelle qui traverse la caverne.
     {
-      const wx = KX + 10.5, wz = KZ + 10.5;
+      const BX0 = 256.2, BX1 = 271, BZ0 = 152.2, BZ1 = 160;
+      const BXC = (BX0 + BX1) / 2, BZC = (BZ0 + BZ1) / 2;
+      // pont supérieur (= plafond du rez-de-chaussée), dessus à 7,55
+      mshell(BXC, PT, BZC, BX1 - BX0, 0.55, BZ1 - BZ0, BLK2);
+      gglow(RED, BXC, PT - 0.05, BZ1 + 0.01, BX1 - BX0, 0.1, 0.04); // liseré rouge sous le pont
+      // mur est (côté lagon) et façade vitrée sud avec une porte
+      mshell(BX1 - 0.2, FY, BZC, 0.4, 3.6, BZ1 - BZ0, BLK);
+      mshell(257.35, FY, BZ1 - 0.2, 2.3, 3.6, 0.4, BLK);            // trumeau ouest (pied de l'escalier)
+      for (const [x0, x1] of [[258.5, 263.2], [265.2, 270.8]]) {   // porte : x 263,2-265,2
+        const w = x1 - x0, xc = (x0 + x1) / 2;
+        mshell(xc, FY, BZ1 - 0.2, w, 0.5, 0.4, BLK);                // allège
+        gpane(xc, FY + 0.5, BZ1 - 0.2, w, 2.7, 0.12);               // vitrage
+        mdeco(BOX, BLK, xc, FY + 3.4, BZ1 - 0.2, w, 0.4, 0.4);      // linteau
+        for (let k = 0; k <= 2; k++) mdeco(BOX, BLK, x0 + w * k / 2, FY + 1.85, BZ1 - 0.2, 0.14, 2.7, 0.2); // montants
+      }
+      mdeco(BOX, BLK, 264.2, FY + 3.4, BZ1 - 0.2, 2.0, 0.4, 0.4);   // linteau de la porte
+      gglow(RED, 264.2, FY + 3.15, BZ1 + 0.02, 1.6, 0.08, 0.04);
+      // intérieur du rez-de-chaussée : grand écran, armurerie, bancs de contrôle
+      gglow(0x37d2ff, 263, 5.3, BZ0 + 0.06, 4.2, 1.7, 0.05);
+      gglow(0x0b2a3a, 263, 5.3, BZ0 + 0.08, 3.9, 1.45, 0.03);
+      for (let k = 0; k < 4; k++) gglow(0x37d2ff, 261.4 + k * 1.1, 5.0 + (k % 2) * 0.35, BZ0 + 0.1, 0.8, 0.05, 0.02);
+      for (const rx of [258.2, 259.6]) { // râteliers d'armes
+        mdeco(BOX, BLK2, rx, FY + 1.3, BZ0 + 0.35, 1.2, 2.6, 0.5);
+        for (let k = 0; k < 3; k++) mdeco(BOX, 0x0d0f13, rx, FY + 0.7 + k * 0.7, BZ0 + 0.62, 1.0, 0.12, 0.12);
+      }
+      mshell(267.5, FY, 154.2, 3.2, 0.95, 1.1, BLK2);               // console
+      gglow(0x39ff88, 267.5, FY + 0.99, 154.2, 2.6, 0.03, 0.7);
+      // pont supérieur : garde-corps (ouvert sur l'escalier et la passerelle)
+      for (const [x0, x1] of [[258.5, 262], [264, BX1]]) {
+        mdeco(BOX, STEEL, (x0 + x1) / 2, PT + 1.45, BZ1 - 0.05, x1 - x0, 0.08, 0.08);
+        for (let x = x0; x <= x1 + 0.01; x += (x1 - x0) / Math.max(1, Math.round((x1 - x0) / 1.7))) mdeco(BOX, STEEL, x, PT + 1.0, BZ1 - 0.05, 0.08, 0.9, 0.08);
+      }
+      mdeco(BOX, STEEL, BX1 - 0.05, PT + 1.45, BZC, 0.08, 0.08, BZ1 - BZ0);
+      // SALLE DE CONTRÔLE (ouest du pont) : pupitres, mur d'écrans, auvent
+      mshell(260, PT + 0.55, 154.0, 5.2, 0.9, 0.9, BLK2);
+      for (let k = 0; k < 4; k++) gglow(k % 2 ? 0x37d2ff : RED, 258.2 + k * 1.2, PT + 1.5, 154.05, 0.9, 0.04, 0.5);
+      gglow(0x0b2a3a, 260, PT + 3.0, BZ0 + 0.06, 5.6, 2.4, 0.04);
+      gglow(RED, 260, PT + 3.0, BZ0 + 0.07, 1.6, 1.6, 0.4, new THREE.TorusGeometry(0.5, 0.06, 6, 24)); // emblème
+      for (let k = 0; k < 3; k++) gglow(0x37d2ff, 258.1 + k * 1.9, PT + 2.2, BZ0 + 0.08, 1.4, 0.7, 0.03);
+      mdeco(BOX, BLK, 260, PT + 3.65, 154.2, 6.6, 0.25, 4.0);       // auvent
+      gglow(0xfff1c8, 260, PT + 3.5, 154.2, 5.6, 0.04, 0.12);
+      // BUREAU DE BRUTUS (est du pont) : bureau noir et or, emblème, radar
+      mshell(268, PT + 0.55, 154.6, 2.8, 0.8, 1.3, BLK);
+      mdeco(BOX, GOLD, 268, PT + 1.37, 154.6, 2.9, 0.05, 1.4);
+      gglow(0x39ff88, 267.3, PT + 1.42, 154.6, 0.9, 0.03, 0.7);
+      mdeco(BOX, BLK2, 268, PT + 0.95, 153.3, 1.0, 1.4, 0.8);        // fauteuil
+      gglow(GOLD, 268, PT + 3.2, BZ0 + 0.07, 2.4, 2.4, 0.4, new THREE.TorusGeometry(0.5, 0.07, 6, 28));
+      gglow(RED, 268, PT + 3.2, BZ0 + 0.08, 0.9, 0.9, 0.03);
+      // caisses sur le pont
+      mshell(265.2, PT + 0.55, 153.2, 1.2, 1.1, 1.2, 0x6b5430);
+      // ESCALIER extérieur (ouest) : du sol de la caverne au pont supérieur
+      for (let i = 0; i < 9; i++) mshell(257.5, FY + 0.45 * (i + 1) - 1.0, 168 - 0.92 * i, 2.0, 1.0, 0.95, STEEL);
+      mdeco(BOX, STEEL, 258.55, FY + 2.9, 164.3, 0.08, 0.08, 8.3, Math.atan2(4.0, 7.4), 0, 0);
+      // PASSERELLE qui traverse la caverne jusqu'au tablier du mur sud
+      mshell(263, 6.9, 167.8, 2.0, 0.5, 15.6, STEEL);
+      for (const sxr of [262.05, 263.95]) mdeco(BOX, STEEL, sxr, 8.3, 167.8, 0.07, 0.07, 15.6);
+      for (let z = 160.6; z < 175.6; z += 2.5) for (const sxr of [262.05, 263.95]) mdeco(BOX, STEEL, sxr, 7.85, z, 0.07, 0.9, 0.07);
+      gglow(RED, 263, 6.86, 167.8, 0.1, 0.06, 15.4);
+    }
+
+    // ---- LAGON intérieur (coin nord-est) : bassin d'eau de mer sous la
+    // voûte, alimenté par la cascade, avec une vedette de l'Ombre amarrée et
+    // un escalier immergé pour en ressortir à la nage
+    {
+      const LX0 = G.lagX0, LX1 = G.lagX1, LZ0 = G.lagZ0, LZ1 = G.lagZ1;
+      // escalier immergé le long du bord sud : première marche juste sous la surface
+      for (let i = 0; i < 10; i++) {
+        const top = -0.35 + 0.416 * i;
+        mshell(272.5 + 0.8 * i, -5, 157.7, 0.8, top + 5, 1.6, STEEL);
+      }
+      // bordures du bassin (bandes jaunes de quai)
+      mdeco(BOX, HAZ, LX0 - 0.15, FY + 0.02, (LZ0 + LZ1) / 2, 0.3, 0.04, LZ1 - LZ0);
+      mdeco(BOX, HAZ, LX1 + 0.15, FY + 0.02, (LZ0 + LZ1) / 2, 0.3, 0.04, LZ1 - LZ0);
+      mdeco(BOX, HAZ, (LX0 + LX1) / 2, FY + 0.02, LZ1 + 0.15, LX1 - LX0, 0.04, 0.3);
+      // bittes d'amarrage
+      for (const bx of [273.2, 279.2]) mdeco(CYL_GEO, BLK2, bx, FY + 0.3, LZ1 + 0.45, 0.35, 0.6, 0.35);
+      // projecteurs immergés (le bassin luit en cyan)
+      for (const bx of [274, 278]) gglow(0x5fe8ff, bx, -1.6, LZ0 + 0.1, 1.2, 0.5, 0.05);
+      // VEDETTE de l'Ombre : coque noire, bande rouge, pare-brise (flotte et tangue)
+      const boat = new THREE.Group();
+      const hullM = matC(BLK, { metalness: 0.4, roughness: 0.4 });
+      const hull = new THREE.Mesh(BOX, hullM); hull.scale.set(3.6, 0.7, 1.7); hull.position.y = 0.2; boat.add(hull);
+      const nose = new THREE.Mesh(PRISM_GEO, hullM); nose.scale.set(1.7, 1.3, 0.7); nose.rotation.set(0, Math.PI / 2, Math.PI / 2); nose.position.set(2.15, 0.2, 0); boat.add(nose);
+      const stripe = new THREE.Mesh(BOX, matC(RED, { emissive: RED, emissiveIntensity: 0.6 })); stripe.scale.set(3.62, 0.12, 1.72); stripe.position.y = 0.4; boat.add(stripe);
+      const ws = new THREE.Mesh(BOX, matC(0x9fd8ff, { transparent: true, opacity: 0.45 })); ws.scale.set(0.08, 0.5, 1.3); ws.position.set(0.6, 0.8, 0); ws.rotation.z = 0.5; boat.add(ws);
+      const seat = new THREE.Mesh(BOX, matC(0x3a3f4a)); seat.scale.set(0.8, 0.4, 1.2); seat.position.set(-0.6, 0.7, 0); boat.add(seat);
+      boat.position.set(276.4, 0, 154.4); boat.rotation.y = 0.08; scene.add(boat);
+      spyFx.push((dt, t) => { boat.position.y = Math.sin(t * 1.3) * 0.07 - 0.05; boat.rotation.z = Math.sin(t * 0.9) * 0.025; boat.rotation.x = Math.sin(t * 1.1) * 0.02; });
+    }
+
+    // ---- CASCADE : elle tombe de la voûte dans le lagon (angle nord-est)
+    {
       grottoWaterfallTex = canvasTex((g, s) => {
         g.fillStyle = 'rgba(190,230,255,0.9)'; g.fillRect(0, 0, s, s);
         for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.5})`; g.fillRect(Math.random() * s, Math.random() * s, 2 + Math.random() * 4, 12 + Math.random() * 30); }
       }, 128);
       grottoWaterfallTex.wrapS = grottoWaterfallTex.wrapT = THREE.RepeatWrapping;
-      const wf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 14, 12, 1, true), new THREE.MeshBasicMaterial({ map: grottoWaterfallTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
-      wf.position.set(273, 10.4, 173.5); scene.add(wf);
-      grottoPoolPos = new THREE.Vector3(273, FY, 173.5); // éclaboussures au pied de la cascade
-      const pool = new THREE.Mesh(CYL_GEO, matC(0x53d8e8, { transparent: true, opacity: 0.7, roughness: 0.15 }));
-      pool.scale.set(2.4, 0.14, 2.4); pool.position.set(273, FY + 0.07, 173.5); scene.add(pool);
+      const wf = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.4, 12.9, 12, 1, true), new THREE.MeshBasicMaterial({ map: grottoWaterfallTex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      wf.position.set(278.6, 6.45, 153.7); scene.add(wf);
+      grottoPoolPos = new THREE.Vector3(278.6, 0, 153.7); // éclaboussures au pied de la cascade
     }
 
     // ---- CRISTAUX LUMINEUX CYAN (maillage émissif fusionné)
@@ -6317,7 +6453,7 @@ function buildSpyPOI(p) {
         _dm.compose(_dp.set(x, y, z), _dq, _ds.set(s, s * 1.8, s));
         crysGeos.push(colorize(PRISM_GEO.clone().applyMatrix4(_dm), hcol(0x9fe8ff)));
       };
-      for (const [cx2, cy2, cz2, s] of [[12.2, 5.4, -6, 0.9], [9, 5.4, -7, 1.1], [-6, 4.4, 12.2, 0.8], [12.2, 11.4, 6, 1.0], [4, 12.3, -12.2, 0.7], [-11, 12.1, 9, 0.9]]) crys(KX + cx2, cy2, KZ + cz2, s);
+      for (const [cx2, cy2, cz2, s] of [[281.2, 5.4, 159.4, 0.9], [263, 4.4, 177.2, 0.8], [281.2, 11.4, 171, 1.0], [273, 12.3, 152.8, 0.7], [258, 12.1, 174, 0.9], [256.6, 4.4, 175, 1.0]]) crys(cx2, cy2, cz2, s);
       const crysMesh = new THREE.Mesh(mergeGeometries(crysGeos), matC(0x53e0ff, { emissive: 0x17a0c8, emissiveIntensity: 1.7, roughness: 0.25 }));
       crysMesh.castShadow = true; scene.add(crysMesh);
     }
@@ -6327,10 +6463,10 @@ function buildSpyPOI(p) {
     const lampAt = (x, y, z) => { const l = new THREE.Mesh(BOX, lampM); l.scale.set(0.32, 0.5, 0.32); l.position.set(x, y, z); scene.add(l); };
     lampAt(279.5, 5.6, 158.0); // entrée de la caverne, sous l'arche rocheuse
     const addCaveLight = (x, y, z, color, intensity, dist) => { const L = new THREE.PointLight(color, intensity, dist); L.position.set(x, y, z); scene.add(L); };
-    addCaveLight(KX, 11.4, KZ, 0x66d9ff, 14, 34); // caverne
-    addCaveLight(KX + 4, 6.4, KZ + 6.5, 0x7fd0ff, 9, 20); // cascade
-    addCaveLight(PX, PT + 2.5, PZ, 0xffc98a, 8, 18); // QG
-    addCaveLight(261, 9.4, 158, 0xffd9b0, 5, 12); // crâne de l'Ombre
+    addCaveLight(KX + 2, 11, KZ + 5, 0xbfe2ff, 11, 32); // caverne
+    addCaveLight(KX, 9.5, KZ, 0xfff0d0, 9, 18);         // lumière du puits
+    addCaveLight(263, 6.6, 158.5, 0xff4848, 8, 15);     // base de l'Ombre (rouge)
+    addCaveLight(276, 1.6, 155.5, 0x3fd8ff, 9, 15);     // lagon
 
     // ---- FAÇADE CRÂNE : la bouche du crâne EST l'entrée de la Grotte. Le
     // visage est sculpté dans la face EST de la montagne, FACE À L'OCÉAN
@@ -6396,34 +6532,23 @@ function buildSpyPOI(p) {
       grottoSkullBounds = sb;
     }
 
-    // (l'ancienne ENTRÉE OUEST est condamnée : la paroi ouest de la caverne est
-    // pleine et la montagne la recouvre — plus de linteau ni de passage côté île)
-
-    // ---- PASSERELLE MÉTALLIQUE le long du mur sud + conteneurs et cuve :
-    // habillage industriel de la base souterraine de l'Ombre
+    // ---- TABLIER MÉTALLIQUE le long du mur sud (relié à la passerelle) +
+    // conteneur et caisses : habillage industriel de la base
     {
-      const WM = 0x5a616c;
+      const WM = 0x4f5561;
       gshell(267.3, 6.7, 176.7, 17.4, 0.5, 2.2, WM); // tablier le long du mur sud
-      for (const cxp of [275, 262.4, 258.2]) gdeco(BOX, 0x39424e, cxp, 5.5, 177.3, 0.5, 1.2, 0.4); // consoles
+      for (const cxp of [275, 268.5, 258.2]) gdeco(BOX, 0x39424e, cxp, 5.5, 177.3, 0.5, 1.2, 0.4); // consoles
       gdeco(BOX, 0x8a929e, 267.3, 7.9, 175.65, 17.4, 0.9, 0.1); // garde-corps
       for (let i = 0; i < 5; i++) gdeco(BOX, 0x8a929e, 275.5 - i * 4.1, 7.9, 175.65, 0.12, 0.9, 0.12); // poteaux
-      // escalier d'accès depuis le sol de la caverne (côté ouest) : les
-      // marches MONTENT vers le tablier (dernière marche à 6,75, à 0,45 m
-      // sous le dessus du tablier 7,2 — dénivelé gravissable en marchant)
+      // escalier d'accès depuis le sol de la caverne (côté ouest)
       for (let i = 0; i < 8; i++) gshell(259.8, 2.6 + 0.45 * i, 168.6 + i * 0.92, 2.2, 1.0, 0.95, WM);
-      // conteneurs de fret (posés au sec sur le sol de la caverne)
-      makeStructBox(274, 3.4, 173.5, 6.5, 2.8, 2.8, matC(0xb03a2e, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
-      makeStructBox(277, 3.4, 155.5, 2.8, 2.8, 6.5, matC(0x2980b9, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
-      // cuve cylindrique contre le mur nord-est
-      const tank = new THREE.Mesh(CYL_GEO, matC(0x8fa3ad, { metalness: 0.4, roughness: 0.5 }));
-      tank.scale.set(2.6, 4, 2.6); tank.position.set(280.5, 5.4, 155); tank.castShadow = true; scene.add(tank);
-      propBox(280.5, 3.4, 155, 1.3, 1.3, 4); // cuve : solide
+      // conteneur de fret sous le tablier
+      makeStructBox(270.5, 3.4, 176.2, 6.0, 2.8, 2.6, matC(0xb03a2e, { metalness: 0.3, roughness: 0.6 }), { hp: 320, mat: 'metal' });
+      for (const [cx2, cz2] of [[257.4, 176.4], [257.4, 174.9], [280.6, 162.2]]) { gdeco(BOX, 0x8a6a3a, cx2, FY + 0.6, cz2, 1.2, 1.2, 1.2); propBox(cx2, FY, cz2, 0.6, 0.6, 1.2); }
     }
 
     // ---- SURFACE : deux bunkers et un hélipad sur le plateau du POI (13,4, plat)
-    // bunker 1 : sud du plateau, hors des massifs de la montagne
     buildHouse(p.x - 5, p.z + 25, p.h, 10, 9, 2, 'bunker');
-    // bunker 2 : sud-ouest, sur le plateau plat, à l'écart de la montagne
     buildHouse(p.x - 32, p.z + 15, p.h, 10, 8, 0, 'bunker');
     {
       const hx = p.x - 22, hz = p.z + 18;
@@ -6431,26 +6556,25 @@ function buildSpyPOI(p) {
       const ring = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.1, 20), matC(0x1f2430)); ring.position.set(hx, p.h + 0.2, hz); scene.add(ring);
       for (const [mx, mz, mw, md] of [[-0.7, 0, 0.4, 1.6], [0.7, 0, 0.4, 1.6], [0, 0, 1.4, 0.4]]) { const m = new THREE.Mesh(BOX, matC(0xffd23f)); m.scale.set(mw, 0.05, md); m.position.set(hx + mx, p.h + 0.26, hz + mz); scene.add(m); }
     }
-    // blocs erratiques sur le plateau (13,4), loin de la montagne
     for (const [bx, bz, bs] of [[-26, 21, 2.6], [-14, -17, 3.2], [-34, 25, 2.2], [-28, 23, 2.8], [-22, -20, 2.4]])
       gshell(G.cx + bx, terrainH(G.cx + bx, G.cz + bz) - 0.5, G.cz + bz, bs, bs, bs * 1.3, ROCK_C);
 
-    // ---- COFFRE-FORT ET CABINE DANS LA CAVERNE
-    buildVault(p, { x: KX - 1.5, y: FY, z: KZ + 5.5 }); // déplacé : libère la face du contrefort pour le crâne
-    buildPhoneBooth(p, { x: KX - 6.5, y: FY, z: KZ + 5 }); // déplacée : libère le pied de l'escalier de la passerelle
+    // ---- COFFRE-FORT (côté sud-est de la salle) ET CABINE
+    buildVault(p, { x: 276.5, y: FY, z: 171 });
+    buildPhoneBooth(p, { x: 266, y: FY, z: 175.4 });
 
-    // ---- COFFRES, MUNITIONS ET BUTIN
-    spawnChest(KX + 9, FY + 0.05, KZ - 6);
-    spawnChest(KX - 6, FY + 0.05, KZ + 1);
-    spawnChest(PX + 2, PT + 0.55, PZ);
-    spawnChest(KX - 6, FY + 0.05, KZ + 8);
-    ammoBoxes.push(spawnAmmoBox(KX - 3, FY + 0.05, KZ - 5));
-    ammoBoxes.push(spawnAmmoBox(PX - 3, PT + 0.55, PZ - 1));
-    lootSpots.push({ x: KX - 1, y: FY + 0.6, z: KZ - 10 });
-    lootSpots.push({ x: KX + 10, y: FY + 0.6, z: KZ - 2 });
-    lootSpots.push({ x: KX - 5, y: FY + 0.6, z: KZ + 9 });
-    lootSpots.push({ x: PX - 2, y: PT + 0.7, z: PZ + 1 });
-    lootSpots.push({ x: KX + 11, y: FY + 0.6, z: KZ + 5 });
+    // ---- COFFRES, MUNITIONS ET BUTIN (sol, rez-de-chaussée de la base, pont)
+    spawnChest(279.5, FY + 0.05, 160.6);
+    spawnChest(262, FY + 0.05, 166);
+    spawnChest(268.6, PT + 0.55, 156.8);
+    spawnChest(262, FY + 0.05, 156.5);
+    ammoBoxes.push(spawnAmmoBox(266, FY + 0.05, 161.3));
+    ammoBoxes.push(spawnAmmoBox(261, PT + 0.55, 157.6));
+    lootSpots.push({ x: 268, y: FY + 0.6, z: 157 });
+    lootSpots.push({ x: 279, y: FY + 0.6, z: 164 });
+    lootSpots.push({ x: 264, y: FY + 0.6, z: 173.5 });
+    lootSpots.push({ x: 262.5, y: PT + 1.1, z: 157 });
+    lootSpots.push({ x: 263, y: 7.95, z: 168 });
 
     // fusion de toutes les roches de la grotte en un seul maillage
     finishGrotto();
@@ -7246,7 +7370,7 @@ function updatePlayer(dt) {
   p.vel.y -= GRAV * dt * (p.inWater ? 0.22 : 1);
   if (p.inWater) p.vel.y *= Math.max(0, 1 - 2.6 * dt);
   physics(p, dt);
-  if (p.landV > 26 && !p.noFall) { const d = (p.landV - 26) * 6; damageChar(p, d, null, false, 'chute'); }
+  if (p.landV > 26 && !p.noFall && !grottoPad(p)) { const d = (p.landV - 26) * 6; damageChar(p, d, null, false, 'chute'); }
   if (p.grounded) p.noFall = false;
   autoPickups(p);
   updateEdit();
@@ -7325,7 +7449,7 @@ function updateChar(ch, dt) {
       if (ch.hench) henchThink(ch, dt); else botThink(ch, dt);
       ch.vel.y -= GRAV * dt;
       physics(ch, dt);
-      if (ch.landV > 26) damageChar(ch, (ch.landV - 26) * 6, null, false, 'chute');
+      if (ch.landV > 26 && !grottoPad(ch)) damageChar(ch, (ch.landV - 26) * 6, null, false, 'chute');
     }
   }
   updateMovers(ch, dt);
@@ -9130,7 +9254,9 @@ window.render_game_to_text = () => JSON.stringify({
 });
 window.__game = { structs, rebuildHouse, towers, outline,
   ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
-  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; } };
+  PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; },
+  // capture libre (QA visuelle) : rendu depuis un point de vue arbitraire
+  snap: (x, y, z, lx, ly, lz) => { const p0 = camera.position.clone(), q0 = camera.quaternion.clone(); camera.position.set(x, y, z); camera.lookAt(lx, ly, lz); camera.updateMatrixWorld(); renderer.render(scene, camera); const u = renderer.domElement.toDataURL('image/png'); camera.position.copy(p0); camera.quaternion.copy(q0); return u; } };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built
