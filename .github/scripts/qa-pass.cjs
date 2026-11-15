@@ -23,6 +23,34 @@ const fail = (m) => { console.error('ECHEC:', m); process.exitCode = 1; };
   await page.click('[data-tab="pass"]');
   await page.waitForFunction(() => document.querySelectorAll('.reward[data-t]').length > 0, { timeout: 20000 });
 
+  // --- A) Accueil du passe : progression, niveau, achats et 5 catégories
+  const home = await page.evaluate(() => ({
+    visible: getComputedStyle(document.getElementById('passHome')).display !== 'none',
+    tiles: [...document.querySelectorAll('#bpTiles [data-open-pass]')].map(t => t.dataset.openPass).join(','),
+    rew: document.getElementById('bpRew').textContent, pages: document.getElementById('bpPages').textContent,
+    lvl: document.getElementById('bpLvl').textContent, segs: document.querySelectorAll('#bpSeg i').length,
+    next: document.getElementById('bpUpNext').innerText, hero: document.getElementById('bpHero').innerText,
+  }));
+  console.log('accueil du passe:', JSON.stringify(home));
+  if (!home.visible) fail("l'accueil du passe n'est pas affiché");
+  if (home.tiles !== 'main,free,premium,bonus,quete') fail('catégories inattendues: ' + home.tiles);
+  if (home.rew !== '0 / 53' || home.pages !== '0 / 8' || home.lvl !== '1' || home.segs !== 10) fail('progression incorrecte: ' + JSON.stringify(home));
+  if (!/Niveau 2/.test(home.next) || !/Brutus/.test(home.hero)) fail('prochaine récompense / héros incorrects: ' + JSON.stringify(home));
+  // acheter un niveau depuis l'accueil : niveau 2, 100 Éclats gratuits obtenus
+  await page.click('#bpBuyLvl');
+  await new Promise(r => setTimeout(r, 300));
+  const bought = await page.evaluate(() => ({ lvl: document.getElementById('bpLvl').textContent, rew: document.getElementById('bpRew').textContent, cur: document.getElementById('curVal').textContent.replace(/\s/g, '') }));
+  console.log('après achat de niveau:', JSON.stringify(bought));
+  if (bought.lvl !== '2' || bought.rew !== '1 / 53' || bought.cur !== '1150') fail('achat de niveau depuis l\'accueil: ' + JSON.stringify(bought));
+  // retour au niveau 1 pour la suite du scénario
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForFunction(() => document.querySelectorAll('[data-tab="pass"]').length > 0, { timeout: 20000 });
+  await page.click('[data-tab="pass"]');
+  await page.waitForFunction(() => document.querySelectorAll('.reward[data-t]').length > 0, { timeout: 20000 });
+  // ouvre la piste principale (page de catégorie)
+  await page.click('#bpTiles [data-open-pass="main"]');
+  await new Promise(r => setTimeout(r, 300));
+
   // --- 0) Premier rendu (niveau 1) : une seule case .sel, cohérente avec l'aperçu
   const first = await page.evaluate(() => {
     const sels = document.querySelectorAll('.reward.sel');
@@ -126,6 +154,7 @@ const fail = (m) => { console.error('ECHEC:', m); process.exitCode = 1; };
   await page.waitForFunction(() => document.querySelectorAll('[data-tab="pass"]').length > 0, { timeout: 20000 });
   await page.click('[data-tab="pass"]');
   await page.waitForFunction(() => document.querySelectorAll('.reward[data-t]').length > 0, { timeout: 20000 });
+  await page.click('#bpTiles [data-open-pass="main"]');
   const r4 = await page.evaluate(() => {
     const tr = document.getElementById('passTrack');
     return { tiers: tr.children.length, checks: tr.querySelectorAll('.reward .check').length, ok: [...tr.children].every(t => t.children.length === 5) };

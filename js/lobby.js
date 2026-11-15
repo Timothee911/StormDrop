@@ -223,7 +223,7 @@ function buildChar() {
 function playEmote(id) { emoteId = id; emoteT = 0; }
 let previewMode = null; // 'pickaxe' | 'glider'
 // camera placement per tab: [charScreenX offset (world units), cam distance, look height]
-const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 4.65, h: 1.45 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
+const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 1.05, d: 6.4, h: 1.25 }, passHome: { x: 0, d: 6.6, h: 1.3 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
 let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
@@ -529,57 +529,115 @@ function renderPass() {
     const cur = tr.children[Math.max(0, Math.min(MAX_TIER, S.level) - 3)];
     if (cur && !renderPass.scrolled) { tr.scrollLeft = cur.offsetLeft - tr.offsetLeft; renderPass.scrolled = true; }
   }
+  renderPassHome();
+  // accueil du passe : héros cadré en pied ; page de catégorie : cadrage serré
+  if (curTab === 'pass') viewT = $('passHome').style.display === 'none' ? VIEWS.pass : VIEWS.passHome;
 }
 $('ptL').onclick = () => { $('passTrack').scrollLeft -= 600; };
 $('ptR').onclick = () => { $('passTrack').scrollLeft += 600; };
-// Navigation : écran de catégories puis une page dédiée par catégorie
-document.querySelectorAll('#passHome [data-open-pass]').forEach((b) => b.onclick = () => {
-  passView = b.dataset.openPass;
+// Navigation : écran d'accueil du passe (héros, progression, catégories) puis
+// une page dédiée par catégorie.
+function openPassView(v) {
+  passView = v;
   $('passHome').style.display = 'none';
   $('passContent').style.display = 'flex';
   renderPass.scrolled = false;
   $('passTrack').scrollTop = 0;
   $('passTrack').scrollLeft = 0;
   renderPass();
-});
-// Aperçu des tenues premium directement sur les trois cartes d'accueil du passe.
-const PASS_HOME_SKINS = {
-  main: ['brutus', 'tntina', 'meowscles', 'skye', 'midas'],
-  bonus: ['cyber'],
-  quete: ['roi'],
-};
-document.querySelectorAll('#passHome [data-open-pass]').forEach((card) => {
-  const key = card.dataset.openPass;
-  const art = card.querySelector('.pass-card-art');
-  if (!art) return;
-  const skins = PASS_HOME_SKINS[key] || [];
-  art.className = 'pass-card-skins';
-  art.innerHTML = skins.map((id) => {
-    const it = itemOf('skin', id);
-    return `<span class="pass-home-skin"><img src="${thumb('skin', id, true)}" alt="${it.name}" title="${it.name}"></span>`;
-  }).join('');
+}
+document.querySelectorAll('#passHome [data-open-pass]').forEach((b) => b.onclick = () => openPassView(b.dataset.openPass));
+// Vignettes des tenues sur les tuiles de catégorie (rendues une seule fois).
+document.querySelectorAll('#passHome .bp-tile-art').forEach((art) => {
+  art.innerHTML = art.dataset.skins.split(',').map((id) => `<img src="${thumb('skin', id, true)}" alt="${itemOf('skin', id).name}" title="${itemOf('skin', id).name}">`).join('');
 });
 $('passBack').onclick = () => {
   $('passContent').style.display = 'none';
-  $('passHome').style.display = 'flex';
+  $('passHome').style.display = '';
+  passSel = { t: 1, k: 'prem' }; passView = 'main';
+  renderPass();
 };
+// Comptes de progression pour l'écran d'accueil du passe
+function passCounts() {
+  let free = 0, prem = 0, freeGot = 0, premGot = 0;
+  for (let t = 1; t <= MAX_TIER; t++) {
+    if (PASS[t]?.free) { free++; if (S.claimed.has(t + 'free')) freeGot++; }
+    if (PASS[t]?.prem) { prem++; if (S.claimed.has(t + 'prem')) premGot++; }
+  }
+  let bonusGot = 0; for (let t = MAX_TIER + 1; t <= MAX_BONUS; t++) if (S.claimed.has('bonus' + t)) bonusGot++;
+  let queteGot = 0; for (const q of PASS_QUETE) if (S.claimed.has('quete' + q.need)) queteGot++;
+  const bonus = MAX_BONUS - MAX_TIER, quete = PASS_QUETE.length;
+  // une « page » = 5 paliers : 6 pages pour le passe, 2 pour le pass bonus
+  const pages = MAX_BONUS / 5, pagesDone = Math.floor(Math.min(S.level, MAX_BONUS) / 5);
+  return { free, prem, freeGot, premGot, bonus, bonusGot, quete, queteGot, pages, pagesDone,
+    total: free + prem + bonus + quete, got: freeGot + premGot + bonusGot + queteGot };
+}
+// Prochaine récompense encore verrouillée sur la piste principale puis bonus
+function nextPassReward() {
+  for (let t = S.level + 1; t <= MAX_BONUS; t++) {
+    if (t > MAX_TIER) return { t, r: PASS_BONUS[t], k: 'bonus' };
+    const P = PASS[t] || {};
+    if (P.prem && S.passOwned) return { t, r: P.prem, k: 'prem' };
+    if (P.free) return { t, r: P.free, k: 'free' };
+    if (P.prem) return { t, r: P.prem, k: 'prem' };
+  }
+  return null;
+}
+function rewardName(r) { return r.cat === 'eclats' ? r.amount + ' Éclats' : itemOf(r.cat, r.id).name; }
+function renderPassHome() {
+  const c = passCounts(), ring = (el, f) => el.style.setProperty('--p', Math.round(Math.min(1, f) * 100));
+  $('bpRew').textContent = `${c.got} / ${c.total}`; ring($('bpRingRew'), c.got / c.total);
+  $('bpPages').textContent = `${c.pagesDone} / ${c.pages}`; ring($('bpRingPages'), c.pagesDone / c.pages);
+  const need = xpNeeded(S.level), max = S.level >= MAX_BONUS;
+  $('bpLvl').textContent = S.level; $('bpLvl2').textContent = S.level;
+  $('bpNextLvl').textContent = max ? 'MAX' : '→ ' + (S.level + 1);
+  $('bpXpLeft').textContent = max ? 'PASSE TERMINÉ' : fmt(need - S.xp) + ' XP';
+  $('bpXpTo').textContent = max ? '' : `jusqu'au niveau ${S.level + 1}`;
+  // barre segmentée : 10 segments de 1 000 XP
+  const segs = 10, f = max ? segs : S.xp / need * segs;
+  $('bpSeg').innerHTML = Array.from({ length: segs }, (_, i) => `<i style="--f:${Math.max(0, Math.min(1, f - i))}"></i>`).join('');
+  $('bpBuyLvl').disabled = max;
+  const pr = $('bpPremium');
+  pr.classList.toggle('owned', S.passOwned);
+  pr.innerHTML = S.passOwned ? '<b>PASSE PREMIUM ACTIF ✓</b><small>TOUTES LES RÉCOMPENSES PREMIUM SONT À TOI</small>' : '<b>PASSE PREMIUM</b><small><i class="coin"></i> 950 · TOUTES LES TENUES DES AGENTS</small>';
+  const nx = nextPassReward(), up = $('bpUpNext');
+  if (nx) {
+    const locked = nx.k === 'prem' && !S.passOwned;
+    up.innerHTML = `${rewardHTML(nx.r, 'bp-up-art')}<div><small>PROCHAINE RÉCOMPENSE</small><b>${rewardName(nx.r)}</b><span>Niveau ${nx.t}${locked ? ' · Premium' : nx.k === 'bonus' ? ' · Bonus' : ''}</span></div>`;
+    up.onclick = () => { if (nx.k === 'bonus') { passBSel = nx.t; openPassView('bonus'); } else { passSel = { t: nx.t, k: nx.k }; openPassView('main'); } };
+  } else { up.innerHTML = '<div><small>PASSE TERMINÉ</small><b>Toutes les récompenses sont débloquées !</b></div>'; up.onclick = null; }
+  // héros affiché sur la scène : nom et palier
+  const hr = PASS[passSel?.t || 1]?.[passSel?.k || 'prem'];
+  if (hr && hr.cat !== 'eclats') { const it = itemOf(hr.cat, hr.id), RR = RARITIES[it.rarity]; $('bpHero').innerHTML = `<span style="background:${RR.color}">${RR.name.toUpperCase()}</span><b>${it.name}</b><small>Récompense du niveau ${passSel?.t || 1}</small>`; }
+  const prog = { main: [c.freeGot + c.premGot, c.free + c.prem], free: [c.freeGot, c.free], premium: [c.premGot, c.prem], bonus: [c.bonusGot, c.bonus], quete: [c.queteGot, c.quete] };
+  document.querySelectorAll('#bpTiles .bp-tile').forEach((t) => {
+    const [g, n] = prog[t.dataset.openPass];
+    const lock = (t.dataset.openPass === 'bonus' && S.level < MAX_TIER) || (t.dataset.openPass === 'premium' && !S.passOwned);
+    t.classList.toggle('locked', lock); t.classList.toggle('done', g >= n);
+    t.querySelector('.bp-tile-prog').innerHTML = `${lock ? LOCK_SVG : ''}${g} / ${n}`;
+  });
+}
 // acheter un niveau : 150 Éclats, passe directement au niveau suivant
-$('buyLevelBtn').onclick = () => {
+function buyLevel() {
   if (S.level >= MAX_BONUS) { toast('Toutes les récompenses du passe sont déjà débloquées'); return; }
   if (S.eclats < 150) { toast('Pas assez d’Éclats'); return; }
   S.eclats -= 150;
   const res = addXP(xpNeeded(S.level) - S.xp);
   updateTopbar(); renderPass();
   toast(`Niveau ${S.level} acheté${res.rewards.length ? ' · ' + res.rewards.length + ' récompense' + (res.rewards.length > 1 ? 's' : '') + ' obtenue' + (res.rewards.length > 1 ? 's' : '') : ''}`);
-};
-$('passBuyBtn').onclick = () => {
+}
+function buyPass() {
   if (S.passOwned) return;
   if (S.eclats < 950) { toast('Pas assez d’Éclats'); return; }
   S.eclats -= 950; S.passOwned = true;
   const got = unlockTiers();
   updateTopbar(); renderPass();
   toast(`Passe premium débloqué · ${got.length} récompense${got.length > 1 ? 's' : ''} obtenue${got.length > 1 ? 's' : ''}`);
-};
+}
+$('buyLevelBtn').onclick = buyLevel;
+$('bpBuyLvl').onclick = buyLevel;
+$('passBuyBtn').onclick = buyPass;
+$('bpPremium').onclick = buyPass;
 
 // CHALLENGES (accueil) --------------------------------------------------------
 function renderChallenges() { /* page défis supprimée : les 3 défis du jour restent sur l'accueil */ }
