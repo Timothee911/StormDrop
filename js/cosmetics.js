@@ -1,5 +1,6 @@
 // Cosmetics catalog + procedural character / pickaxe / glider / backpack models + emote poses
 import * as THREE from 'three';
+import { KAIA } from './kaia.js';
 
 export const RARITIES = {
   common: { name: 'Commun', color: '#9aa3b5', grad: ['#b9c0cc', '#6e7687'] },
@@ -32,6 +33,7 @@ export const SKINS = {
   surf: { name: 'Surfeur Solaire', rarity: 'uncommon', shirt: 0x00c2c7, pants: 0xffa52d, skin: 0xc68b5e, hat: 0xffffff, style: 'none', extra: 'shades', desc: 'Toujours sur la vague.' },
   // Agents du Chapitre 2 Saison 2
   ombre: { name: 'Ombre', rarity: 'rare', shirt: 0x1a1a22, pants: 0x14141c, skin: 0xb07a52, hat: 0x111118, style: 'fedora', extra: 'shades', desc: 'L’uniforme parfait de l’ombre.' },
+  kaia: { name: 'Kaia Volt', rarity: 'legendary', model: 'kaia', shirt: 0x2b2f3a, pants: 0x2b2f3a, skin: 0xf2b88c, hat: 0x1a1008, style: 'none', desc: 'Tenue tactique, élan électrique.' },
   midas: { name: 'Midas', rarity: 'legendary', shirt: 0xd9a900, pants: 0x8a6a00, skin: 0xf2c6a0, hat: 0x1a1a1a, style: 'fedora', extra: 'shades', accent: 0xffc400, desc: 'Tout ce qu’il touche devient or.' },
   brutus: { name: 'Brutus', rarity: 'epic', shirt: 0x3a4a5a, pants: 0x2a3a4a, skin: 0xd9a77c, hat: 0x222831, style: 'helmet', extra: 'visor', accent: 0x39ff88, desc: 'Le colosse de La Grotte.' },
   skye: { name: 'Skye', rarity: 'epic', shirt: 0xff8fc7, pants: 0xffffff, skin: 0xf2c6a0, hair: 0x6b4226, hat: 0xff8fc7, style: 'beanie', desc: 'Toujours accompagnée d’Ollie.' },
@@ -850,8 +852,56 @@ function onChest(torso, w, h, d, x, y, m, r) {
   b.rotation.x = Math.atan((chestFront(x, y + 0.01) - chestFront(x, y - 0.01)) / 0.02);
   return b;
 }
+// --- Kaia Volt : modèle importé (kaia.js, généré depuis kaia-volt.obj) --------------------
+// Même squelette que le personnage procédural : hanches/genoux/épaules/coudes/tête/torse,
+// pour que toutes les animations et emotes du jeu fonctionnent telles quelles.
+const KAIA_GEO = new Map(), KAIA_MAT = new Map();
+function kaiaBuf(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; }
+function kaiaGeo(bone, i) {
+  const k = bone + i; let g = KAIA_GEO.get(k);
+  if (!g) {
+    const p = KAIA.parts[bone][i];
+    g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(new Int16Array(kaiaBuf(p.p)), (v) => v / KAIA.Q), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(Float32Array.from(new Int8Array(kaiaBuf(p.n)), (v) => v / 127), 3));
+    g.setIndex(new THREE.BufferAttribute(new Uint16Array(kaiaBuf(p.i)), 1));
+    g.computeBoundingSphere();
+    KAIA_GEO.set(k, g);
+  }
+  return g;
+}
+function kaiaMat(name) {
+  let m = KAIA_MAT.get(name);
+  if (!m) { const d = KAIA.mats[name]; m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(d.c[0], d.c[1], d.c[2], THREE.LinearSRGBColorSpace), roughness: d.r }); KAIA_MAT.set(name, m); }
+  return m;
+}
+function kaiaFill(group, bone) {
+  (KAIA.parts[bone] || []).forEach((p, i) => { const m = new THREE.Mesh(kaiaGeo(bone, i), kaiaMat(p.m)); m.castShadow = true; group.add(m); });
+}
+function buildKaia(cos) {
+  const pv = KAIA.pivots, at = (grp, v) => { grp.position.set(v[0], v[1], v[2]); return grp; };
+  const g = new THREE.Group();
+  const hipL = at(new THREE.Group(), pv.hipL), hipR = at(new THREE.Group(), pv.hipR);
+  const kneeL = at(new THREE.Group(), pv.kneeL), kneeR = at(new THREE.Group(), pv.kneeR);
+  hipL.add(kneeL); hipR.add(kneeR);
+  const torso = new THREE.Group(); torso.position.y = KAIA.torsoY;
+  const head = at(new THREE.Group(), pv.head); torso.add(head);
+  const shL = at(new THREE.Group(), pv.shL), shR = at(new THREE.Group(), pv.shR);
+  const elL = at(new THREE.Group(), pv.elL), elR = at(new THREE.Group(), pv.elR);
+  shL.add(elL); shR.add(elR); torso.add(shL, shR);
+  kaiaFill(torso, 'torso'); kaiaFill(head, 'head');
+  kaiaFill(hipL, 'hip_L'); kaiaFill(hipR, 'hip_R'); kaiaFill(kneeL, 'knee_L'); kaiaFill(kneeR, 'knee_R');
+  kaiaFill(shL, 'arm_L'); kaiaFill(shR, 'arm_R'); kaiaFill(elL, 'fore_L'); kaiaFill(elR, 'fore_R');
+  // sac à dos : prévu pour le torse large du perso procédural, on l'aplatit pour le buste fin de Kaia
+  const pack = new THREE.Group(); pack.scale.z = 0.7; torso.add(pack); buildBackpack(pack, cos.backpack);
+  const hand = new THREE.Group(); hand.position.set(pv.hand[0], pv.hand[1], pv.hand[2]); hand.rotation.x = -Math.PI / 2; elR.add(hand);
+  g.add(hipL, hipR, torso);
+  const glider = makeParachute(cos.glider); glider.visible = false; g.add(glider);
+  return { group: g, hipL, hipR, kneeL, kneeR, torso, head, shL, shR, elL, elR, hand, glider };
+}
 export function makeCharMesh(cos) {
   const s = SKINS[cos.skin] || SKINS.recrue;
+  if (s.model === 'kaia') return buildKaia(cos);
   const g = new THREE.Group();
   const shirt = mat(s.shirt, { roughness: 0.85 }), pants = mat(s.pants, { roughness: 0.9 });
   const skinM = mat(s.skin, { roughness: 0.55 }), dark = mat(0x1a1a22, { roughness: 0.6 });
