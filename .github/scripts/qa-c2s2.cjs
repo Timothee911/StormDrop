@@ -609,8 +609,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     G.keys.KeyW = false;
     R.push(['redescente du tablier -> sol de la caverne', p.alive && p.grounded && p.pos.z < 169 && Math.abs(p.pos.y - 3.4) < 0.6 && !swamDeck, 'z=' + p.pos.z.toFixed(1) + ' y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
-    // conteneur de fret : solide (cover au sol sec de la caverne, sommet 6,2)
-    p.pos.set(274, 6.4, 173.5); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
+    // conteneur de fret : solide (sous le tablier sud, sommet 6,2) — posé sur
+    // son bord nord, hors du tablier et du coffre-fort
+    p.pos.set(272.5, 6.4, 175.1); p.vel.set(0, 0, 0); p.mode = 'ground'; p.grounded = true;
     window.advanceTime(200);
     R.push(['conteneur de fret solide', p.grounded && Math.abs(p.pos.y - 6.2) < 0.6, 'y=' + p.pos.y.toFixed(1) + ' grounded=' + p.grounded]);
     // pas de dégâts de zone en début de partie : on doit rester en vie
