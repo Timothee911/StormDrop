@@ -35,15 +35,15 @@ if (![50, 100].includes(+S.players)) S.players = 50;
 // Battle pass rewards: tier -> { free, prem }
 const R = (cat, id) => ({ cat, id });
 const E = (n) => ({ cat: 'eclats', amount: n });
+// Une récompense par niveau, regroupées en pages de 6 : 2 gratuites (il suffit
+// d'atteindre le niveau indiqué) et 4 premium (niveau + Passe Premium).
+const PASS_PAGE = 6;
 const PASS = {
-  1: { prem: R('skin', 'brutus') }, 2: { free: E(100) }, 3: { prem: R('backpack', 'cape') }, 4: { free: R('emote', 'robot') },
-  5: { prem: R('pickaxe', 'sucre') }, 6: { free: R('glider', 'nuage') }, 7: { prem: E(100) }, 8: { free: E(100), prem: R('skin', 'tntina') },
-  9: { prem: R('glider', 'aigle') }, 10: { free: R('skin', 'jardin') }, 11: { prem: R('emote', 'flex') }, 12: { free: R('pickaxe', 'hache') },
-  13: { prem: E(100) }, 14: { free: E(100) }, 15: { prem: R('skin', 'meowscles') }, 16: { free: R('backpack', 'carapace') },
-  17: { prem: R('backpack', 'fusee') }, 18: { free: E(100) }, 19: { prem: R('pickaxe', 'marteau') }, 20: { free: R('skin', 'surf') },
-  21: { prem: E(100) }, 22: { free: E(100), prem: R('skin', 'skye') }, 23: { prem: R('glider', 'neon') }, 24: { free: E(200) },
-  25: { prem: R('skin', 'ombre') }, 26: { prem: E(300) }, 27: { prem: R('emote', 'fil') }, 28: { free: E(200), prem: R('glider', 'dragon') },
-  29: { prem: R('backpack', 'ailesdragon') }, 30: { prem: R('skin', 'midas') },
+  1: { prem: R('skin', 'brutus') }, 2: { free: E(100) }, 3: { prem: R('backpack', 'cape') }, 4: { prem: R('pickaxe', 'sucre') }, 5: { free: R('emote', 'robot') }, 6: { prem: R('skin', 'tntina') },
+  7: { prem: R('glider', 'aigle') }, 8: { free: R('glider', 'nuage') }, 9: { prem: E(100) }, 10: { prem: R('emote', 'flex') }, 11: { free: R('skin', 'jardin') }, 12: { prem: R('skin', 'meowscles') },
+  13: { prem: R('backpack', 'fusee') }, 14: { free: R('pickaxe', 'hache') }, 15: { prem: E(100) }, 16: { prem: R('pickaxe', 'marteau') }, 17: { free: E(100) }, 18: { prem: R('skin', 'skye') },
+  19: { prem: R('glider', 'neon') }, 20: { free: R('backpack', 'carapace') }, 21: { prem: E(100) }, 22: { prem: R('emote', 'fil') }, 23: { free: R('skin', 'surf') }, 24: { prem: R('skin', 'ombre') },
+  25: { prem: E(300) }, 26: { free: E(200) }, 27: { prem: R('glider', 'dragon') }, 28: { prem: R('backpack', 'ailesdragon') }, 29: { free: E(200) }, 30: { prem: R('skin', 'midas') },
 };
 const PASS_ITEMS = new Set();
 for (const t in PASS) for (const k of ['free', 'prem']) { const r = PASS[t][k]; if (r && r.cat !== 'eclats') PASS_ITEMS.add(r.cat + ':' + r.id); }
@@ -223,7 +223,7 @@ function buildChar() {
 function playEmote(id) { emoteId = id; emoteT = 0; }
 let previewMode = null; // 'pickaxe' | 'glider'
 // camera placement per tab: [charScreenX offset (world units), cam distance, look height]
-const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 1.05, d: 6.4, h: 1.25 }, passHome: { x: 0, d: 6.6, h: 1.3 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
+const VIEWS = { home: { x: 0, d: 9.2, h: 1.2 }, pass: { x: 0, d: 8.2, h: 0.8 }, passHome: { x: 0, d: 6.6, h: 1.3 }, challenges: { x: 0, d: 9, h: 1.1 }, career: { x: 0, d: 9, h: 1.1 }, locker: { x: -1.5, d: 9.5, h: 1.1 }, shop: { x: 0, d: 9, h: 1.1 } };
 let view = { ...VIEWS.home }, viewT = VIEWS.home, curTab = 'home';
 let dragging = false, lastX = 0, spinV = 0;
 canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; });
@@ -447,54 +447,57 @@ function passStatusHTML() {
     const d = S.doneCh.size;
     return `<div class="ps-lock on">${d} / ${PASS_QUETE.length} DÉFIS TERMINÉS</div><div class="ps-cond">Les défis se remplissent automatiquement en jouant (voir l'accueil).</div><div class="ps-bar"><i style="width:${Math.min(100, d / PASS_QUETE.length * 100)}%"></i></div><div class="ps-count">Défis terminés : ${d} / ${PASS_QUETE.length}</div>`;
   }
-  return `<div class="ps-lock on">NIVEAU ${Math.min(S.level, MAX_TIER)}</div><div class="ps-cond">Chaque niveau offre une récompense gratuite, et une premium avec le Passe Premium.</div><div class="ps-bar"><i style="width:${Math.min(100, S.level / MAX_TIER * 100)}%"></i></div><div class="ps-count">Niveau ${Math.min(S.level, MAX_TIER)} / ${MAX_TIER}</div>`;
+  return `<div class="ps-lock on">NIVEAU ${Math.min(S.level, MAX_TIER)}</div><div class="ps-cond">6 récompenses par page : 2 gratuites dès le niveau indiqué, 4 premium avec le Passe Premium.</div><div class="ps-bar"><i style="width:${Math.min(100, S.level / MAX_TIER * 100)}%"></i></div><div class="ps-count">Niveau ${Math.min(S.level, MAX_TIER)} / ${MAX_TIER}</div>`;
 }
 function passRewardOf() {
   if (passView === 'bonus') return PASS_BONUS[passBSel];
   if (passView === 'quete') return (PASS_QUETE.find((q) => q.need === passQSel) || PASS_QUETE[0]).r;
   return PASS[passSel.t][passSel.k];
 }
-function renderPassTrack() {
-  const tr = $('passTrack');
-  if (passView === 'main' || passView === 'free' || passView === 'premium') {
-    // initialisé AVANT la boucle : la case sélectionnée doit porter .sel dès le 1er rendu
-    if (!passSel) passSel = { t: 1, k: 'prem' };
-    let h = '';
-    for (let t = 1; t <= MAX_TIER; t++) {
-      const P = PASS[t] || {};
-      const cell = (k) => {
-        const r = P[k]; if (!r) return rewardHTML(null);
-        const unlocked = S.level >= t && (k === 'free' || S.passOwned);
-        const cls = `${k === 'prem' ? 'prem' : ''} ${unlocked ? '' : 'locked'} ${passSel && passSel.t === t && passSel.k === k ? 'sel' : ''}`;
-        // badge ✓ (débloqué) ou cadenas, placé DANS la case — attention à conserver
-        // la balise fermante </div> de la case, sinon le DOM du passe entier casse.
-        return rewardHTML(r, cls).replace('class="reward', `data-t="${t}" data-k="${k}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + '</div>');
-      };
-      const keys = passView === 'free' ? ['free'] : passView === 'premium' ? ['prem'] : ['prem', 'free'];
-      h += `<div class="tier ${keys.length === 1 ? 'single' : ''} ${S.level === t ? 'cur' : ''}"><div class="tier-num">${t}</div>${keys.map((k) => `<div class="row-tag">${t === 1 ? (k === 'prem' ? 'PREMIUM' : 'GRATUIT') : '&nbsp;'}</div>${cell(k)}`).join('')}</div>`;
-    }
-    tr.innerHTML = h;
-    tr.querySelectorAll('.reward[data-t]').forEach((el) => el.onclick = () => { passSel = { t: +el.dataset.t, k: el.dataset.k }; renderPass(); });
-  } else if (passView === 'bonus') {
-    let h = '';
-    for (let t = MAX_TIER + 1; t <= MAX_BONUS; t++) {
-      const r = PASS_BONUS[t], unlocked = S.level >= t;
-      const cls = `bonus ${unlocked ? '' : 'locked'} ${passBSel === t ? 'sel' : ''}`;
-      h += `<div class="tier single ${S.level === t ? 'cur' : ''}"><div class="tier-num">${t}</div><div class="row-tag">BONUS</div>${rewardHTML(r, cls).replace('class="reward', `data-b="${t}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + '</div>')}</div>`;
-    }
-    tr.innerHTML = h;
-    tr.querySelectorAll('.reward[data-b]').forEach((el) => el.onclick = () => { passBSel = +el.dataset.b; renderPass(); });
-  } else {
+// Entrées de la vue affichée : une case par récompense, avec son niveau requis
+function passEntries() {
+  const out = [];
+  if (passView === 'bonus') {
+    for (let t = MAX_TIER + 1; t <= MAX_BONUS; t++) out.push({ r: PASS_BONUS[t], attr: `data-b="${t}"`, lvl: 'NIV. ' + t, tag: 'BONUS', kind: 'bonus', unlocked: S.level >= t, sel: passBSel === t, cur: S.level === t });
+  } else if (passView === 'quete') {
     const d = S.doneCh.size;
-    let h = '';
-    for (const q of PASS_QUETE) {
-      const unlocked = d >= q.need;
-      const cls = `quete ${unlocked ? '' : 'locked'} ${passQSel === q.need ? 'sel' : ''}`;
-      h += `<div class="tier single ${d === q.need ? 'cur' : ''}"><div class="tier-num">${q.need}</div><div class="row-tag">DÉFIS</div>${rewardHTML(q.r, cls).replace('class="reward', `data-q="${q.need}" class="reward`).replace('</div></div>', '</div>' + (unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + '</div>')}</div>`;
+    for (const q of PASS_QUETE) out.push({ r: q.r, attr: `data-q="${q.need}"`, lvl: q.need + ' DÉFI' + (q.need > 1 ? 'S' : ''), tag: 'QUÊTE', kind: 'quete', unlocked: d >= q.need, sel: passQSel === q.need, cur: d === q.need });
+  } else {
+    for (let t = 1; t <= MAX_TIER; t++) for (const k of ['free', 'prem']) {
+      const r = PASS[t]?.[k]; if (!r) continue;
+      if ((passView === 'free' && k !== 'free') || (passView === 'premium' && k !== 'prem')) continue;
+      out.push({ r, attr: `data-t="${t}" data-k="${k}"`, lvl: 'NIV. ' + t, tag: k === 'prem' ? 'PREMIUM' : 'GRATUIT', kind: k === 'prem' ? 'prem' : 'free', unlocked: S.level >= t && (k === 'free' || S.passOwned), sel: passSel && passSel.t === t && passSel.k === k, cur: S.level === t });
     }
-    tr.innerHTML = h;
-    tr.querySelectorAll('.reward[data-q]').forEach((el) => el.onclick = () => { passQSel = +el.dataset.q; renderPass(); });
   }
+  return out;
+}
+let passPage = 0;
+function passPageCount() { return Math.max(1, Math.ceil(passEntries().length / PASS_PAGE)); }
+// page qui contient la case sélectionnée
+function passPageOfSel() { const i = passEntries().findIndex((e) => e.sel); return i < 0 ? 0 : Math.floor(i / PASS_PAGE); }
+function renderPassTrack() {
+  if (!passSel) passSel = { t: 1, k: 'prem' };
+  const tr = $('passTrack'), all = passEntries(), pages = Math.max(1, Math.ceil(all.length / PASS_PAGE));
+  passPage = Math.max(0, Math.min(pages - 1, passPage));
+  const list = all.slice(passPage * PASS_PAGE, passPage * PASS_PAGE + PASS_PAGE);
+  // badge ✓ / cadenas, niveau et type ajoutés DANS la case (avant sa balise fermante)
+  tr.innerHTML = list.map((e) => {
+    const cls = `${e.kind} ${e.unlocked ? '' : 'locked'} ${e.sel ? 'sel' : ''} ${e.cur ? 'cur' : ''}`;
+    const html = rewardHTML(e.r, cls).replace('class="reward', `${e.attr} class="reward`);
+    const extra = (e.unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + `<span class="pc-lvl">${e.lvl}</span><span class="pc-tag">${e.tag}</span>`;
+    return html.slice(0, -6) + extra + '</div>';
+  }).join('');
+  tr.querySelectorAll('.reward').forEach((el) => el.onclick = () => {
+    if (el.dataset.t) passSel = { t: +el.dataset.t, k: el.dataset.k };
+    else if (el.dataset.b) passBSel = +el.dataset.b; else passQSel = +el.dataset.q;
+    renderPass();
+  });
+  // pagination : PAGE x / n, points, flèches
+  const got = (i) => all.slice(i * PASS_PAGE, i * PASS_PAGE + PASS_PAGE).every((e) => e.unlocked);
+  $('ppLabel').textContent = `PAGE ${passPage + 1} / ${pages}`;
+  $('ppDots').innerHTML = Array.from({ length: pages }, (_, i) => `<button class="${i === passPage ? 'on' : ''} ${got(i) ? 'done' : ''}" data-pg="${i}" aria-label="Page ${i + 1}"></button>`).join('');
+  $('ppDots').querySelectorAll('button').forEach((b) => b.onclick = () => { passPage = +b.dataset.pg; renderPass(); });
+  $('ptL').disabled = passPage === 0; $('ptR').disabled = passPage >= pages - 1;
 }
 function renderPass() {
   if (!passSel) passSel = { t: 1, k: 'prem' };
@@ -523,27 +526,21 @@ function renderPass() {
   pb.classList.toggle('owned', S.passOwned);
   pb.querySelector('.pb-title').textContent = S.passOwned ? 'PASSE PREMIUM ACTIF' : 'PASSE PREMIUM';
   $('passBuyBtn').style.display = S.passOwned ? 'none' : '';
-  // keep current tier visible (piste principale uniquement)
-  if (passView === 'main' || passView === 'free' || passView === 'premium') {
-    const tr = $('passTrack');
-    const cur = tr.children[Math.max(0, Math.min(MAX_TIER, S.level) - 3)];
-    if (cur && !renderPass.scrolled) { tr.scrollLeft = cur.offsetLeft - tr.offsetLeft; renderPass.scrolled = true; }
-  }
   renderPassHome();
   // accueil du passe : héros cadré en pied ; page de catégorie : cadrage serré
   if (curTab === 'pass') viewT = $('passHome').style.display === 'none' ? VIEWS.pass : VIEWS.passHome;
 }
-$('ptL').onclick = () => { $('passTrack').scrollLeft -= 600; };
-$('ptR').onclick = () => { $('passTrack').scrollLeft += 600; };
+$('ptL').onclick = () => { passPage--; renderPass(); };
+$('ptR').onclick = () => { passPage++; renderPass(); };
 // Navigation : écran d'accueil du passe (héros, progression, catégories) puis
 // une page dédiée par catégorie.
 function openPassView(v) {
   passView = v;
   $('passHome').style.display = 'none';
   $('passContent').style.display = 'flex';
-  renderPass.scrolled = false;
-  $('passTrack').scrollTop = 0;
-  $('passTrack').scrollLeft = 0;
+  passPage = passPageOfSel();
+  // sans sélection dans cette vue : page du niveau actuel
+  if (!passEntries().some((e) => e.sel)) { const i = passEntries().findIndex((e) => !e.unlocked); passPage = i < 0 ? 0 : Math.floor(i / PASS_PAGE); }
   renderPass();
 }
 document.querySelectorAll('#passHome [data-open-pass]').forEach((b) => b.onclick = () => openPassView(b.dataset.openPass));
@@ -567,8 +564,10 @@ function passCounts() {
   let bonusGot = 0; for (let t = MAX_TIER + 1; t <= MAX_BONUS; t++) if (S.claimed.has('bonus' + t)) bonusGot++;
   let queteGot = 0; for (const q of PASS_QUETE) if (S.claimed.has('quete' + q.need)) queteGot++;
   const bonus = MAX_BONUS - MAX_TIER, quete = PASS_QUETE.length;
-  // une « page » = 5 paliers : 6 pages pour le passe, 2 pour le pass bonus
-  const pages = MAX_BONUS / 5, pagesDone = Math.floor(Math.min(S.level, MAX_BONUS) / 5);
+  // une « page » = 6 niveaux : 5 pages pour le passe, 2 pour le pass bonus
+  const ends = []; for (let a = 1; a <= MAX_TIER; a += PASS_PAGE) ends.push(Math.min(MAX_TIER, a + PASS_PAGE - 1));
+  for (let a = MAX_TIER + 1; a <= MAX_BONUS; a += PASS_PAGE) ends.push(Math.min(MAX_BONUS, a + PASS_PAGE - 1));
+  const pages = ends.length, pagesDone = ends.filter((e) => S.level >= e).length;
   return { free, prem, freeGot, premGot, bonus, bonusGot, quete, queteGot, pages, pagesDone,
     total: free + prem + bonus + quete, got: freeGot + premGot + bonusGot + queteGot };
 }
