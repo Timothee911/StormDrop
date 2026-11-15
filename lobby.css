@@ -1454,3 +1454,15 @@ body[data-tab="pass"].pass-cat #topbar { background: linear-gradient(180deg, rgb
 @media (min-width: 901px) and (pointer: fine) {
   #page-pass .pass-content .pass-track .reward { height: clamp(120px, 21vh, 200px); }
 }
+
+/* Cartes du passe sans bandeau GRATUIT / PREMIUM ; tenues en gros plan */
+#page-pass .pass-content .pass-track .reward img { inset: 4px 0 22px; height: calc(100% - 26px); }
+#page-pass .pass-content .pass-track .reward.c-skin img { inset: 0 0 22px; height: calc(100% - 22px); object-fit: cover; object-position: center top; }
+#page-pass .pass-content .pass-track .reward .lock, #page-pass .pass-content .pass-track .reward .check { top: 5px; }
+#page-pass .pass-content .pass-track .r-eclats .eclats-art { top: 0; }
+@media (max-width: 900px), (pointer: coarse) {
+  #page-pass .pass-content .pass-track .reward img { inset: 2px 0 16px; height: calc(100% - 18px); }
+  #page-pass .pass-content .pass-track .reward.c-skin img { inset: 0 0 16px; height: calc(100% - 16px); }
+  #page-pass .pass-content .pass-track .reward .lock, #page-pass .pass-content .pass-track .reward .check { top: 3px; }
+  #page-pass .pass-content .pass-track .r-eclats .eclats-art { top: 0; }
+}

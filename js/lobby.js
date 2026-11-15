@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { createOutline } from './outline.js';
 import { loadSettings, saveSettings, settingsForm } from './settings.js';
 import { initAudio, playMusic, stopMusic, setVolumes, sfx } from './audio.js';
-import { RARITIES, SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, CATS, DEFAULT_LOADOUT, makeCharMesh, makePickaxe, makeGlider, makeParachute, poseEmote, poseIdle, mat } from './cosmetics.js';
+import { RARITIES, SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, CATS, DEFAULT_LOADOUT, makeCharMesh, makeBackpack, makePickaxe, makeGlider, makeParachute, poseEmote, poseIdle, mat } from './cosmetics.js';
 
 const $ = (id) => document.getElementById(id);
 const XP_PER_LEVEL = 10000;
@@ -146,18 +146,35 @@ thumbScene.add(new THREE.HemisphereLight(0xffffff, 0x6a6aa0, 1.4));
 const tl = new THREE.DirectionalLight(0xffffff, 1.6); tl.position.set(3, 5, -6); thumbScene.add(tl);
 const thumbCam = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
 const thumbCache = new Map();
+// big : grande vignette (fenêtre d'achat) ; 'hero' : tenue cadrée en gros plan
+const WHITE = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
 function thumb(cat, id, big = false) {
-  const key = cat + ':' + id + (big ? ':big' : '');
+  const key = cat + ':' + id + (big ? ':' + big : '');
   if (thumbCache.has(key)) return thumbCache.get(key);
   const g = new THREE.Group();
   let camPos = [0, 1.25, -5.2], look = [0, 1.05, 0];
-  if (cat === 'skin') { const m = makeCharMesh({ skin: id, backpack: 'none' }); poseIdle(m, 0.4); m.group.rotation.y = 0.35; g.add(m.group); }
+  if (cat === 'skin') {
+    const m = makeCharMesh({ skin: id, backpack: 'none' }); poseIdle(m, 0.4); m.group.rotation.y = 0.35; g.add(m.group);
+    if (big === 'hero') { camPos = [0, 1.62, -3.6]; look = [0, 1.42, 0]; }
+  }
   else if (cat === 'backpack') {
     if (id === 'none') { const s = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 8, 24), mat(0xffffff)); s.position.y = 1.2; g.add(s); const b = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.4), mat(0xffd23f)); b.position.set(0, 0.36, 0.32); g.add(b); }
-    else { const m = makeCharMesh({ skin: 'recrue', backpack: id }); m.group.rotation.y = Math.PI + 0.6; m.group.traverse((o) => { if (o.isMesh && o.parent !== m.torso && !['cristal'].includes(id)) o.castShadow = true; }); g.add(m.group); }
+    else {
+      // le sac seul, de dos, centré et cadré selon sa taille
+      const pk = makeBackpack(id); pk.rotation.y = Math.PI + 0.55; pk.rotation.x = 0.12; g.add(pk);
+      const bb = new THREE.Box3().setFromObject(pk), c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());
+      pk.position.sub(c); g.position.y = 1.05;
+      const r = Math.max(sz.x, sz.y, sz.z * 0.8);
+      camPos = [0, 1.05 + r * 0.25, -Math.max(2.2, r * 2.6)]; look = [0, 1.05, 0];
+    }
   } else if (cat === 'pickaxe') { const w = new THREE.Group(); const p = makePickaxe(id); p.rotation.x = Math.PI / 2; p.position.y = -0.25; w.add(p); w.rotation.z = 0.6; w.scale.setScalar(1.5); w.position.y = 0.1; g.add(w); }
   else if (cat === 'glider') { const gl = makeParachute(id); gl.rotation.set(-0.35, 0.3, 0); gl.position.set(0, -1.9, 0); g.add(gl); camPos = [0, 3.2, -9.5]; look = [0, 1.7, 0]; }
-  else if (cat === 'emote') { const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1, clap: 0.1, zombie: 0.4, squat: 0.6, boxe: 0.15, pirouette: 0.3, kungfu: 0.5, corde: 0.2, airguitar: 0.2 }[id] || 0.2); m.group.position.y = Math.max(y, -0.3); m.group.rotation.y = 0.35; g.add(m.group); }
+  else if (cat === 'emote') {
+    // danse : silhouette blanche du personnage dans la pose
+    const m = makeCharMesh({ skin: 'recrue2', backpack: 'none' }); const y = poseEmote(m, id, { danse: 0.2, salut: 0.15, robot: 0.3, flex: 0.1, disco: 0.15, fil: 0.1, clap: 0.1, zombie: 0.4, squat: 0.6, boxe: 0.15, pirouette: 0.3, kungfu: 0.5, corde: 0.2, airguitar: 0.2 }[id] || 0.2); m.group.position.y = Math.max(y, -0.3); m.group.rotation.y = 0.35;
+    m.group.traverse((o) => { if (o.isMesh) o.material = WHITE; });
+    g.add(m.group); camPos = [0, 1.15, -4.3]; look = [0, 1.0, 0];
+  }
   thumbScene.add(g);
   thumbCam.position.set(...camPos); thumbCam.lookAt(...look);
   // grande vignette pour la fenêtre d'achat : rendu 1024 px (net dans la modale)
@@ -169,11 +186,11 @@ function thumb(cat, id, big = false) {
   thumbCache.set(key, url);
   return url;
 }
-function rewardHTML(r, cls = '') {
+function rewardHTML(r, cls = '', hero_ = false) {
   if (!r) return `<div class="reward empty ${cls}"></div>`;
   if (r.cat === 'eclats') return `<div class="reward r-eclats ${cls}"><div class="eclats-art"><i class="coin"></i><b>${r.amount}</b></div><div class="rw-label">${r.amount} Éclats</div></div>`;
-  const it = itemOf(r.cat, r.id);
-  return `<div class="reward r-${it.rarity} ${cls}"><img alt="" src="${thumb(r.cat, r.id)}"><div class="rw-label">${it.name}</div></div>`;
+  const it = itemOf(r.cat, r.id), hero = hero_ && r.cat === 'skin';
+  return `<div class="reward r-${it.rarity} c-${r.cat} ${cls}"><img alt="" src="${thumb(r.cat, r.id, hero ? 'hero' : false)}"><div class="rw-label">${it.name}</div></div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -483,8 +500,8 @@ function renderPassTrack() {
   // badge ✓ / cadenas, niveau et type ajoutés DANS la case (avant sa balise fermante)
   tr.innerHTML = list.map((e) => {
     const cls = `${e.kind} ${e.unlocked ? '' : 'locked'} ${e.sel ? 'sel' : ''} ${e.cur ? 'cur' : ''}`;
-    const html = rewardHTML(e.r, cls).replace('class="reward', `${e.attr} class="reward`);
-    const extra = (e.unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + `<span class="pc-lvl">${e.lvl}</span><span class="pc-tag">${e.tag}</span>`;
+    const html = rewardHTML(e.r, cls, true).replace('class="reward', `${e.attr} class="reward`);
+    const extra = (e.unlocked ? '<i class="check">✓</i>' : `<i class="lock">${LOCK_SVG}</i>`) + `<span class="pc-lvl">${e.lvl}</span>`;
     return html.slice(0, -6) + extra + '</div>';
   }).join('');
   tr.querySelectorAll('.reward').forEach((el) => el.onclick = () => {
