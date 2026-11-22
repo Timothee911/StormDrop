@@ -253,7 +253,7 @@ function buildFace(head, s, skinM, dark) {
   sph(head, 0.024, 0, 0.183, faceZ(0, 0.183) - 0.018, skinM, 1, 0.9, 1); // bout du nez
   for (const sx of [-1, 1]) sph(head, 0.015, sx * 0.022, 0.176, faceZ(0.022, 0.176) - 0.004, skinM); // ailes du nez
   for (const sx of [-1, 1]) sph(head, 0.055, sx * 0.194, 0.24, 0.03, skinM, 0.4, 1, 0.7); // oreilles
-  if (s.extra === 'shades' || s.extra === 'visor') return;
+  if (s.extra === 'shades' || s.extra === 'visor' || s.style === 'balaclava') return;
   const white = mat(0xf7f8ff, { roughness: 0.2 }), iris = mat(s.eyes || 0x4a2e1a, { roughness: 0.15 });
   const pupil = mat(0x07070a, { roughness: 0.1 }), shine = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.6 });
   for (const sx of [-1, 1]) {
@@ -353,6 +353,24 @@ function buildHead(head, s) {
     cyl(head, 0.38, 0.4, 0.04, 0, 0.47, 0, hat, 20);
     cyl(head, 0.19, 0.2, 0.14, 0, 0.55, 0, hat, 16);
     cyl(head, 0.203, 0.203, 0.04, 0, 0.51, 0, mat(0xd94848), 16);
+  }
+  if (st === 'peaked') { // casquette d'officier : calotte large, bandeau, visière vernie, insigne
+    const band = mat(s.accent || 0xc9a227, { metalness: 0.6, roughness: 0.3 });
+    cyl(head, 0.255, 0.235, 0.12, 0, 0.47, 0.0, hat, 20).scale.z = 1.08;
+    cyl(head, 0.32, 0.27, 0.07, 0, 0.56, 0.01, hat, 20).scale.z = 1.1; // plateau évasé
+    cyl(head, 0.258, 0.258, 0.04, 0, 0.45, 0, band, 20).scale.z = 1.09;
+    const vis = rbox(head, 0.3, 0.025, 0.14, 0, 0.42, -0.27, mat(0x050507, { metalness: 0.5, roughness: 0.15 }), 0.01); vis.rotation.x = 0.28;
+    sph(head, 0.045, 0, 0.5, -0.27, band, 1, 1, 0.4);
+    sph(head, 0.026, 0, 0.5, -0.29, mat(0xc0141e, { emissive: 0x700008, emissiveIntensity: 0.5 }), 1, 1, 0.5);
+  }
+  if (st === 'balaclava') { // cagoule tactique + lunettes de vision nocturne relevées
+    const fab = mat(s.hat, { roughness: 1 });
+    part(head, hairGeo(0.0, -0.02, 0.014), fab, 0, 0, 0);
+    part(head, arcGeo(0.228, 0.075, 2.0), mat(0x0d1a14, { metalness: 0.4, roughness: 0.15, emissive: 0x0b3a1c, emissiveIntensity: 0.5, side: THREE.DoubleSide }), 0, 0.28, 0, 1, 1, 1.05);
+    rbox(head, 0.2, 0.06, 0.07, 0, 0.47, -0.2, mat(0x22252b, { metalness: 0.5, roughness: 0.4 }), 0.02).rotation.x = -0.5; // support de casque
+    for (const sx of [-1, 1]) cyl(head, 0.032, 0.036, 0.09, sx * 0.05, 0.53, -0.23, mat(0x1a1d22, { metalness: 0.5, roughness: 0.35 }), 10).rotation.x = -1.1; // tubes relevés
+    for (const sx of [-1, 1]) cyl(head, 0.07, 0.07, 0.05, sx * 0.22, 0.25, 0.02, mat(0x202329, { roughness: 0.6 }), 12).rotation.z = Math.PI / 2; // casque radio
+    rbox(head, 0.03, 0.22, 0.03, 0.21, 0.4, 0.02, mat(0x202329), 0.01).rotation.z = -0.15;
   }
   if (st === 'fedora') {
     cyl(head, 0.3, 0.3, 0.03, 0, 0.47, 0.01, hat, 20).scale.z = 0.95;
@@ -899,15 +917,93 @@ function buildKaia(cos) {
   const glider = makeParachute(cos.glider); glider.visible = false; g.add(glider);
   return { group: g, hipL, hipR, kneeL, kneeR, torso, head, shL, shR, elL, elR, hand, glider };
 }
+// ---------------------------------------------------------------------------
+// TENUES DE L'OMBRE (déguisement en partie, via les cabines téléphoniques, et
+// uniformes des hommes de main) : trois modèles complets posés sur le squelette
+// du perso, qui suivent donc toutes les animations.
+export const SHADOW_OUTFITS = {
+  agent: { name: 'Agent de l’Ombre', outfit: 'suit', shirt: 0x17181f, pants: 0x121319, skin: 0xb07a52, hat: 0x0e0e13, shoes: 0x0a0a0c, gloves: 0x0c0c10, style: 'fedora', extra: 'shades', accent: 0x0c0c10 },
+  garde: { name: 'Garde de l’Ombre', outfit: 'tactical', shirt: 0x1d2026, pants: 0x181b20, skin: 0xb07a52, hat: 0x121418, shoes: 0x141518, gloves: 0x101114, style: 'balaclava', accent: 0x101114 },
+  officier: { name: 'Officier de l’Ombre', outfit: 'officer', shirt: 0x101015, pants: 0x0f0f14, skin: 0xc58c64, hat: 0x0d0d12, shoes: 0x060608, gloves: 0x0b0b0e, style: 'peaked', extra: 'shades', accent: 0xc9a227 },
+};
+export const SHADOW_OUTFIT_IDS = Object.keys(SHADOW_OUTFITS);
+function buildShadowOutfit(s, torso, head, shL, shR, hipL, hipR, kneeL, kneeR) {
+  const jacket = mat(s.shirt, { roughness: 0.6 });
+  const black = mat(0x08080b, { roughness: 0.5 });
+  const red = mat(0xc0141e, { roughness: 0.4, emissive: 0x5a0008, emissiveIntensity: 0.35 });
+  const gold = mat(0xc9a227, { metalness: 0.65, roughness: 0.3 });
+  const white = mat(0xeef0f4, { roughness: 0.6 });
+  const steel = mat(0x8d949e, { metalness: 0.7, roughness: 0.35 });
+  // insigne de l'Ombre : disque rouge cerclé, motif sombre au centre
+  const insignia = (x, y, k = 1) => {
+    onChest(torso, 0.075 * k, 0.075 * k, 0.014, x, y, red, 0.035 * k);
+    onChest(torso, 0.035 * k, 0.035 * k, 0.02, x, y, black, 0.017 * k);
+  };
+  // chaussures de ville / rangers : on recouvre la basket par une coque lisse
+  const shoeOver = (m, k = 1) => { for (const kn of [kneeL, kneeR]) { rbox(kn, 0.17, 0.11 * k, 0.32, 0, -0.39 + (k - 1) * 0.04, 0.06, m, 0.05); rbox(kn, 0.18, 0.03, 0.33, 0, -0.445, 0.06, black, 0.012); } };
+  if (s.outfit === 'suit') {
+    // costume noir ajusté : revers, chemise blanche, cravate, pochette, oreillette
+    onChest(torso, 0.14, 0.28, 0.014, 0, 0.6, white, 0.02);                       // plastron de chemise
+    onChest(torso, 0.045, 0.27, 0.022, 0, 0.53, black, 0.015);                    // cravate
+    onChest(torso, 0.06, 0.045, 0.026, 0, 0.68, black, 0.015);                    // nœud
+    for (const sx of [-1, 1]) { const l = onChest(torso, 0.075, 0.3, 0.02, sx * 0.105, 0.56, mat(0x0d0d12, { roughness: 0.35 }), 0.012); l.rotation.z = sx * 0.32; } // revers satinés
+    for (const y of [0.33, 0.41]) sph(torso, 0.016, 0, y, chestFront(0, y) - 0.012, black); // boutons
+    onChest(torso, 0.07, 0.03, 0.018, -0.17, 0.585, white, 0.008);                // pochette
+    insignia(0.17, 0.6, 0.8);
+    // pans de la veste qui descendent sur les hanches
+    const hem = cyl(torso, 0.262, 0.29, 0.2, 0, 0.13, 0.005, jacket, 22); hem.scale.z = 0.66;
+    // oreillette et son fil spiralé vers le col
+    sph(head, 0.032, -0.205, 0.23, 0.02, black);
+    limb(head, 0.007, 0.007, 0.22, -0.2, 0.13, 0.06, mat(0xd8dde4, { roughness: 0.3 })).rotation.x = 0.2;
+    shoeOver(mat(0x060607, { metalness: 0.2, roughness: 0.18 })); // richelieus vernis
+    for (const sh of [shL, shR]) { const el = sh.children.find((c) => c.isGroup); if (el) cyl(el, 0.07, 0.068, 0.04, 0, -0.235, 0, white, 12); } // manchettes de chemise
+  } else if (s.outfit === 'tactical') {
+    // gilet pare-balles à plaques, porte-chargeurs, radio, brassard rouge, rangers
+    const vest = mat(0x2a2e35, { roughness: 0.85 });
+    onChest(torso, 0.46, 0.36, 0.06, 0, 0.5, vest, 0.04);                          // plaque avant
+    rbox(torso, 0.46, 0.38, 0.07, 0, 0.5, 0.175, vest, 0.04);                      // plaque arrière
+    for (const sx of [-1, 1]) rbox(torso, 0.06, 0.4, 0.34, sx * 0.25, 0.5, 0.0, vest, 0.02); // flancs
+    for (const sx of [-1, 1]) rbox(torso, 0.09, 0.04, 0.36, sx * 0.17, 0.72, 0.0, vest, 0.015); // bretelles
+    for (const x of [-0.13, 0, 0.13]) { onChest(torso, 0.1, 0.13, 0.05, x, 0.38, mat(0x23262c, { roughness: 0.9 }), 0.02); onChest(torso, 0.1, 0.03, 0.06, x, 0.45, black, 0.01); } // porte-chargeurs
+    onChest(torso, 0.07, 0.12, 0.05, 0.16, 0.61, black, 0.015);                    // radio
+    limb(torso, 0.008, 0.008, 0.16, 0.18, 0.72, -0.15, black).rotation.z = 0.3;    // antenne
+    insignia(-0.14, 0.6, 0.85);
+    for (const sh of [shL]) cyl(sh, 0.098, 0.098, 0.08, 0, -0.16, 0, red, 14);     // brassard
+    for (const sh of [shL, shR]) sph(sh, 0.1, 0, -0.02, 0, vest, 1.15, 0.75, 1.15); // épaulières
+    for (const kn of [kneeL, kneeR]) rbox(kn, 0.16, 0.15, 0.07, 0, -0.01, -0.09, mat(0x2a2e35, { roughness: 0.7 }), 0.03).rotation.x = -0.1; // genouillères renforcées
+    rbox(hipR, 0.08, 0.2, 0.13, 0.11, -0.12, 0.0, black, 0.025);                    // holster de cuisse
+    for (const y of [-0.08, -0.2]) cyl(hipR, 0.135, 0.135, 0.025, 0, y, 0, black, 14);
+    shoeOver(mat(0x141518, { roughness: 0.7 }), 1.6);                                // rangers montantes
+  } else if (s.outfit === 'officer') {
+    // long manteau croisé à boutons dorés, épaulettes à franges, ceinturon, écharpe rouge
+    const coat = jacket;
+    for (const sx of [-1, 1]) for (const y of [0.36, 0.46, 0.56]) sph(torso, 0.017, sx * 0.09, y, chestFront(sx * 0.09, y) - 0.012, gold); // double rangée
+    for (const sx of [-1, 1]) { const l = onChest(torso, 0.08, 0.2, 0.02, sx * 0.12, 0.64, mat(0x18181f, { roughness: 0.4 }), 0.012); l.rotation.z = sx * 0.4; } // revers
+    const sash = onChest(torso, 0.07, 0.62, 0.02, 0.02, 0.48, red, 0.012); sash.rotation.z = 0.62; // écharpe en diagonale
+    cyl(torso, 0.27, 0.27, 0.07, 0, 0.21, 0, black, 22).scale.z = 0.66;            // ceinturon
+    rbox(torso, 0.1, 0.075, 0.03, 0, 0.21, -0.185, gold, 0.012);                    // boucle dorée
+    insignia(-0.16, 0.6, 0.9);
+    for (const sx of [-1, 1]) { // épaulettes dorées à franges
+      rbox(torso, 0.16, 0.035, 0.14, sx * 0.3, 0.7, 0, gold, 0.015);
+      for (let i = 0; i < 5; i++) limb(torso, 0.01, 0.01, 0.07, sx * (0.23 + i * 0.035), 0.67, -0.06, gold);
+    }
+    // pans du manteau : dos et côtés jusqu'aux genoux (ouverts devant pour la marche)
+    rbox(torso, 0.5, 0.66, 0.035, 0, -0.2, 0.17, coat, 0.015);
+    for (const sx of [-1, 1]) { const p = rbox(torso, 0.035, 0.62, 0.3, sx * 0.27, -0.18, 0.03, coat, 0.012); p.rotation.z = sx * 0.06; }
+    for (const sx of [-1, 1]) { const p = rbox(torso, 0.13, 0.58, 0.03, sx * 0.19, -0.17, -0.16, coat, 0.012); p.rotation.z = sx * 0.08; }
+    for (const sh of [shL, shR]) { const el = sh.children.find((c) => c.isGroup); if (el) cyl(el, 0.074, 0.07, 0.07, 0, -0.22, 0, gold, 12); } // parements dorés
+    shoeOver(mat(0x060607, { metalness: 0.25, roughness: 0.15 }), 2.2);              // bottes cavalières
+  }
+}
 export function makeCharMesh(cos) {
-  const s = SKINS[cos.skin] || SKINS.recrue;
+  const s = cos.skinDef || SKINS[cos.skin] || SKINS.recrue;
   if (s.model === 'kaia') return buildKaia(cos);
   const g = new THREE.Group();
   const shirt = mat(s.shirt, { roughness: 0.85 }), pants = mat(s.pants, { roughness: 0.9 });
   const skinM = mat(s.skin, { roughness: 0.55 }), dark = mat(0x1a1a22, { roughness: 0.6 });
   const bootM = mat(0x23232f, { roughness: 0.4 }), soleM = mat(0xd8d4c8, { roughness: 0.7 });
   const armored = s.style === 'astro' || s.style === 'knight';
-  const gloveM = armored ? mat(0xdfe4ee, { roughness: 0.5 }) : skinM;
+  const gloveM = s.gloves !== undefined ? mat(s.gloves, { roughness: 0.45 }) : armored ? mat(0xdfe4ee, { roughness: 0.5 }) : skinM;
   const metal = mat(0xc0c8d0, { metalness: 0.7, roughness: 0.35 });
 
   // --- jambes : pantalon cargo (cuisse, poche latérale), genouillère, mollet, grosse chaussure ---
@@ -974,6 +1070,7 @@ export function makeCharMesh(cos) {
   }
   torso.add(shL, shR);
   const hand = new THREE.Group(); hand.position.set(0, -0.32, 0); hand.rotation.x = -Math.PI / 2; elR.add(hand);
+  if (s.outfit) buildShadowOutfit(s, torso, head, shL, shR, hipL, hipR, kneeL, kneeR);
   g.add(hipL, hipR, torso);
   const glider = makeParachute(cos.glider); glider.visible = false; g.add(glider);
   g.traverse((m) => { if (m.isMesh) m.castShadow = true; });

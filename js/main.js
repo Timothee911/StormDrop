@@ -5,7 +5,7 @@ import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.j
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
-import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints } from './cosmetics.js';
+import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints, SHADOW_OUTFITS, SHADOW_OUTFIT_IDS } from './cosmetics.js';
 
 // =====================================================================
 // Constants & data
@@ -109,35 +109,98 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
 });
 
-// Sky dome
+// Sky dome — ciel procédural complet, dans un seul shader :
+//  • dégradé zénith -> horizon à décroissance exponentielle + voile clair à l'horizon ;
+//  • soleil : disque net assombri sur le bord, halo de diffusion (Mie) ;
+//  • lever / coucher : bande chaude orangée concentrée du côté du soleil ;
+//  • cirrus : voiles d'altitude étirés par le vent qui dérivent lentement ;
+//  • nuit : étoiles qui scintillent (couleurs variées), Voie lactée, lune
+//    cratérisée avec son halo, légère aurore vers le nord.
+// Les couleurs des uniformes sont linéaires : on les encode en sRGB quand on
+// dessine directement à l'écran (lin = 0) et on les laisse linéaires sinon.
+const SKY_T = { value: 0 };
 let skyMat = null, sunDisc = null, stars = null;
 {
-  const g = new THREE.SphereGeometry(1200, 32, 16);
+  const g = new THREE.SphereGeometry(1200, 48, 24);
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(0x3d8ae8) }, mid: { value: new THREE.Color(0xa6dcff) }, bot: { value: FOG_COL }, lin: { value: 0 }, sunDir: { value: new THREE.Vector3(0.5, 0.7, 0.35).normalize() }, glow: { value: 1 } },
+    uniforms: { top: { value: new THREE.Color(0x3d8ae8) }, mid: { value: new THREE.Color(0xa6dcff) }, bot: { value: FOG_COL }, lin: { value: 0 }, sunDir: { value: new THREE.Vector3(0.5, 0.7, 0.35).normalize() }, moonDir: { value: new THREE.Vector3(-0.5, -0.7, -0.35).normalize() }, glow: { value: 1 }, uT: SKY_T, uNight: { value: 0 } },
     vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-    fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bot; uniform float lin; uniform vec3 sunDir; uniform float glow; varying vec3 vP;
+    fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bot; uniform float lin; uniform vec3 sunDir; uniform vec3 moonDir; uniform float glow; uniform float uT; uniform float uNight; varying vec3 vP;
+      float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int k = 0; k < 5; k++) { s += a * n2(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; } return s; }
       void main(){
-        float h = vP.y; vec3 u = mix(mid, top, smoothstep(0.05, 0.75, h));
-        // halo around the sun, warmer when it is low
-        float sd = max(dot(normalize(vP), sunDir), 0.0);
-        vec3 gc = mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.95, 0.82), smoothstep(0.05, 0.5, sunDir.y));
-        u += gc * (pow(sd, 6.0) * 0.28 + pow(sd, 48.0) * 0.45) * glow;
-        if (lin > 0.5) u = pow(u, vec3(2.2));
-        vec3 c = h > 0.0 ? u : bot;
-        c = mix(bot, c, smoothstep(-0.02, 0.3, h)); // wide haze band melting into the fog
+        vec3 d = normalize(vP); float h = d.y, hz = max(h, 0.0);
+        // dégradé : bleu profond au zénith, plus clair vers l'horizon, voile laiteux au ras de l'eau
+        vec3 c = mix(mid, top, pow(smoothstep(0.0, 1.0, hz), 0.6));
+        c = mix(c, bot, exp(-hz * 7.0) * 0.75);
+        float day = smoothstep(-0.12, 0.08, sunDir.y);
+        float sunLow = (1.0 - smoothstep(0.02, 0.5, sunDir.y)) * smoothstep(-0.2, 0.0, sunDir.y);
+        // lever / coucher : bande chaude du côté du soleil, rose plus haut
+        float az = max(dot(normalize(d.xz + 1e-4), normalize(sunDir.xz + 1e-4)), 0.0);
+        c += vec3(1.0, 0.42, 0.14) * pow(az, 2.5) * exp(-hz * 6.0) * sunLow * 0.85;
+        c += vec3(0.9, 0.35, 0.45) * pow(az, 1.5) * exp(-hz * 2.2) * sunLow * 0.18;
+        // halo de diffusion autour du soleil
+        float sd = max(dot(d, sunDir), 0.0);
+        vec3 gc = mix(vec3(1.0, 0.62, 0.32), vec3(1.0, 0.93, 0.8), smoothstep(0.05, 0.5, sunDir.y));
+        c += gc * (pow(sd, 5.0) * 0.16 + pow(sd, 40.0) * 0.35 + pow(sd, 400.0) * 0.6) * glow * day;
+        // cirrus : voiles étirés, projetés sur un plafond d'altitude
+        if (h > 0.0) {
+          vec2 uv = d.xz / (h + 0.12);
+          vec2 q = vec2(uv.x * 0.9 + uv.y * 0.35, uv.y * 2.6 - uv.x * 0.5) * 1.6 + vec2(uT * 0.006, uT * 0.002);
+          float ci = fbm(q + fbm(q * 0.5 + 3.0) * 1.2);
+          ci = smoothstep(0.58, 0.9, ci) * smoothstep(0.03, 0.22, h) * smoothstep(0.25, 0.6, n2(uv * 0.22 + 11.0)); // voiles par plaques, pas partout
+          vec3 cc = mix(vec3(1.0), vec3(1.0, 0.62, 0.42), sunLow * 0.8);
+          cc = mix(cc, vec3(0.16, 0.19, 0.28), uNight);
+          cc += gc * pow(sd, 6.0) * 0.4 * day;
+          c = mix(c, cc, ci * (0.42 - 0.3 * uNight));
+        }
+        // NUIT : étoiles scintillantes, Voie lactée, lune, aurore discrète
+        if (uNight > 0.01 && h > -0.02) {
+          float vis = uNight * smoothstep(-0.02, 0.18, h);
+          vec3 gal = normalize(vec3(0.35, 0.55, 0.76));
+          float band = exp(-pow(dot(d, gal), 2.0) * 22.0);
+          float mw = band * (0.45 + 0.55 * fbm(vec2(atan(d.z, d.x) * 6.0, d.y * 9.0)));
+          c += vec3(0.35, 0.4, 0.6) * mw * 0.16 * vis;
+          vec3 sp = d * 260.0, cell = floor(sp), f = fract(sp) - 0.5;
+          float r = h3(cell);
+          float dens = 0.982 - band * 0.02;
+          float st = step(dens, r) * smoothstep(0.42, 0.0, length(f + (vec3(h3(cell + 3.1), h3(cell + 7.7), h3(cell + 1.9)) - 0.5) * 0.4));
+          float tw = 0.55 + 0.45 * sin(uT * (1.5 + r * 4.0) + r * 60.0);
+          vec3 scol = mix(vec3(0.75, 0.82, 1.0), vec3(1.0, 0.86, 0.7), h3(cell + 5.3));
+          c += scol * st * tw * (0.6 + 2.0 * (r - dens) / (1.0 - dens)) * vis;
+          // aurore : rideaux verts et violets qui ondulent vers le nord (z < 0)
+          float north = smoothstep(0.1, -0.7, d.z);
+          float cur = n2(vec2(d.x * 4.0 + uT * 0.05, uT * 0.03)) * n2(vec2(d.x * 11.0 - uT * 0.08, 3.0));
+          float au = cur * smoothstep(0.06, 0.2, h) * smoothstep(0.55, 0.25, h) * north;
+          c += mix(vec3(0.1, 0.9, 0.5), vec3(0.55, 0.25, 0.9), smoothstep(0.15, 0.45, h)) * au * 0.22 * uNight;
+        }
+        float md = dot(d, moonDir);
+        if (moonDir.y > -0.1 && md > 0.99) {
+          vec3 mu = normalize(cross(moonDir, vec3(0.0, 1.0, 0.0))), mv = cross(mu, moonDir);
+          vec2 mp = vec2(dot(d, mu), dot(d, mv)) / 0.03;          // coordonnées sur le disque (rayon 1)
+          float disc = smoothstep(1.0, 0.94, length(mp));
+          float crat = 0.78 + 0.22 * fbm(mp * 2.5 + 4.0) - 0.18 * smoothstep(0.35, 0.0, length(mp - vec2(0.3, 0.2))) - 0.12 * smoothstep(0.25, 0.0, length(mp + vec2(0.35, 0.1)));
+          float phase = smoothstep(-0.6, 0.2, mp.x + 0.25);         // croissant éclairé
+          vec3 moon = vec3(0.92, 0.94, 1.0) * crat * (0.25 + 0.75 * phase) * 1.4;
+          c = mix(c, moon, disc * smoothstep(0.0, 0.3, uNight + 0.15));
+        }
+        c += vec3(0.55, 0.62, 0.85) * (pow(max(md, 0.0), 300.0) * 0.25 + pow(max(md, 0.0), 30.0) * 0.06) * uNight;
+        // disque du soleil (bord assombri)
+        float sdisc = smoothstep(0.99955, 0.99975, sd);
+        c = mix(c, vec3(1.0, 0.96, 0.86) * mix(2.2, 1.6, sunLow) * (0.85 + 0.15 * smoothstep(0.99955, 0.99995, sd)), sdisc * day);
+        // sous l'horizon : couleur de brume (la mer recouvre tout)
+        c = mix(bot, c, smoothstep(-0.03, 0.02, h));
+        if (lin < 0.5) c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
         gl_FragColor = vec4(c, 1.0); }`,
   });
   const sky = new THREE.Mesh(g, m); sky.renderOrder = -1; scene.add(sky); skyMat = m;
-  // Sun disc
+  // le soleil est dessiné par le shader : l'ancien disque reste pour compatibilité, caché
   const sun = new THREE.Mesh(new THREE.CircleGeometry(40, 32), new THREE.MeshBasicMaterial({ color: 0xfff6c8, fog: false }));
-  sun.position.set(500, 700, 350); sun.lookAt(0, 0, 0); scene.add(sun); sunDisc = sun;
-  // stars (visible at night)
-  const sg = new THREE.BufferGeometry(), sp = [];
-  for (let i = 0; i < 700; i++) { const a = MR() * 6.283, y = 0.15 + MR() * 0.85, r = Math.sqrt(1 - y * y); sp.push(Math.cos(a) * r * 1100, y * 1100, Math.sin(a) * r * 1100); }
-  sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-  stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false })); scene.add(stars);
+  sun.position.set(500, 700, 350); sun.visible = false; scene.add(sun); sunDisc = sun;
 }
 
 const hemi = new THREE.HemisphereLight(0xc4dcff, 0x9aa57a, 1.15); // cool fill: shadows read bluish against the warm sun
@@ -941,6 +1004,11 @@ const clouds = [];
     const puff = (x, y, r, a) => { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,' + a + ')'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); };
     puff(128, 132, 118, .95); puff(82, 148, 78, .8); puff(178, 146, 84, .8);
     puff(128, 106, 68, .9); puff(58, 158, 52, .7); puff(202, 158, 52, .7);
+    // ventre ombré : le dessous du cumulus est gris-bleu, le sommet reste éclatant
+    g.globalCompositeOperation = 'source-atop';
+    const sh = g.createLinearGradient(0, 70, 0, 230); sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(0.55, 'rgba(196,206,224,0.45)'); sh.addColorStop(1, 'rgba(150,163,190,0.85)');
+    g.fillStyle = sh; g.fillRect(0, 0, 256, 256);
+    g.globalCompositeOperation = 'source-over';
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   })();
   const n = 15;
@@ -954,6 +1022,7 @@ const clouds = [];
         map: tex, transparent: true, opacity: rand(0.5, 0.85), depthWrite: false, fog: false,
         color: new THREE.Color(1, 1, 1).lerp(new THREE.Color(0.82, 0.87, 0.96), rand(0, 0.6)),
       }));
+      s.userData.base = s.material.color.clone();
       s.position.set(t * W * 2 + rand(-18, 18), rand(-12, 12) + Math.cos(t * Math.PI) * 8, rand(-28, 28));
       const w = rand(130, 230); s.scale.set(w, w * rand(0.45, 0.62), 1);
       grp.add(s);
@@ -4813,7 +4882,7 @@ function buildPhoneBooth(p, at) {
   g.position.set(bx, by, bz); scene.add(g);
   const col = addCollider({ type: 'box', minX: bx - 0.65, maxX: bx + 0.65, minZ: bz - 0.65, maxZ: bz + 0.65, minY: by, maxY: by + 2.9 });
   col.indestructible = true;
-  booths.push({ x: bx, y: by, z: bz, mesh: g, col });
+  booths.push({ x: bx, y: by, z: bz, mesh: g, col, outfit: SHADOW_OUTFIT_IDS[booths.length % SHADOW_OUTFIT_IDS.length] }); // chaque cabine fournit sa tenue
 }
 const AGENCY_PAL = { wall: 0xe0ded6, trim: 0xffc400, accent: 0xffc400 };
 // ---- La Grotte : matériau rocheux dédié + petit batcher (collider invisible +
@@ -7155,7 +7224,8 @@ function startGame() {
     boss.skill = 1.05; boss.think = rand(0.5); boss.react = 0; boss.strafe = 1; boss.strafeT = 0; boss.burst = 0; boss.stuckT = 0; boss.stuckN = 0; boss.lastP = new THREE.Vector3(); boss.lostT = 0; boss.buildCd = 0; boss.alert = 0;
     addNameTag(boss, cfg.boss);
     for (let i = 0; i < cfg.hench; i++) {
-      const h = new Char('Ombre', false, { skin: 'ombre', backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
+      // les hommes de main portent les trois tenues de l'Ombre (agent, garde, officier)
+      const h = new Char('Ombre', false, { skin: 'ombre', skinDef: SHADOW_OUTFITS[SHADOW_OUTFIT_IDS[i % SHADOW_OUTFIT_IDS.length]], backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
       h.hench = true; h.henchPoi = p; h.bossRef = boss; h.wpBox = wpBox;
       h.lodPhase = i % 4; h.lodAcc = 0; // mise à jour des PNJ éloignés (comme les bots)
       // spawn sur le circuit (décalé pour ne pas s'empiler) : jamais dans un mur
@@ -7324,7 +7394,7 @@ function interact() {
   if (t.type === 'chest') openChest(t.c);
   else if (t.type === 'door') toggleDoor(t.dr);
   else if (t.type === 'vault') openVault(t.v);
-  else if (t.type === 'booth') setDisguise(player, !player.disguise);
+  else if (t.type === 'booth') setDisguise(player, !player.disguise, false, t.b.outfit);
   else if (t.type === 'drop') openDrop(t.c);
   else if (t.type === 'vehicle') enterVehicle(player, t.v);
   else if (t.type === 'ammo') { openAmmoBox(t.c); addXP('Caisse de munitions', 20); for (let i = 0; i < 2; i++) { const id = pick(['ar', 'smg', 'shotgun', 'sniper']); spawnLoot(ammoFor(id), t.c.x, t.c.y + 0.5, t.c.z); } }
@@ -7368,24 +7438,47 @@ function openVault(v) {
   showCenter('COFFRE-FORT OUVERT', `Le butin de ${v.poi.name} est à toi`, 2.2);
 }
 // Déguisement d'Ombre (cabine téléphonique rouge)
-function setDisguise(ch, on, broke) {
+// DÉGUISEMENT : une vraie tenue de l'Ombre (modèle complet, cf. SHADOW_OUTFITS)
+// remplace le corps du joueur. Elle suit toutes les animations : chaque frame,
+// les articulations du joueur sont recopiées sur celles de la tenue (syncDisguise).
+// L'arme reste celle du joueur (sa main n'est pas masquée).
+const DISGUISE_JOINTS = ['hipL', 'hipR', 'kneeL', 'kneeR', 'torso', 'head', 'shL', 'shR', 'elL', 'elR'];
+function setBodyHidden(ch, hide) {
+  if (hide) {
+    const P = ch.parts, keep = new Set();
+    for (const root of [P.hand, P.glider, ch.disguiseMesh]) if (root) root.traverse((o) => keep.add(o));
+    ch.hiddenBody = [];
+    ch.mesh.traverse((o) => { if (o.isMesh && o.visible && !keep.has(o) && o.material !== hitMatInvisible) { o.visible = false; ch.hiddenBody.push(o); } });
+  } else if (ch.hiddenBody) { for (const o of ch.hiddenBody) o.visible = true; ch.hiddenBody = null; }
+}
+function syncDisguise(ch) {
+  const D = ch.disguiseParts, P = ch.parts;
+  if (!D) return;
+  for (const k of DISGUISE_JOINTS) D[k].rotation.copy(P[k].rotation); // les animations ne font que tourner les articulations
+}
+function setDisguise(ch, on, broke, outfit) {
   if (!ch || !ch.isPlayer || ch.disguise === on) return;
   ch.disguise = on;
   // enfilant le costume, les hommes de main perdent ta trace
   if (on) { for (const c of chars) if (c.hench && c.target === ch) c.target = null; }
-  if (!ch.disguiseMesh) {
-    const g = new THREE.Group();
-    addBox(g, 0.82, 0.92, 0.52, 0, 1.28, 0, matC(0x17171f));
-    addBox(g, 0.64, 0.22, 0.48, 0, 1.72, 0, matC(0x17171f));
-    addBox(g, 0.68, 0.09, 0.68, 0, 2.08, 0, matC(0x101016));
-    addBox(g, 0.46, 0.26, 0.46, 0, 2.2, 0, matC(0x101016));
-    g.visible = false;
-    ch.mesh.add(g);
-    ch.disguiseMesh = g;
+  if (on) {
+    const id = SHADOW_OUTFITS[outfit] ? outfit : (ch.disguiseId || SHADOW_OUTFIT_IDS[0]);
+    if (!ch.disguiseMesh || ch.disguiseId !== id) {
+      if (ch.disguiseMesh) ch.mesh.remove(ch.disguiseMesh);
+      const m = makeCharMeshCos({ skin: 'ombre', skinDef: SHADOW_OUTFITS[id], backpack: 'none', pickaxe: 'default', glider: 'default', emote: 'danse' });
+      m.group.remove(m.glider);
+      ch.disguiseMesh = m.group; ch.disguiseParts = m; ch.disguiseId = id;
+      ch.mesh.add(m.group);
+    }
+    ch.disguiseMesh.visible = true;
+    setBodyHidden(ch, true);
+    syncDisguise(ch);
+  } else {
+    if (ch.disguiseMesh) ch.disguiseMesh.visible = false;
+    setBodyHidden(ch, false);
   }
-  ch.disguiseMesh.visible = on;
   const el = document.getElementById('disguiseTag');
-  if (el) el.classList.toggle('on', on);
+  if (el) { el.classList.toggle('on', on); if (on) el.textContent = 'DÉGUISEMENT · ' + SHADOW_OUTFITS[ch.disguiseId].name.toUpperCase(); }
   if (broke && !on) { showCenter('DÉGUISEMENT ROMPU', 'Les hommes de main t\'ont repéré', 1.6); sfx('warn', 0.5); }
   else sfx('click', 0.5);
 }
@@ -7690,6 +7783,7 @@ function updateChar(ch, dt) {
   }
   ch.wasInWaterFX = ch.inWater;
   animateChar(ch, dt);
+  if (ch.disguise) syncDisguise(ch);
 }
 // Effets de nage : sillage en V et écume aux mains (crawl), petits anneaux sur
 // place, bulles qui remontent en plongée et après un grand plongeon.
@@ -8470,7 +8564,7 @@ function updateHUD(dt) {
   else if (player.alive && player.reviving) pr.style.display = 'none'; // la barre de réanimation porte déjà l'info
   else if (player.alive && player.mode === 'ground') {
     const t = nearestInteract();
-    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'revive' ? (player.reviving === t.c ? `Annuler la réanimation de ${t.c.name}` : `Réanimer ${t.c.name}`) : t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (player.keycards && player.keycards[t.v.poi.key] ? 'Ouvrir le coffre-fort' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : 'Se déguiser en homme de main') : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
+    if (t) { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> ${t.type === 'revive' ? (player.reviving === t.c ? `Annuler la réanimation de ${t.c.name}` : `Réanimer ${t.c.name}`) : t.type === 'drop' ? 'Ouvrir le largage' : t.type === 'chest' ? 'Ouvrir le coffre' : t.type === 'door' ? (t.dr.open ? 'Fermer la porte' : 'Ouvrir la porte') : t.type === 'ammo' ? 'Ouvrir la caisse de munitions' : t.type === 'vault' ? (player.keycards && player.keycards[t.v.poi.key] ? 'Ouvrir le coffre-fort' : `Coffre-fort · carte de ${t.v.poi.name} requise`) : t.type === 'booth' ? (player.disguise ? 'Retirer le déguisement' : `Enfiler la tenue : ${SHADOW_OUTFITS[t.b.outfit || 'agent'].name}`) : t.type === 'vehicle' ? (t.v.kind === 'car' ? 'Conduire la voiture' : 'Piloter le bateau') : 'Ramasser ' + itemLabel(t.L.item) + weaponCard(t.L.item)}`; }
     else pr.style.display = 'none';
   } else if (player.alive && player.mode === 'drive') { pr.style.display = 'block'; pr.innerHTML = `<kbd>${keyLabel(BIND.interact)}</kbd> Descendre · ${Math.round(Math.abs(player.vehicle.speed) * 3.6)} km/h`; }
   else pr.style.display = 'none';
@@ -9456,13 +9550,13 @@ function updateAmbient(dt) {
 // =====================================================================
 const TOD_KEYS = [
   // t, skyTop, skyMid, fog, sun colour, sun int, hemi int
-  [0.0, 0x0a1030, 0x1c2a5a, 0x2a3866, 0x8fa8ff, 0.55, 0.55],
-  [0.22, 0x2a3f8f, 0xff9a6a, 0xf0b090, 0xffb070, 1.4, 0.8],
-  [0.32, 0x3d8ae8, 0xa6dcff, 0xbfe6ff, 0xffe8c4, 2.4, 1.15],
-  [0.68, 0x3d8ae8, 0xa6dcff, 0xbfe6ff, 0xffe8c4, 2.4, 1.15],
-  [0.78, 0x3a3f9f, 0xff7a4a, 0xffb080, 0xff9050, 1.5, 0.85],
-  [0.88, 0x0a1030, 0x1c2a5a, 0x2a3866, 0x8fa8ff, 0.55, 0.55],
-  [1.0, 0x0a1030, 0x1c2a5a, 0x2a3866, 0x8fa8ff, 0.55, 0.55],
+  [0.0, 0x03061a, 0x0e1838, 0x1c2850, 0x8fa8ff, 0.55, 0.55],
+  [0.22, 0x2c3f88, 0xc196a6, 0xffb98a, 0xffb070, 1.4, 0.8],
+  [0.32, 0x1f6fd6, 0x8cc6f2, 0xd2ecff, 0xffe8c4, 2.4, 1.15],
+  [0.68, 0x1f6fd6, 0x8cc6f2, 0xd2ecff, 0xffe8c4, 2.4, 1.15],
+  [0.78, 0x2e3478, 0xb9879e, 0xffa477, 0xff9050, 1.5, 0.85],
+  [0.88, 0x03061a, 0x0e1838, 0x1c2850, 0x8fa8ff, 0.55, 0.55],
+  [1.0, 0x03061a, 0x0e1838, 0x1c2850, 0x8fa8ff, 0.55, 0.55],
 ];
 let tod = pick([0.3, 0.42, 0.5, 0.62, 0.7, 0.74]); // starting time of day changes every match
 const DAY_LEN = 900; // seconds for a full day
@@ -9470,6 +9564,7 @@ let nightF = 0; // facteur nuit (0 = plein jour, 1 = nuit noire) : lucioles, pap
 const _ca = new THREE.Color(), _cb = new THREE.Color();
 let todAcc = 1;
 function lerpHex(a, b, t, out) { return out.set(a).lerp(_cb.set(b), t); }
+const CLOUD_TINT = new THREE.Color(1, 1, 1), _cT = new THREE.Color();
 function updateDayNight(dt) {
   tod = (tod + dt / DAY_LEN) % 1; todAcc += dt; if (todAcc < 0.25) return; todAcc = 0;
   let i = 0; while (i < TOD_KEYS.length - 2 && TOD_KEYS[i + 1][0] <= tod) i++;
@@ -9480,15 +9575,29 @@ function updateDayNight(dt) {
   const night = clamp(1 - sunLight.intensity / 1.2, 0, 1);
   nightF = night;
   // l'eau reflète le ciel du moment (plein jour, crépuscule aurore/rouge ou nuit)
-  if (skyMat) { WSKY.top.copy(skyMat.uniforms.top.value); WSKY.mid.copy(skyMat.uniforms.mid.value); WSKY.sun.copy(skyMat.uniforms.sunDir.value); }
+  if (skyMat) { WSKY.top.copy(skyMat.uniforms.top.value); WSKY.mid.copy(skyMat.uniforms.mid.value); }
   WSKY.night.value = night;
-  if (stars) stars.material.opacity = night;
+  const nightK = clamp((night - 0.12) / 0.38, 0, 1); // nuit « visuelle » : 1 en pleine nuit
+  if (skyMat) skyMat.uniforms.uNight.value = nightK;
   // sun path (moon at night keeps light from above)
   const ang = (tod - 0.25) * Math.PI * 2, el = Math.sin(ang);
   const sx = Math.cos(ang) * 110, sy = Math.max(35, Math.abs(el) * 130), sz = 50;
   SUN_OFF.set(sx, sy, sz);
-  if (skyMat) { skyMat.uniforms.sunDir.value.set(Math.cos(ang) * 800, Math.abs(el) * 800, el > 0 ? 350 : -350).normalize(); skyMat.uniforms.glow.value = el > 0 ? 1 : 0.2; }
-  if (sunDisc) { sunDisc.position.set(Math.cos(ang) * 800, Math.max(-100, el * 800), 350); sunDisc.lookAt(0, 0, 0); sunDisc.material.color.set(el > 0 ? 0xfff6c8 : 0xdfe8ff); if (el <= 0) sunDisc.position.set(-Math.cos(ang) * 800, -el * 800, -350); }
+  if (skyMat) {
+    // vrai soleil (peut passer sous l'horizon) et lune à l'opposé, un peu décalée
+    skyMat.uniforms.sunDir.value.set(Math.cos(ang) * 800, el * 800, 350).normalize();
+    skyMat.uniforms.moonDir.value.set(-Math.cos(ang) * 800, -el * 800 + 120, -350).normalize();
+    skyMat.uniforms.glow.value = el > 0 ? 1 : 0.2;
+    // l'eau reflète le soleil le jour, la lune la nuit
+    WSKY.sun.copy(el > 0 ? skyMat.uniforms.sunDir.value : skyMat.uniforms.moonDir.value);
+    if (WSKY.sun.y < 0.05) { WSKY.sun.y = 0.05; WSKY.sun.normalize(); }
+  }
+  // nuages : teinte du moment (blancs le jour, dorés au crépuscule, gris-bleu la nuit)
+  {
+    const dusk = clamp(1 - Math.abs(el) / 0.35, 0, 1) * (1 - nightK * 0.7);
+    CLOUD_TINT.setRGB(1, 1, 1).lerp(_cT.setRGB(1.0, 0.66, 0.5), dusk * 0.8).lerp(_cT.setRGB(0.13, 0.16, 0.24), nightK * 0.95);
+    for (const g of clouds) for (const sp of g.children) sp.material.color.copy(sp.userData.base).multiply(CLOUD_TINT);
+  }
   renderer.toneMappingExposure = 1.1 + night * 0.25;
   const lampOn = night > 0.4;
   for (const c of chests) if (!c.opened && lampOn && c.light.intensity) c.light.intensity *= 1.4;
@@ -9540,7 +9649,7 @@ function step(dt) {
     for (const c of chars) if (c.isPlayer) updateChar(c, dt);
     return;
   }
-  waterT.value += dt; windT.value += dt;
+  waterT.value += dt; windT.value += dt; SKY_T.value += dt;
   updateBus(dt);
   updateStorm(dt);
   if (player.mode === 'bus' && bus.active) { player.pos.copy(bus.pos); }
@@ -9620,7 +9729,7 @@ window.render_game_to_text = () => JSON.stringify({
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
 window.__game = { structs, rebuildHouse, towers, outline,
-  ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; }, get bus() { return bus; }, waveAt, get footprints() { return footPrints.filter((f) => f.life > 0).length; }, get snowfall() { return snowF.k; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
+  ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; }, get bus() { return bus; }, waveAt, get footprints() { return footPrints.filter((f) => f.life > 0).length; }, get snowfall() { return snowF.k; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on, outfit) => setDisguise(player, on, false, outfit), SHADOW_OUTFITS, get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; },
   // capture libre (QA visuelle) : rendu depuis un point de vue arbitraire
   snap: (x, y, z, lx, ly, lz) => { const p0 = camera.position.clone(), q0 = camera.quaternion.clone(); camera.position.set(x, y, z); camera.lookAt(lx, ly, lz); camera.updateMatrixWorld(); renderer.render(scene, camera); const u = renderer.domElement.toDataURL('image/png'); camera.position.copy(p0); camera.quaternion.copy(q0); return u; } };

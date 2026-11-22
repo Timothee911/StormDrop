@@ -46,6 +46,27 @@ Refaite pour se rapprocher de la Grotte du Chapitre 2 Saison 2 :
 - **Herbe** : trois verts mélangés à grande échelle. Au sol, le shader dessine des brins, des creux sombres entre les touffes, des pointes éclairées, du trèfle et de petites fleurs des champs. Les touffes en 3D ont des pieds plus sombres et des pointes plus claires.
 - **Terre** : plaques de terre battue dans les prairies et sentiers sinueux à travers l'île, avec un bord irrégulier contre l'herbe. On y voit des mottes, des cailloux, des fissures et quelques pousses. Aucune touffe d'herbe ne pousse sur la terre.
 
+## Ciel et tenues de l'Ombre
+
+- **Ciel procédural** : tout est calculé dans un seul shader.
+  - Dégradé du zénith vers l'horizon, avec un voile clair au ras de l'eau.
+  - Soleil : disque net au bord assombri et halo de diffusion.
+  - Lever et coucher : la lumière chaude se concentre du côté du soleil.
+  - Cirrus : voiles d'altitude qui dérivent lentement.
+- **Nuit** :
+  - étoiles qui scintillent, de couleurs variées, et Voie lactée ;
+  - lune cratérisée avec son halo, à l'opposé du soleil ;
+  - aurore discrète vers le nord.
+- **Couleurs du ciel** : elles sont maintenant encodées correctement à l'écran. Avant, le bleu sortait trop saturé.
+- **Nuages** : dessous ombré, teinte qui suit l'heure (blancs le jour, dorés au crépuscule, gris-bleu la nuit).
+- **Reflets dans l'eau** : la mer reflète le soleil le jour et la lune la nuit.
+- **Tenues de l'Ombre** : trois tenues complètes remplacent l'ancien déguisement fait de boîtes. Chaque cabine téléphonique fournit la sienne, et son nom s'affiche dans le bandeau « DÉGUISEMENT ».
+  - **Agent de l'Ombre** : costume noir, revers satinés, chemise blanche, cravate, pochette, oreillette, chapeau, lunettes noires, richelieus vernis.
+  - **Garde de l'Ombre** : cagoule, lunettes de vision nocturne, casque radio, gilet pare-balles et porte-chargeurs, radio, brassard rouge, holster de cuisse, rangers.
+  - **Officier de l'Ombre** : manteau long croisé à boutons dorés, épaulettes à franges, écharpe rouge, ceinturon, casquette d'officier, bottes cavalières.
+- **Animations** : la tenue suit toutes les animations du joueur (articulations recopiées à chaque image), et l'arme reste en main.
+- **Hommes de main** : ils portent les trois mêmes tenues.
+
 ## Eau et neige refaites
 
 - **Flottaison** : plus de hauteur fixe. On flotte grâce à une poussée d'Archimède amortie qui suit la houle de la mer (même formule que le shader de l'eau). Le nageur monte et descend avec les vagues.
