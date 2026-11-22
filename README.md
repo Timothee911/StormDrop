@@ -57,7 +57,7 @@ Refaite pour se rapprocher de la Grotte du Chapitre 2 Saison 2 :
   - plongée : brasse sous l'eau avec ciseau des jambes, le corps s'incline selon qu'on descend ou remonte, bulles d'air ;
   - en eau peu profonde : genoux levés ;
   - en sortant de l'eau : gouttes qui tombent du corps.
-- **Lagon de la Grotte** : eau calme, sans houle.
+- **Lagon de la Grotte** : eau calme, sans houle. Un nageur peut se hisser sur un rebord qui affleure (quai, marche immergée).
 - **Neige** : le sol enneigé est dessiné par le shader. On y voit :
   - un bord irrégulier où l'herbe d'altitude perce ;
   - des congères, des rides de vent et des ombres bleues dans les pentes ;

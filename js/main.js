@@ -2331,6 +2331,8 @@ function applyGravity(ch, dt) {
 }
 function physics(ch, dt) {
   const oldY = ch.pos.y;
+  // un nageur se hisse sur un rebord qui affleure (berge, quai, marche immergée)
+  const stepUp = STEP + (ch.inWater ? 0.6 : 0);
   ch.blocked = false;
   queryCols(ch.pos.x, ch.pos.z, 2.5, tmpCols);
   // SOUS-PAS ADAPTATIFS : à grande vitesse (grappin, trampoline, véhicules) on
@@ -2344,7 +2346,7 @@ function physics(ch, dt) {
     ch.pos.z += ch.vel.z * dt / nSub;
     for (const c of tmpCols) {
       if (c.type !== 'box' || c.passable) continue;
-      if (oldY + CH_H <= c.minY || oldY + STEP >= c.maxY) continue;
+      if (oldY + CH_H <= c.minY || oldY + stepUp >= c.maxY) continue;
       const px = clamp(ch.pos.x, c.minX, c.maxX), pz = clamp(ch.pos.z, c.minZ, c.maxZ);
       const dx = ch.pos.x - px, dz = ch.pos.z - pz, d2 = dx * dx + dz * dz;
       if (d2 >= CH_R * CH_R) continue;
@@ -2369,7 +2371,7 @@ function physics(ch, dt) {
     if (!c.alive) continue;
     if (ch.pos.x < c.minX - tol || ch.pos.x > c.maxX + tol || ch.pos.z < c.minZ - tol || ch.pos.z > c.maxZ + tol) continue;
     if (c.type === 'box') {
-      if (c.maxY <= oldY + STEP && c.maxY > ground) { ground = c.maxY; onTerrain = false; gcol = c; }
+      if (c.maxY <= oldY + stepUp && c.maxY > ground) { ground = c.maxY; onTerrain = false; gcol = c; }
       else if (ch.vel.y > 0 && oldY + CH_H <= c.minY + 0.15 && ch.pos.y + CH_H > c.minY) { ch.pos.y = c.minY - CH_H; ch.vel.y = 0; }
     } else if (c.type === 'ramp' || c.type === 'cone') {
       if (ch.pos.x < c.minX || ch.pos.x > c.maxX || ch.pos.z < c.minZ || ch.pos.z > c.maxZ) continue;
