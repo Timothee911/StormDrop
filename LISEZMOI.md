@@ -33,7 +33,7 @@ Les touches sont définies par position physique : le jeu affiche automatiquemen
 - Construction sur grille (bois, pierre, métal avec vie et temps de renforcement différents), édition 3x3 (portes, fenêtres) des murs et des sols.
 - Tir : ADS avec zoom, recul, dispersion croissante, dégâts tête x2, chiffres colorés (corps, tête, bouclier).
 - Butin en 5 raretés, soins avec barre de progression, coffres lumineux, largages en parachute.
-- Bus de combat au trajet aléatoire, chute libre dirigée, planeur.
+- Hélico de combat au trajet aléatoire, chute libre dirigée, planeur.
 - Tempête en phases, grande carte, minicarte, marqueurs, noms de lieux, biomes forêt, désert, neige, plage.
 - Voitures, bateaux, trampolines, cheminées d'air.
 - 30, 50 ou 100 joueurs, modes Solo, Duo, Escouade avec coéquipiers IA.

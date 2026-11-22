@@ -123,12 +123,13 @@ export function sfx(name, vol = 1, pan = 0) {
     case 'land': noise(o, t, 0.18, 'lowpass', 700, 0.8, 0.004, 0.7); break;
     case 'drive': noise(o, t, 0.25, 'lowpass', 220, 1.2, 0.02, 0.6); break;
     case 'crit': tone(o, t, 0.12, 'sine', 900, 1800, 0.35); noise(o, t, 0.1, 'bandpass', 1200, 2, 0.002, 0.6); break;
+    case 'rotor': noise(o, t, 0.11, 'lowpass', 260, 1.4, 0.006, 0.7); tone(o, t, 0.09, 'sine', 62, 44, 0.35); break; // pale d'hélico : « tchop » sourd
     case 'click': tone(o, t, 0.04, 'square', 900, 900, 0.08); break;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Procedural music (lobby loop, victory fanfare, battle bus theme)
+// Procedural music (lobby loop, victory fanfare, combat helicopter theme)
 // ---------------------------------------------------------------------------
 let musTimer = null, musStep = 0, musName = null;
 const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12);

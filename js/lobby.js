@@ -435,8 +435,12 @@ function drawModeArt() {
   g.fillStyle = '#5fbf4a'; g.beginPath(); g.ellipse(W * 0.5, H * 0.74, 106, 34, 0, 0, 7); g.fill();
   g.fillStyle = '#3f9a3a'; for (let i = 0; i < 9; i++) { const x = W * 0.5 - 80 + i * 20, y = H * 0.7 + Math.sin(i) * 6; g.beginPath(); g.moveTo(x, y - 18); g.lineTo(x - 7, y); g.lineTo(x + 7, y); g.closePath(); g.fill(); }
   g.fillStyle = '#d96a3a'; g.fillRect(W * 0.5 + 24, H * 0.62, 18, 12); g.fillStyle = '#8a3a2a'; g.beginPath(); g.moveTo(W * 0.5 + 21, H * 0.62); g.lineTo(W * 0.5 + 33, H * 0.55); g.lineTo(W * 0.5 + 45, H * 0.62); g.fill();
-  // bus
-  g.fillStyle = '#3fa9ff'; g.fillRect(40, 22, 46, 16); g.fillStyle = '#ffd23f'; g.fillRect(40, 18, 46, 6);
+  // hélico de combat : cabine, queue, dérive, rotor et patins
+  g.fillStyle = '#3d4a3a'; g.beginPath(); g.ellipse(62, 31, 18, 9, 0, 0, 7); g.fill();
+  g.fillRect(70, 27, 26, 4); g.fillRect(93, 20, 5, 11);
+  g.fillStyle = '#7fd0ff'; g.beginPath(); g.ellipse(51, 29, 7, 5, 0, 0, 7); g.fill();
+  g.fillStyle = '#ffc928'; g.fillRect(52, 34, 22, 2);
+  g.fillStyle = '#1a1d22'; g.fillRect(38, 17, 50, 2); g.fillRect(61, 17, 2, 6); g.fillRect(50, 42, 26, 2);
   g.strokeStyle = 'rgba(255,255,255,.7)'; g.setLineDash([6, 6]); g.lineWidth = 2; g.beginPath(); g.moveTo(90, 30); g.lineTo(W - 20, 60); g.stroke(); g.setLineDash([]);
 }
 

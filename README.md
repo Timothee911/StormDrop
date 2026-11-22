@@ -40,6 +40,12 @@ Refaite pour se rapprocher de la Grotte du Chapitre 2 Saison 2 :
   - le canyon se remonte toujours à pied sec ;
   - on ne traverse jamais la roche du flanc ouest.
 
+## Hélico de combat et nouveau sol
+
+- **Hélico de combat** : le bus de combat est remplacé par un hélicoptère militaire kaki à bandes jaunes. Il a un cockpit vitré, des portes latérales ouvertes avec mitrailleuses, des ailerons à paniers de roquettes, un canon sous le nez et des patins. Le rotor principal et le rotor de queue tournent, l'appareil vole nez légèrement piqué, et on entend le « tchop » des pales. Le trajet, le saut et le compte à rebours de la zone ne changent pas.
+- **Herbe** : trois verts mélangés à grande échelle. Au sol, le shader dessine des brins, des creux sombres entre les touffes, des pointes éclairées, du trèfle et de petites fleurs des champs. Les touffes en 3D ont des pieds plus sombres et des pointes plus claires.
+- **Terre** : plaques de terre battue dans les prairies et sentiers sinueux à travers l'île, avec un bord irrégulier contre l'herbe. On y voit des mottes, des cailloux, des fissures et quelques pousses. Aucune touffe d'herbe ne pousse sur la terre.
+
 ## Agence, voitures et eau
 
 - **Sous-sol B1** : archives et local technique séparés, couloir vers le coffre, poteaux, conduites, éclairage, signalétique et garde-corps d'escalier. Les deux pièces, le scanner et la remontée au hall sont accessibles sans saut.
@@ -63,9 +69,9 @@ La Plateforme flotte désormais EN PLEINE MER (l'îlot dessous a été retiré d
 
 ## Contenu
 
-- Construction sur grille (bois / pierre / métal) à 5 matériaux, édition 3x3 (toit de la même texture que les murs), tir ADS, 6 raretés d'armes dont la mythique, tempête en phases, bus de combat, planeur, véhicules, trampolines et cheminées d'air.
+- Construction sur grille (bois / pierre / métal) à 5 matériaux, édition 3x3 (toit de la même texture que les murs), tir ADS, 6 raretés d'armes dont la mythique, tempête en phases, hélico de combat, planeur, véhicules, trampolines et cheminées d'air.
 - Physique sur tous les objets : mobilier, coffres, caisses de munitions, largages, pads, cheminées d'air et décor des POI sont solides (murs fins infranchissables même à grande vitesse grâce aux sous-pas).
-- La zone apparaît 1 min après la fin du bus, bouge pour la première fois 2 min après son activation et se referme bien plus lentement ; dégâts 1, puis 2 à la moitié des joueurs, 5 au quart, 15 à 5 survivants.
+- La zone apparaît 1 min après le passage de l'hélico, bouge pour la première fois 2 min après son activation et se referme bien plus lentement ; dégâts 1, puis 2 à la moitié des joueurs, 5 au quart, 15 à 5 survivants.
 - Chute libre tête en avant les mains vides (la pioche ne sort qu'après la réception) et mains accrochées aux poignées du parachute à l'ouverture.
 - Passe de combat : 10 000 XP par niveau. Écran d'accueil avec le héros de la saison au centre, récompenses obtenues et pages terminées à gauche, niveau (barre segmentée), achat de niveau, Passe Premium et prochaine récompense à droite, et cinq catégories en bas (récompenses du passe, piste gratuite, piste premium, pass bonus, pass quête). Une récompense par niveau, en pages de 6 (2 gratuites : il suffit d'atteindre le niveau indiqué ; 4 premium : niveau + Passe Premium). Pages de catégorie : infos à gauche, personnage au centre, niveau et achats à droite, récompenses en bas avec pagination. Boutique quotidienne couvrant les cinq catégories (tenues, sacs à dos, pioches, planeurs, emotes), tenue de base : la Recrue.
 - 50 / 100 joueurs, Solo / Duo / Escouade avec coéquipiers IA, lobby complet (boutique, passe de combat, défis, casier, paramètres, touches AZERTY/QWERTY).

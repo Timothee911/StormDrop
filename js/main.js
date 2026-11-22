@@ -217,6 +217,18 @@ const WSKY = {
   sun: new THREE.Vector3(0.5, 0.7, 0.35).normalize(), night: { value: 0 },
 };
 // =====================================================================
+// Terre à nu dans l'herbe (0 = herbe, 1 = terre) : plaques de terre battue dans les
+// prairies, sentiers sinueux qui serpentent sur l'île, et bande de terre au pied des
+// pentes avant la roche. Partagé par le sol (shader) et les touffes d'herbe (pas de
+// touffes sur la terre).
+function groundDirtW(x, z, sl) {
+  const pa = fbm(x * 0.021 + 13.7, z * 0.021 - 4.1);
+  let d = clamp((pa - 0.66) / 0.08, 0, 1);
+  const tr = Math.abs(fbm(x * 0.0055 + 3.3, z * 0.0055 + 8.9) - 0.5);
+  d = Math.max(d, clamp((0.0075 - tr) / 0.004, 0, 1) * 0.9);
+  d = Math.max(d, clamp((sl - 0.95) / 0.5, 0, 1) * 0.85);
+  return d;
+}
 const TERRAIN_SIZE = WORLD_R * 2 + 120;
 let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser terrainH
 let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel en temps réel
@@ -227,7 +239,10 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   const pos = geo.attributes.position;
   const cols = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
-  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x76cc4a), g2 = new THREE.Color(0x4fae3f), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0xb59262), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x2f8a3a), snowDirt = new THREE.Color(0xc9d3dc);
+  const soilG = new Float32Array(pos.count), soilD = new Float32Array(pos.count);
+  // herbe : trois verts (prairie claire, vert franc, vert profond) mélangés par deux bruits ;
+  // terre : brun chaud, plus sombre et plus humide en bas des pentes
+  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x6cc444), g2 = new THREE.Color(0x3f9c35), g3 = new THREE.Color(0x9ad25a), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0x9a7149), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x2d7f35), snowDirt = new THREE.Color(0xc9d3dc);
   const gRock = new THREE.Color(0x857a6c), gRock2 = new THREE.Color(0x6c6660), gMoss = new THREE.Color(0x5f7a45), gcol = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
@@ -235,25 +250,36 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
     pos.setY(i, h);
     const sl = Math.abs(terrainH(x + 1.5, z) - h) + Math.abs(terrainH(x, z + 1.5) - h);
     const n = fbm(x * 0.05, z * 0.05);
+    const n2 = fbm(x * 0.012 + 31, z * 0.012 - 17);
     if (h < 1.4) c.copy(h < -1 ? deep : sand);
-    else { c.copy(g1).lerp(g2, n); if (h < 2.2) c.lerp(sand, (2.2 - h) / 0.8); }
+    else { c.copy(g1).lerp(g2, n).lerp(g3, clamp((n2 - 0.52) * 2.4, 0, 1) * 0.7); if (h < 2.2) c.lerp(sand, (2.2 - h) / 0.8); }
     const bw = biomeW(x, z);
     if (h >= 1.4) { c.lerp(dsand, bw.desert * (0.85 + 0.15 * n)); c.lerp(fgreen, bw.forest * 0.6); c.lerp(snow, bw.snow * (0.75 + 0.25 * n)); }
     if (inPOI(x, z, -4) && h >= 1.4) c.lerp(bw.snow > 0.5 ? snowDirt : dirt, 0.18 + 0.2 * n);
-    if (sl > 1.6 || h > 26) c.lerp(rock, clamp(Math.max((sl - 1.6) * 0.8, (h - 26) / 6), 0, 1));
+    const rk = (sl > 1.6 || h > 26) ? clamp(Math.max((sl - 1.6) * 0.8, (h - 26) / 6), 0, 1) : 0;
+    if (rk > 0) c.lerp(rock, rk);
     if (h > 40) c.lerp(snow, clamp((h - 40) / 4, 0, 1));
     // montagne de la Grotte : roche brun-gris nue (pas de neige), mousse sur
     // les replats, comme le massif rocheux de la base de l'Ombre
+    let gk = 0;
     {
       const gd = Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ);
       if (gd < 72 && h > 1.4) {
         const k = 1 - clamp((gd - 52) / 20, 0, 1);
+        gk = k * k * (3 - 2 * k);
         gcol.copy(gRock).lerp(gRock2, n).lerp(gMoss, clamp(1 - sl / 1.4, 0, 1) * (0.25 + 0.45 * n));
-        c.lerp(gcol, k * k * (3 - 2 * k));
+        c.lerp(gcol, gk);
       }
     }
+    // poids « herbe » et « terre » pour le shader : le shader dessine les lames d'herbe
+    // et les cailloux / fissures de la terre là où ces poids le demandent
+    const green = h < 2.2 ? 0 : clamp((h - 2.2) / 0.6, 0, 1) * (1 - bw.snow) * (1 - bw.desert) * (1 - rk) * (1 - gk) * (h > 38 ? 0 : 1);
+    soilG[i] = green;
+    soilD[i] = green * groundDirtW(x, z, sl);
     cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
   }
+  geo.setAttribute('aSoilG', new THREE.BufferAttribute(soilG, 1));
+  geo.setAttribute('aSoilD', new THREE.BufferAttribute(soilD, 1));
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.computeVertexNormals();
   const tmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
@@ -262,9 +288,11 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   tmat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterT;
     sh.uniforms.uNight = WSKY.night;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.uniforms.uDirtA = { value: new THREE.Color(0x8c7556) };
+    sh.uniforms.uDirtB = { value: new THREE.Color(0x5f4d3a) };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; attribute float aSoilG; attribute float aSoilD; varying float vSoilG; varying float vSoilD;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vSoilG = aSoilG; vSoilD = aSoilD;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vWP; uniform float uT; uniform float uNight;
+      varying vec3 vWP; uniform float uT; uniform float uNight; varying float vSoilG; varying float vSoilD; uniform vec3 uDirtA; uniform vec3 uDirtB;
       float th(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float tn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(th(i), th(i + vec2(1.0, 0.0)), f.x), mix(th(i + vec2(0.0, 1.0)), th(i + vec2(1.0, 1.0)), f.x), f.y); }`)
@@ -273,8 +301,45 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
         float grain = tn(vWP.xz * 2.1 + 3.0);
         diffuseColor.rgb *= 0.84 + patches * 0.27 + (grain - 0.5) * 0.08;
         // drier, yellower grass in large patches (only where the ground is green)
-        float dry = smoothstep(0.5, 0.8, tn(vWP.xz * 0.045 + 40.0)) * step(diffuseColor.r * 1.15, diffuseColor.g);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.18, 1.02, 0.62), dry * 0.55);
+        float dry = smoothstep(0.55, 0.85, tn(vWP.xz * 0.045 + 40.0)) * vSoilG;
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.16, 1.03, 0.66), dry * 0.45);
+        // HERBE : brins dessinés au sol — stries fines orientées par zone, creux sombres
+        // entre les touffes, pointes claires, trèfle plus foncé et petites fleurs des champs
+        if (vSoilG > 0.01) {
+          // deux nappes de stries croisées (pas de rotation continue : pas de tourbillons)
+          vec2 gp = vWP.xz;
+          float bx = tn(vec2(gp.x * 9.0, gp.y * 2.2)), bz = tn(vec2(gp.x * 2.2 + 13.0, gp.y * 9.0));
+          float blades = mix(bx, bz, smoothstep(0.35, 0.65, tn(gp * 0.7 + 5.0)));
+          float clump = tn(gp * 1.15 + 21.0);
+          float gk = (blades - 0.5) * 0.16 + (clump - 0.5) * 0.18;
+          vec3 gcol = diffuseColor.rgb * (1.0 + gk);
+          gcol = mix(gcol, gcol * vec3(1.12, 1.18, 0.78), smoothstep(0.78, 0.95, blades) * 0.5); // pointes au soleil
+          float clover = smoothstep(0.62, 0.74, tn(vWP.xz * 0.6 + 77.0)) * smoothstep(0.35, 0.7, tn(vWP.xz * 3.2 + 4.0));
+          gcol = mix(gcol, gcol * vec3(0.72, 0.9, 0.7), clover * 0.55);
+          float fl = step(0.985, th(floor(vWP.xz * 4.0))) * smoothstep(0.55, 0.75, tn(vWP.xz * 0.07 + 63.0));
+          vec3 flc = mix(vec3(1.0, 0.95, 0.75), vec3(1.0, 0.82, 0.25), step(0.5, th(floor(vWP.xz * 4.0) + 3.0)));
+          gcol = mix(gcol, flc, fl * 0.85);
+          diffuseColor.rgb = mix(diffuseColor.rgb, gcol, vSoilG);
+        }
+        // TERRE : bord déchiqueté avec l'herbe, terre battue brune, mottes, cailloux clairs,
+        // fissures sombres et touffes d'herbe rase qui repoussent
+        if (vSoilD > 0.01) {
+          float edge = vSoilD + (tn(vWP.xz * 0.9 + 2.0) - 0.5) * 0.45 + (tn(vWP.xz * 3.7) - 0.5) * 0.18;
+          float dm = smoothstep(0.42, 0.56, edge);
+          float dn = tn(vWP.xz * 0.35 + 11.0) * 0.6 + tn(vWP.xz * 1.4 + 7.0) * 0.4;
+          vec3 dcol = mix(uDirtB, uDirtA, dn);
+          dcol *= 0.86 + tn(vWP.xz * 5.5 + 1.0) * 0.24;
+          vec2 pc = floor(vWP.xz * 3.0), pf = fract(vWP.xz * 3.0) - 0.5;
+          float pr = th(pc);
+          vec2 po = (vec2(th(pc + 1.3), th(pc + 2.7)) - 0.5) * 0.5;
+          float peb = step(0.72, pr) * smoothstep(0.2, 0.12, length(pf - po) * (0.8 + pr));
+          dcol = mix(dcol, vec3(0.42, 0.40, 0.37) * (0.85 + 0.3 * th(pc + 5.1)), peb);
+          float cr = abs(tn(vWP.xz * 1.8 + 30.0) - 0.5);
+          dcol *= 1.0 - smoothstep(0.03, 0.0, cr) * 0.35;
+          float sprout = smoothstep(0.7, 0.85, tn(vWP.xz * 2.4 + 50.0)) * (1.0 - smoothstep(0.6, 0.9, vSoilD));
+          dcol = mix(dcol, diffuseColor.rgb * 0.85, sprout);
+          diffuseColor.rgb = mix(diffuseColor.rgb, dcol, dm);
+        }
         vec3 fn = normalize(cross(dFdx(vWP), dFdy(vWP)));
         diffuseColor.rgb *= mix(0.84, 1.0, smoothstep(0.62, 0.92, abs(fn.y)));
         float wl = -0.08 + 0.12 * sin(uT * 1.3 + vWP.x * 0.07 + vWP.z * 0.05);
@@ -479,7 +544,9 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   // caustiques : la lumière ondoie sur le fond marin (visible en plongée et à travers l'eau)
   sbedMat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterT; sh.uniforms.uNight = WSKY.night;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.uniforms.uDirtA = { value: new THREE.Color(0x8c7556) };
+    sh.uniforms.uDirtB = { value: new THREE.Color(0x5f4d3a) };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; attribute float aSoilG; attribute float aSoilD; varying float vSoilG; varying float vSoilD;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vSoilG = aSoilG; vSoilD = aSoilD;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
       varying vec3 vWP; uniform float uT; uniform float uNight;
       float caustic(vec3 p) {
@@ -1083,7 +1150,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
       const h = rr(0.42, 0.85) * (i < 4 ? 1.0 : 0.82), w = rr(0.035, 0.055);
       const dx = Math.sin(yaw), dz = Math.cos(yaw); // direction de la penche
       const wx = Math.cos(yaw), wz = -Math.sin(yaw); // largeur de la lame
-      const rows = [[0, w, 0.0, 0.34], [0.52, w * 0.72, lean * 0.45, 0.72], [1.0, 0.0, lean * 1.15, 1.0]];
+      const rows = [[0, w, 0.0, 0.28], [0.52, w * 0.72, lean * 0.45, 0.7], [1.0, 0.0, lean * 1.15, 1.08]]; // pied sombre, pointe éclairée
       const base = pos.length / 3;
       for (const [t, ww, off, br] of rows) {
         const y = t * h, cx = bx + dx * off * h, cz = bz + dz * off * h, yy = y - off * off * h * 0.25;
@@ -1122,7 +1189,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
   const NF = Math.floor(N / 5);
   const grass = new THREE.InstancedMesh(tuft, gm, N), flowers = new THREE.InstancedMesh(flower, fm, NF);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color(), col2 = new THREE.Color();
-  const GR = [0x53d241, 0x69df50, 0x44bb38, 0x8ce85c, 0x5ccd46], DRY = new THREE.Color(0xc6c85a), DARK = new THREE.Color(0x2f8a3a);
+  const GR = [0x4fbf3a, 0x63cf45, 0x3fa634, 0x86d653, 0x58c040, 0x74c94a], DRY = new THREE.Color(0xc2bd5c), DARK = new THREE.Color(0x2b7d33);
   const FL = [0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff, 0xa98bff, 0xff8a3d, 0x5ac8ff];
   let ng = 0, nf = 0, guard = 0;
   while ((ng < N || nf < NF) && guard++ < N * 14) {
@@ -1131,6 +1198,8 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
     const bw = biomeW(x, z); if (bw.snow > 0.35 || bw.desert > 0.35) continue;
     if (Math.abs(terrainH(x + 1.2, z) - h) + Math.abs(terrainH(x, z + 1.2) - h) > 1.7) continue;
     if (inPOI(x, z, -2)) continue;
+    if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < 60) continue;
+    if (groundDirtW(x, z, Math.abs(terrainH(x + 1.5, z) - h) + Math.abs(terrainH(x, z + 1.5) - h)) > 0.45) continue; // pas de touffes sur la terre
     const patch = fbm(x * 0.045 + 7, z * 0.045 - 3); // zones denses / clairsemées
     const isF = nf < NF && gr() < 0.2 && bw.forest < 0.5 && patch > 0.4;
     if (!isF && ng >= N) continue;
@@ -2683,7 +2752,7 @@ let elimBy = null, placement = 0;
 const leaderboard = [];
 
 // Ballon captif réutilisable : grand, légèrement ovale (pas trop), segments blanc/bleu.
-// Le largage l'utilise en taille normale, le bus de combat en version plus grande.
+// Utilisé par les largages de ravitaillement.
 function makeBallon(r) {
   const g = new THREE.Group();
   const white = matC(0xf2f6fa, { roughness: 0.45, metalness: 0.03, emissive: 0xb9c4d4, emissiveIntensity: 0.4 });
@@ -2706,7 +2775,7 @@ function makeBallon(r) {
   g.scale.y = 1.15; // un peu ovale, mais pas trop
   return g;
 }
-// câble d'acier entre deux points (utilisé par le bus de combat)
+// câble d'acier entre deux points
 function cableBetween(parent, x1, y1, z1, x2, y2, z2, r, mat) {
   const a = _v1.set(x1, y1, z1), b = _v2.set(x2, y2, z2);
   const len = a.distanceTo(b);
@@ -2717,87 +2786,119 @@ function cableBetween(parent, x1, y1, z1, x2, y2, z2, r, mat) {
   return c;
 }
 
-// Bus de combat : autocar stylisé, ballon captif, haubans et équipements de largage.
+// Hélico de combat (remplace l'ancien bus) : gros hélicoptère de transport armé.
+// Nez vers -Z (sens du vol), queue vers +Z. Portes latérales grandes ouvertes :
+// c'est par là qu'on saute. Le rotor principal et le rotor de queue tournent
+// dans updateBus (bus.rotor / bus.tailRotor).
 {
   const g = new THREE.Group();
-  const blue = matC(0x1769d2, { roughness: 0.48, metalness: 0.18 });
-  const blueDark = matC(0x10458f, { roughness: 0.55, metalness: 0.22 });
-  const glass = matC(0x8bdcff, { roughness: 0.16, metalness: 0.28, emissive: 0x17446a, emissiveIntensity: 0.3 });
-  const gold = matC(0xffc928, { roughness: 0.38, metalness: 0.35 });
-  const rubber = matC(0x20242b, { roughness: 0.92 });
-  const steel = matC(0xa8b8c7, { roughness: 0.32, metalness: 0.7 });
-  addBox(g, 3.4, 2.8, 9.2, 0, 0, 0, blue);
-  addBox(g, 3.32, 0.22, 9.25, 0, -1.1, 0, blueDark);
-  addBox(g, 3.46, 0.28, 9.35, 0, -1.42, 0, gold);
-  // Fenêtres séparées et montants sur les deux flancs.
-  for (const side of [-1, 1]) {
-    addBox(g, 0.05, 0.92, 7.0, side * 1.72, 0.45, -0.1, blueDark);
-    for (let i = 0; i < 6; i++) {
-      const z = -3.35 + i * 1.28;
-      addBox(g, 0.055, 0.95, 0.055, side * 1.76, 0.45, z, steel);
-      addBox(g, 0.035, 0.78, 1.12, side * 1.755, 0.46, z + 0.56, glass);
+  const hull = matC(0x3d4a3a, { roughness: 0.62, metalness: 0.25 });      // vert kaki militaire
+  const hullDark = matC(0x262e25, { roughness: 0.7, metalness: 0.25 });
+  const belly = matC(0x6f7a68, { roughness: 0.6, metalness: 0.2 });
+  const stripe = matC(0xffc928, { roughness: 0.4, metalness: 0.3 });       // bandes jaunes StormDrop
+  const glass = matC(0x7fd0ff, { roughness: 0.1, metalness: 0.35, emissive: 0x1a4a6e, emissiveIntensity: 0.35, transparent: true, opacity: 0.75 });
+  const steel = matC(0xa8b3bd, { roughness: 0.32, metalness: 0.75 });
+  const gun = matC(0x1a1d22, { roughness: 0.45, metalness: 0.6 });
+  const cabin = matC(0x1d211c, { roughness: 0.9 });
+  const cyl = (rt, rb, h, seg, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m; };
+  const ball = (r, mat, x, y, z, sx, sy, sz) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 12), mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); g.add(m); return m; };
+  // Fuselage : soute rectangulaire, flancs arrondis, nez bombé avec grande verrière.
+  addBox(g, 3.0, 2.5, 6.4, 0, 0, 0.4, hull);
+  for (const sd of [-1, 1]) cyl(0.5, 0.5, 6.4, 12, hull, sd * 1.25, 0.75, 0.4, Math.PI / 2);
+  addBox(g, 2.9, 0.5, 6.6, 0, -1.3, 0.4, belly);
+  ball(1.55, hull, 0, 0.05, -2.9, 0.98, 0.84, 1.15);
+  ball(1.4, glass, 0, 0.35, -3.25, 0.92, 0.72, 1.05);                  // verrière du cockpit
+  addBox(g, 0.08, 1.0, 1.9, 0, 0.75, -3.3, hullDark);                   // montant central de la verrière
+  ball(0.85, belly, 0, -0.95, -3.3, 1.3, 0.55, 1.2);                    // menton
+  // Bande jaune et numéro de flanc.
+  for (const sd of [-1, 1]) {
+    addBox(g, 0.06, 0.32, 6.0, sd * 1.53, -0.55, 0.4, stripe);
+    // grande porte coulissante ouverte : ouverture sombre + porte repliée vers l'arrière
+    addBox(g, 0.05, 1.9, 2.4, sd * 1.52, 0.05, 0.1, cabin);
+    addBox(g, 0.12, 1.95, 2.3, sd * 1.62, 0.05, 2.25, hullDark);
+    addBox(g, 0.1, 0.08, 4.8, sd * 1.66, 1.07, 1.0, steel);             // rail de la porte
+    // mitrailleuse de porte sur pivot
+    cyl(0.05, 0.05, 0.9, 6, steel, sd * 1.42, -0.55, -0.6);
+    addBox(g, 0.22, 0.22, 0.75, sd * 1.65, -0.05, -0.75, gun);
+    cyl(0.045, 0.045, 1.2, 6, gun, sd * 1.65, -0.02, -1.6, Math.PI / 2);
+    // hublots arrière
+    for (const z of [2.8, 3.35]) addBox(g, 0.05, 0.45, 0.4, sd * 1.52, 0.45, z, glass);
+    // feux de navigation (rouge à bâbord, vert à tribord)
+    addBox(g, 0.14, 0.14, 0.14, sd * 1.56, 1.15, -1.9, matC(sd < 0 ? 0xff3030 : 0x30ff60, { emissive: sd < 0 ? 0xff1010 : 0x10ff40, emissiveIntensity: 2.2 }));
+  }
+  // Ailerons courts avec paniers de roquettes : c'est un hélico DE COMBAT.
+  for (const sd of [-1, 1]) {
+    addBox(g, 2.3, 0.16, 1.1, sd * 2.55, -0.2, 0.9, hullDark);
+    for (const off of [1.65, 3.2]) {
+      cyl(0.32, 0.32, 1.7, 12, hullDark, sd * off, -0.62, 0.8, Math.PI / 2);
+      cyl(0.26, 0.26, 0.04, 12, stripe, sd * off, -0.62, -0.07, Math.PI / 2);
+      for (const [ox, oy] of [[0, 0], [0.13, 0.1], [-0.13, 0.1], [0.13, -0.1], [-0.13, -0.1]]) cyl(0.05, 0.05, 0.05, 6, gun, sd * off + ox, -0.62 + oy, -0.1, Math.PI / 2);
     }
-    addBox(g, 0.09, 0.16, 8.8, side * 1.74, -0.55, 0, gold);
-    addBox(g, 0.12, 0.12, 0.12, side * 1.9, 0.85, -4.25, steel);
-    addBox(g, 0.12, 0.48, 0.12, side * 1.83, 0.72, -4.25, blueDark);
+    addBox(g, 0.1, 0.45, 0.5, sd * 2.4, -0.42, 0.9, steel);
   }
-  // Pare-brise, calandre, phares et pare-chocs.
-  addBox(g, 2.75, 1.25, 0.06, 0, 0.45, -4.64, glass);
-  addBox(g, 2.8, 0.16, 0.12, 0, -0.35, -4.68, blueDark);
-  addBox(g, 2.9, 0.24, 0.22, 0, -1.05, -4.7, steel);
-  for (const x of [-1.2, 1.2]) {
-    addBox(g, 0.48, 0.24, 0.12, x, -0.65, -4.68, gold);
-    addBox(g, 0.38, 0.18, 0.08, x, -0.66, -4.76, matC(0xfff4c2, { emissive: 0xffd15a, emissiveIntensity: 1.3 }));
+  // Tourelle de canon sous le nez.
+  ball(0.42, gun, 0, -1.25, -3.6, 1, 0.9, 1);
+  cyl(0.07, 0.07, 1.5, 8, gun, 0, -1.3, -4.3, Math.PI / 2);
+  cyl(0.11, 0.11, 0.35, 8, steel, 0, -1.3, -3.85, Math.PI / 2);
+  // Moteurs et capot au-dessus de la cabine, tuyères vers l'arrière.
+  addBox(g, 2.0, 0.65, 3.6, 0, 1.55, 0.3, hullDark);
+  for (const sd of [-1, 1]) {
+    cyl(0.42, 0.42, 2.6, 14, hull, sd * 0.78, 1.65, 0.55, Math.PI / 2);
+    cyl(0.33, 0.38, 0.5, 14, gun, sd * 0.78, 1.65, 2.05, Math.PI / 2);
+    cyl(0.34, 0.34, 0.06, 14, stripe, sd * 0.78, 1.65, -0.78, Math.PI / 2);
   }
-  // Roues et moyeux.
-  for (const side of [-1, 1]) for (const z of [-3.0, 3.0]) {
-    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.28, 16), rubber);
-    wheel.rotation.z = Math.PI / 2; wheel.position.set(side * 1.73, -1.03, z); g.add(wheel);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.3, 12), steel);
-    hub.rotation.z = Math.PI / 2; hub.position.copy(wheel.position); g.add(hub);
+  // Poutre de queue effilée, dérive, stabilisateur horizontal.
+  cyl(0.38, 0.75, 7.6, 14, hull, 0, 0.55, 7.2, Math.PI / 2);
+  addBox(g, 0.06, 0.22, 7.0, 0, 0.92, 7.0, stripe);
+  addBox(g, 0.22, 2.4, 1.3, 0, 1.6, 10.9, hull);
+  addBox(g, 0.24, 0.3, 1.0, 0, 2.7, 11.05, stripe);
+  addBox(g, 2.8, 0.12, 0.9, 0, 0.5, 9.8, hull);
+  for (const sd of [-1, 1]) addBox(g, 0.1, 0.55, 0.9, sd * 1.4, 0.6, 9.8, hullDark);
+  // Patins d'atterrissage : deux tubes reliés au ventre par des jambes.
+  for (const sd of [-1, 1]) {
+    cyl(0.1, 0.1, 6.0, 8, steel, sd * 1.35, -2.05, -0.1, Math.PI / 2);
+    const tip = cyl(0.1, 0.1, 0.7, 8, steel, sd * 1.35, -1.9, -3.35, -Math.PI / 4); tip.rotation.x = Math.PI / 2 - 0.6;
+    for (const z of [-1.6, 1.6]) { const leg = cyl(0.08, 0.08, 1.05, 8, steel, sd * 1.25, -1.6, z, 0, 0, sd * 0.35); leg.rotation.z = sd * 0.35; }
   }
-  // Toit, porte arrière et marchepied de largage.
-  addBox(g, 3.1, 0.18, 8.8, 0, 1.48, 0, blueDark);
-  addBox(g, 1.1, 1.9, 0.12, 0, -0.05, 4.68, blueDark);
-  addBox(g, 1.45, 0.22, 0.7, 0, -1.58, 4.95, gold);
-  for (const x of [-1.2, 1.2]) addBox(g, 0.08, 0.75, 0.08, x, -0.9, 4.35, steel);
-  // Feux arrière rouges visibles pendant le vol.
-  for (const x of [-1.3, 1.3]) addBox(g, 0.16, 0.3, 0.08, x, 0.15, 4.66, matC(0xff2a2a, { emissive: 0xd01010, emissiveIntensity: 1.6 }));
-  // Grand ballon captif légèrement ovale : même modèle que les largages, en plus grand.
-  // Placé haut : la nacelle accroche la jupe du ballon, le bus pend bien dessous.
+  // Gyrophare rouge clignotant sous la queue.
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), matC(0xff2020, { emissive: 0xff1010, emissiveIntensity: 2.5 }));
+  beacon.position.set(0, -0.15, 5.0); g.add(beacon);
+  // Rotor principal : mât, moyeu, 4 pales longues + disque flou translucide.
+  const rotor = new THREE.Group(); rotor.position.set(0, 2.55, 0.2); g.add(rotor);
+  cyl(0.18, 0.22, 0.75, 10, steel, 0, 2.15, 0.2);
   {
-    const ballon = makeBallon(4.4);
-    ballon.position.y = 13.6; g.add(ballon);
-    // jupe (bouche) du ballon en coordonnées du groupe : 13.6 - 4.4*0.9*1.15 = ~9.05
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.28, 12), gun); rotor.add(hub);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), steel); cap.position.y = 0.2; cap.scale.y = 0.6; rotor.add(cap);
+    for (let i = 0; i < 4; i++) {
+      const arm = new THREE.Group(); arm.rotation.y = i * Math.PI / 2; rotor.add(arm);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.07, 8.6), gun); blade.position.set(0, 0, 4.6); blade.rotation.z = 0.06; arm.add(blade);
+      const tipM = new THREE.Mesh(new THREE.BoxGeometry(0.63, 0.075, 0.5), stripe); tipM.position.set(0, 0, 8.65); arm.add(tipM);
+    }
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(8.9, 40), new THREE.MeshBasicMaterial({ color: 0x20252a, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
+    disc.rotation.x = -Math.PI / 2; disc.position.y = 0.02; rotor.add(disc);
   }
-  // Nacelle brûleur juste sous la bouche du ballon : cadre sombre + flamme émissive.
+  // Rotor de queue sur le flanc gauche de la dérive.
+  const tailRotor = new THREE.Group(); tailRotor.position.set(-0.28, 1.75, 10.9); g.add(tailRotor);
   {
-    const dark = matC(0x2a2f38, { roughness: 0.6, metalness: 0.35 });
-    addBox(g, 1.35, 0.5, 1.35, 0, 8.35, 0, dark);
-    addBox(g, 1.0, 0.55, 1.0, 0, 8.75, 0, dark);
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.8, 10), matC(0xffa030, { emissive: 0xff7a10, emissiveIntensity: 2.2, roughness: 0.4 }));
-    flame.position.set(0, 9.3, 0); g.add(flame);
-    // Haubans : bords de la nacelle -> jupe du ballon (attaches réelles sur la bouche).
-    for (const [x, z] of [[-0.62, -0.62], [0.62, -0.62], [-0.62, 0.62], [0.62, 0.62]]) {
-      cableBetween(g, x * 0.55, 8.7, z * 0.55, x * 2.5, 9.1, z * 2.5, 0.03, steel);
+    const th = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.2, 10), gun); th.rotation.z = Math.PI / 2; tailRotor.add(th);
+    for (let i = 0; i < 3; i++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.8, 0.24), gun); b.position.y = 0.9; const arm = new THREE.Group(); arm.rotation.x = i * Math.PI * 2 / 3; arm.add(b); tailRotor.add(arm);
     }
-    const frame = matC(0x6a4a28, { roughness: 0.7 });
-    addBox(g, 3.2, 0.16, 6.4, 0, 1.62, 0, frame);
-    for (const [x, z] of [[-1.5, -3.0], [1.5, -3.0], [-1.5, 3.0], [1.5, 3.0]]) addBox(g, 0.14, 0.14, 0.14, x, 1.75, z, steel);
-    // Quatre longs câbles d'acier : cadre du toit -> coins de la nacelle (ancrages
-    // réellement DANS la nacelle, pas à côté).
-    for (const [x, z] of [[-1.5, -3.0], [1.5, -3.0], [-1.5, 3.0], [1.5, 3.0]]) {
-      cableBetween(g, x, 1.75, z, Math.sign(x) * 0.55, 8.2, Math.sign(z) * 0.55, 0.045, steel);
-    }
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1.85, 24), new THREE.MeshBasicMaterial({ color: 0x20252a, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }));
+    disc.rotation.y = Math.PI / 2; tailRotor.add(disc);
   }
-  // Emblème doré sur les flancs de la nacelle.
+  // Étoile jaune StormDrop sur la dérive.
   const starShape = new THREE.Shape();
-  for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, r = i % 2 ? 0.18 : 0.42; if (i === 0) starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r); else starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+  for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, r = i % 2 ? 0.2 : 0.46; if (i === 0) starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r); else starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
   starShape.closePath();
   const starGeo = new THREE.ShapeGeometry(starShape);
   const starMat = matC(0xffdf43, { side: THREE.DoubleSide, emissive: 0x7c5300, emissiveIntensity: 0.3 });
-  for (const side of [-1, 1]) { const star = new THREE.Mesh(starGeo, starMat); star.position.set(side * 0.69, 8.95, 0); star.rotation.y = side * Math.PI / 2; g.add(star); }
-  g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+  for (const sd of [-1, 1]) {
+    const st = new THREE.Mesh(starGeo, starMat); st.position.set(sd * 0.125, 1.5, 10.9); st.rotation.y = sd * Math.PI / 2; g.add(st);
+    const st2 = new THREE.Mesh(starGeo, starMat); st2.position.set(sd * 1.535, 0.45, -1.35); st2.rotation.y = sd * Math.PI / 2; st2.scale.setScalar(0.8); g.add(st2);
+  }
+  g.traverse((m) => { if (m.isMesh && !m.material.transparent) m.castShadow = true; });
+  bus.rotor = rotor; bus.tailRotor = tailRotor; bus.beacon = beacon;
   g.visible = false; scene.add(g); bus.mesh = g;
 }
 
@@ -6980,7 +7081,7 @@ function startGame() {
   bus.start.copy(dir).multiplyScalar(-WORLD_R - 20).add(perp).setY(240);
   bus.end.copy(dir).multiplyScalar(WORLD_R + 20).add(perp).setY(240);
   bus.dir.copy(dir); bus.t = 0; bus.active = true; bus.ended = false; bus.mesh.visible = true;
-  bus.mesh.rotation.y = Math.atan2(-dir.x, -dir.z); // le pare-brise pointe dans le sens du vol
+  bus.mesh.rotation.order = 'YXZ'; bus.mesh.rotation.y = Math.atan2(-dir.x, -dir.z); // le nez de l'hélico pointe dans le sens du vol
   camYaw = Math.atan2(-dir.x, -dir.z) - 0.6; camPitch = -0.35;
   for (const b of bots) {
     if (b.mate) { b.jumpAt = 2; continue; } // mates follow the player
@@ -6994,8 +7095,8 @@ function startGame() {
     b.dropTarget = TEAM_SIZE > 1 ? randomLandPoint(plan.tgt.x, plan.tgt.z, 8) : plan.tgt;
   }
   document.getElementById('busHint').style.display = 'block';
-  document.getElementById('busHint').innerHTML = IS_TOUCH ? 'Appuie sur <b>SAUT</b> pour sauter du bus' : `Appuie sur <kbd>${keyLabel(BIND.jump)}</kbd> pour sauter du bus · <kbd>${keyLabel(BIND.map)}</kbd> carte`;
-  showCenter('LE BUS DÉCOLLE', 'Choisis ton point d\'atterrissage', 3);
+  document.getElementById('busHint').innerHTML = IS_TOUCH ? 'Appuie sur <b>SAUT</b> pour sauter de l\'hélico' : `Appuie sur <kbd>${keyLabel(BIND.jump)}</kbd> pour sauter de l'hélico · <kbd>${keyLabel(BIND.map)}</kbd> carte`;
+  showCenter('L\'HÉLICO DÉCOLLE', 'Choisis ton point d\'atterrissage', 3);
   const modeName = { 1: 'Solo', 2: 'Duo', 4: 'Escouade' }[TEAM_SIZE];
   setTimeout(() => showCenter(`${modeName.toUpperCase()} · ${PLAYER_TOTAL} JOUEURS`, 'Personne n\'a d\'arme : fonce vers le butin', 2.6), 3200);
   updateHotbar(); updateHUDStatic(); updateBuildBar(); buildTeamHUD();
@@ -7839,6 +7940,19 @@ function updateBus(dt) {
   bus.pos.lerpVectors(bus.start, bus.end, t);
   bus.mesh.position.copy(bus.pos);
   bus.mesh.position.y += Math.sin(bus.t * 1.5) * 0.4;
+  // hélico : rotors qui tournent, nez légèrement piqué (vol en avant), petit roulis,
+  // gyrophare qui clignote et « tchop » des pales tant que le joueur est à bord ou proche
+  bus.rotor.rotation.y += dt * 24;
+  bus.tailRotor.rotation.x += dt * 40;
+  bus.mesh.rotation.x = -0.09 + Math.sin(bus.t * 0.9) * 0.015;
+  bus.mesh.rotation.z = Math.sin(bus.t * 0.7) * 0.03;
+  bus.beacon.visible = (bus.t % 1.1) < 0.18;
+  bus.chop = (bus.chop || 0) - dt;
+  if (bus.chop <= 0 && player) {
+    bus.chop = 0.13;
+    const d = player.mode === 'bus' ? 0 : player.pos.distanceTo(bus.pos);
+    if (d < 160) sfx('rotor', (player.mode === 'bus' ? 0.5 : 0.5 * (1 - d / 160)));
+  }
   if (t >= 1) {
     for (const c of chars) if (c.mode === 'bus' && c.alive) jumpFromBus(c);
     bus.active = false; bus.ended = true; bus.mesh.visible = false;
@@ -8521,7 +8635,7 @@ function spawnSupplyDrop() {
   addBox(crate, 1.56, 0.18, 1.56, 0, 0.1, 0, matC(0xffd23f, { metalness: 0.4, roughness: 0.4 }));
   addBox(crate, 0.2, 1.24, 1.56, 0, 0.6, 0, matC(0xffd23f));
   g.add(crate);
-  // Grand ballon ovale (même modèle que le bus de combat, en plus petit) qui porte la caisse.
+  // Grand ballon ovale qui porte la caisse.
   const balloon = makeBallon(2.9); balloon.position.y = 5.2; g.add(balloon);
   for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cableBetween(g, x * 0.75, 1.24, z * 0.75, x * 2.0, 2.0, z * 2.0, 0.03, matC(0x333333));
   const light = { intensity: 2, distance: 10, color: 0x3fa9ff, y: 2, obj: g };
@@ -9253,7 +9367,7 @@ window.render_game_to_text = () => JSON.stringify({
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
 window.__game = { structs, rebuildHouse, towers, outline,
-  ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
+  ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; }, get bus() { return bus; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; },
   // capture libre (QA visuelle) : rendu depuis un point de vue arbitraire
   snap: (x, y, z, lx, ly, lz) => { const p0 = camera.position.clone(), q0 = camera.quaternion.clone(); camera.position.set(x, y, z); camera.lookAt(lx, ly, lz); camera.updateMatrixWorld(); renderer.render(scene, camera); const u = renderer.domElement.toDataURL('image/png'); camera.position.copy(p0); camera.quaternion.copy(q0); return u; } };
