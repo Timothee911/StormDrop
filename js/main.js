@@ -239,10 +239,10 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   const pos = geo.attributes.position;
   const cols = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
-  const soilG = new Float32Array(pos.count), soilD = new Float32Array(pos.count);
+  const soilG = new Float32Array(pos.count), soilD = new Float32Array(pos.count), snowW = new Float32Array(pos.count);
   // herbe : trois verts (prairie claire, vert franc, vert profond) mélangés par deux bruits ;
   // terre : brun chaud, plus sombre et plus humide en bas des pentes
-  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x6cc444), g2 = new THREE.Color(0x3f9c35), g3 = new THREE.Color(0x9ad25a), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0x9a7149), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x2d7f35), snowDirt = new THREE.Color(0xc9d3dc);
+  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x6cc444), g2 = new THREE.Color(0x3f9c35), g3 = new THREE.Color(0x9ad25a), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0x9a7149), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x2d7f35), snowDirt = new THREE.Color(0xc9d3dc), alpine = new THREE.Color(0x56704a);
   const gRock = new THREE.Color(0x857a6c), gRock2 = new THREE.Color(0x6c6660), gMoss = new THREE.Color(0x5f7a45), gcol = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
@@ -254,11 +254,13 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
     if (h < 1.4) c.copy(h < -1 ? deep : sand);
     else { c.copy(g1).lerp(g2, n).lerp(g3, clamp((n2 - 0.52) * 2.4, 0, 1) * 0.7); if (h < 2.2) c.lerp(sand, (2.2 - h) / 0.8); }
     const bw = biomeW(x, z);
-    if (h >= 1.4) { c.lerp(dsand, bw.desert * (0.85 + 0.15 * n)); c.lerp(fgreen, bw.forest * 0.6); c.lerp(snow, bw.snow * (0.75 + 0.25 * n)); }
+    // la NEIGE n'est plus peinte dans la couleur des sommets : le shader la pose par-dessus
+    // (aSnow) avec un bord irrégulier, des congères, des reflets et des plaques de glace.
+    // Dessous, une herbe d'altitude rase et sombre qui perce en bordure.
+    if (h >= 1.4) { c.lerp(dsand, bw.desert * (0.85 + 0.15 * n)); c.lerp(fgreen, bw.forest * 0.6); c.lerp(alpine, bw.snow * 0.8); }
     if (inPOI(x, z, -4) && h >= 1.4) c.lerp(bw.snow > 0.5 ? snowDirt : dirt, 0.18 + 0.2 * n);
     const rk = (sl > 1.6 || h > 26) ? clamp(Math.max((sl - 1.6) * 0.8, (h - 26) / 6), 0, 1) : 0;
     if (rk > 0) c.lerp(rock, rk);
-    if (h > 40) c.lerp(snow, clamp((h - 40) / 4, 0, 1));
     // montagne de la Grotte : roche brun-gris nue (pas de neige), mousse sur
     // les replats, comme le massif rocheux de la base de l'Ombre
     let gk = 0;
@@ -274,12 +276,14 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
     // poids « herbe » et « terre » pour le shader : le shader dessine les lames d'herbe
     // et les cailloux / fissures de la terre là où ces poids le demandent
     const green = h < 2.2 ? 0 : clamp((h - 2.2) / 0.6, 0, 1) * (1 - bw.snow) * (1 - bw.desert) * (1 - rk) * (1 - gk) * (h > 38 ? 0 : 1);
+    snowW[i] = h < 1.6 ? 0 : clamp(Math.max(bw.snow * (0.8 + 0.4 * n), (h - 40) / 4), 0, 1) * (1 - gk) * (1 - 0.55 * clamp((sl - 2.2) / 1.5, 0, 1));
     soilG[i] = green;
     soilD[i] = green * groundDirtW(x, z, sl);
     cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
   }
   geo.setAttribute('aSoilG', new THREE.BufferAttribute(soilG, 1));
   geo.setAttribute('aSoilD', new THREE.BufferAttribute(soilD, 1));
+  geo.setAttribute('aSnow', new THREE.BufferAttribute(snowW, 1));
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.computeVertexNormals();
   const tmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
@@ -290,9 +294,9 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
     sh.uniforms.uNight = WSKY.night;
     sh.uniforms.uDirtA = { value: new THREE.Color(0x8c7556) };
     sh.uniforms.uDirtB = { value: new THREE.Color(0x5f4d3a) };
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; attribute float aSoilG; attribute float aSoilD; varying float vSoilG; varying float vSoilD;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vSoilG = aSoilG; vSoilD = aSoilD;');
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; attribute float aSoilG; attribute float aSoilD; attribute float aSnow; varying float vSoilG; varying float vSoilD; varying float vSnow;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vSoilG = aSoilG; vSoilD = aSoilD; vSnow = aSnow;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vWP; uniform float uT; uniform float uNight; varying float vSoilG; varying float vSoilD; uniform vec3 uDirtA; uniform vec3 uDirtB;
+      varying vec3 vWP; uniform float uT; uniform float uNight; varying float vSoilG; varying float vSoilD; varying float vSnow; uniform vec3 uDirtA; uniform vec3 uDirtB;
       float th(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float tn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(th(i), th(i + vec2(1.0, 0.0)), f.x), mix(th(i + vec2(0.0, 1.0)), th(i + vec2(1.0, 1.0)), f.x), f.y); }`)
@@ -342,6 +346,29 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
         }
         vec3 fn = normalize(cross(dFdx(vWP), dFdy(vWP)));
         diffuseColor.rgb *= mix(0.84, 1.0, smoothstep(0.62, 0.92, abs(fn.y)));
+        // NEIGE : manteau poudreux posé par-dessus le sol, bord déchiqueté où l'herbe
+        // et la roche percent, congères douces, rides sculptées par le vent, ombres
+        // bleutées dans les pentes, plaques de glace bleue et paillettes qui scintillent
+        if (vSnow > 0.01) {
+          float se = vSnow + (tn(vWP.xz * 0.35 + 61.0) - 0.5) * 0.55 + (tn(vWP.xz * 1.9 + 8.0) - 0.5) * 0.2;
+          float sm = smoothstep(0.34, 0.5, se);
+          float drift = tn(vWP.xz * 0.05 + 70.0) * 0.6 + tn(vWP.xz * 0.16 + 3.0) * 0.4;
+          float wind = tn(vec2(vWP.x * 0.95 + vWP.z * 0.3, vWP.z * 0.14 - vWP.x * 0.05));
+          vec3 scol = mix(vec3(0.60, 0.68, 0.84), vec3(0.95, 0.97, 1.0), smoothstep(0.2, 0.8, drift));
+          float fine = tn(vec2(vWP.x * 3.2 + vWP.z * 1.1, vWP.z * 0.6));                  // rides fines du vent
+          scol *= 0.93 + (wind - 0.5) * 0.2 + (fine - 0.5) * 0.08;
+          float slope = 1.0 - abs(fn.y);
+          scol = mix(scol, vec3(0.62, 0.72, 0.9), smoothstep(0.12, 0.5, slope) * 0.55);
+          scol = mix(scol, vec3(0.74, 0.8, 0.88), smoothstep(0.62, 0.9, slope) * 0.6);
+          float ice = smoothstep(0.7, 0.76, tn(vWP.xz * 0.028 + 90.0)) * smoothstep(0.08, 0.02, slope);
+          vec3 icol = mix(vec3(0.58, 0.78, 0.93), vec3(0.8, 0.92, 1.0), tn(vWP.xz * 0.7 + 12.0));
+          icol *= 1.0 - smoothstep(0.025, 0.0, abs(tn(vWP.xz * 1.3 + 5.0) - 0.5)) * 0.25;
+          scol = mix(scol, icol, ice);
+          vec2 sc = floor(vWP.xz * 9.0);
+          float glint = step(0.985, th(sc)) * pow(max(0.0, sin(uT * 2.2 + th(sc + 7.0) * 40.0)), 10.0);
+          scol += vec3(1.0, 0.98, 0.92) * glint * 0.9 * (1.0 - uNight * 0.8);
+          diffuseColor.rgb = mix(diffuseColor.rgb, scol, sm);
+        }
         float wl = -0.08 + 0.12 * sin(uT * 1.3 + vWP.x * 0.07 + vWP.z * 0.05);
         float foam = smoothstep(0.32, 0.04, abs(vWP.y - wl)) * (0.75 + 0.25 * tn(vWP.xz * 1.3 + uT * 0.6));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.97, 0.99, 1.0), foam * 0.8);
@@ -381,7 +408,7 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
     const p = wg.attributes.position, dep = new Float32Array(p.count), sho = new Float32Array(p.count);
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), z = p.getZ(i);
-      dep[i] = Math.min(8, Math.max(0, -terrainH(x, z)));
+      dep[i] = inGrotto(x, z) ? 0.2 : Math.min(8, Math.max(0, -terrainH(x, z))); // lagon de la Grotte : eau calme (même règle que waveAt)
       const th = Math.atan2(z, x);
       const ci = ((th / (Math.PI * 2) * COAST_A) + COAST_A) % COAST_A;
       sho[i] = Math.min(280, Math.abs(Math.hypot(x, z) - coastR[ci | 0]));
@@ -544,9 +571,7 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   // caustiques : la lumière ondoie sur le fond marin (visible en plongée et à travers l'eau)
   sbedMat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterT; sh.uniforms.uNight = WSKY.night;
-    sh.uniforms.uDirtA = { value: new THREE.Color(0x8c7556) };
-    sh.uniforms.uDirtB = { value: new THREE.Color(0x5f4d3a) };
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; attribute float aSoilG; attribute float aSoilD; varying float vSoilG; varying float vSoilD;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vSoilG = aSoilG; vSoilD = aSoilD;');
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
       varying vec3 vWP; uniform float uT; uniform float uNight;
       float caustic(vec3 p) {
@@ -1258,8 +1283,35 @@ let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
     new THREE.IcosahedronGeometry(0.68, 1).translate(0.58, 0.1, -0.25),
   ]);
   trunkIM = new THREE.InstancedMesh(trunkG, matC(0x7a4a26), pts.length);
-  leafIM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
-  leaf2IM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
+  // sapins enneigés : chaque étage porte une calotte de neige au bord irrégulier
+  // (shader : la neige tient sur le haut du cône et sur les faces tournées vers le ciel)
+  const snowLeafMat = () => {
+    const mt = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
+    mt.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aSnowI; varying float vSnowI; varying float vLy; varying vec3 vSP;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSnowI = aSnowI; vLy = position.y; vSP = (instanceMatrix * vec4(position, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+        varying float vSnowI; varying float vLy; varying vec3 vSP;
+        float lh(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.7); }
+        float ln(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(lh(i), lh(i + vec2(1.0, 0.0)), f.x), mix(lh(i + vec2(0.0, 1.0)), lh(i + vec2(1.0, 1.0)), f.x), f.y); }`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+        if (vSnowI > 0.01) {
+          float edge = 0.58 - vSnowI * 0.32 + (ln(vSP.xz * 2.6 + vSP.y * 1.7) - 0.5) * 0.22;
+          float cap = smoothstep(edge, edge + 0.05, vLy);
+          float rim = smoothstep(0.1, 0.0, vLy) * vSnowI * step(0.5, ln(vSP.xz * 5.0 + 3.0));   // neige accrochée au bord des branches
+          float sm = clamp(max(cap, rim), 0.0, 1.0) * clamp(vSnowI * 1.6, 0.0, 1.0);
+          vec3 sc = mix(vec3(0.82, 0.88, 0.97), vec3(0.98, 0.99, 1.0), ln(vSP.xz * 1.3 + 9.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, sc, sm);
+        }`);
+    };
+    return mt;
+  };
+  const leafG2 = leafG.clone();
+  const snowI1 = new THREE.InstancedBufferAttribute(new Float32Array(pts.length), 1), snowI2 = new THREE.InstancedBufferAttribute(new Float32Array(pts.length), 1);
+  leafG.setAttribute('aSnowI', snowI1); leafG2.setAttribute('aSnowI', snowI2);
+  leafIM = new THREE.InstancedMesh(leafG, snowLeafMat(), pts.length);
+  leaf2IM = new THREE.InstancedMesh(leafG2, snowLeafMat(), pts.length);
   leafBallIM = new THREE.InstancedMesh(ballG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
   const lc = new THREE.Color(), snowC = new THREE.Color(0xeef6ff);
   pts.forEach((p, i) => {
@@ -1283,7 +1335,7 @@ let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
       dummy.position.set(p.x, tree.y + 2.0 * s, p.z); dummy.scale.set(3.0 * s, 4.6 * s, 3.0 * s); dummy.updateMatrix(); leafIM.setMatrixAt(i, dummy.matrix);
       dummy.position.set(p.x, tree.y + 4.3 * s, p.z); dummy.scale.set(2.2 * s, 3.6 * s, 2.2 * s); dummy.updateMatrix(); leaf2IM.setMatrixAt(i, dummy.matrix);
       lc.setHSL(0.27 + rand(-0.04, 0.05), 0.55 + rand(0.15), 0.32 + rand(0.1));
-      if (p.snow > 0.3) { lc.setHSL(0.36, 0.35, 0.28); leafIM.setColorAt(i, lc); leaf2IM.setColorAt(i, lc.lerp(snowC, 0.75 * p.snow)); }
+      if (p.snow > 0.3) { lc.setHSL(0.38 + rand(0.03), 0.38, 0.22 + rand(0.05)); leafIM.setColorAt(i, lc); lc.offsetHSL(0, 0, 0.03); leaf2IM.setColorAt(i, lc); snowI1.setX(i, Math.min(1, p.snow * 0.85)); snowI2.setX(i, Math.min(1, p.snow * 1.1)); }
       else { leafIM.setColorAt(i, lc); lc.offsetHSL(0.01, 0, 0.05); leaf2IM.setColorAt(i, lc); }
       tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + 3.2 * s });
     }
@@ -2237,6 +2289,46 @@ function coneH(c, x, z) {
   if (c.editMask & (1 << quadrant)) return c.y;
   return c.y + Math.max(0, 1 - Math.max(lx, lz)) * 1.6;
 }
+// =====================================================================
+// EAU : niveau de la houle, flottaison, plongée et pataugeage
+// =====================================================================
+// waveAt reproduit EXACTEMENT la houle du shader de la mer (même formule, même
+// horloge waterT) : les nageurs, les rides et la caméra suivent les vagues.
+function waveAt(x, z) {
+  const t = waterT.value;
+  let h = Math.sin(x * 0.096 + z * 0.041 + t * 1.05) * 0.180
+        + Math.sin(-x * 0.071 + z * 0.066 - t * 0.88) * 0.150
+        + Math.sin(x * 0.047 - z * 0.089 + t * 1.32) * 0.110
+        + Math.sin(-x * 0.052 - z * 0.058 + t * 1.71) * 0.070;
+  const qx = x + Math.sin(z * 0.023 + t * 0.4) * 6.0, qz = z + Math.sin(x * 0.019 - t * 0.33) * 6.0;
+  h += Math.sin(qx * 0.213 - qz * 0.187 + t * 2.4) * 0.038 + Math.sin(-qx * 0.249 - qz * 0.144 - t * 2.9) * 0.028;
+  const dep = inGrotto(x, z) ? 0.2 : Math.min(8, Math.max(0, -terrainH(x, z))); // lagon de la Grotte : eau calme
+  return h * clamp(dep / 1.6, 0.12, 1) * (1 - smoothstepJS(660, 780, Math.max(Math.abs(x), Math.abs(z))));
+}
+function smoothstepJS(a, b, x) { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+const SWIM_DEPTH = 1.05;   // profondeur d'eau à partir de laquelle on nage (sinon on patauge)
+const FLOAT_FEET = 0.95;   // en surface, les pieds flottent 0,95 m sous l'eau (épaules dehors)
+// Forces verticales : hors de l'eau, simple gravité ; dans l'eau, poussée
+// d'Archimède + amortissement (ressort amorti vers la ligne de flottaison qui
+// suit la houle). Un plongeon depuis haut s'enfonce puis remonte en douceur ;
+// en plongée (touche s'accroupir) on nage vers le fond, on remonte en relâchant.
+function applyGravity(ch, dt) {
+  if (!(ch.inWater && ch.mode === 'ground')) { ch.vel.y -= GRAV * dt; return; }
+  const surf = waveAt(ch.pos.x, ch.pos.z);
+  ch.waterSurf = surf;
+  if (ch.diving) {
+    // nage vers le bas : poussée vers le fond contre la flottabilité, vitesse limitée
+    ch.vel.y += -11 * dt;
+    ch.vel.y *= Math.max(0, 1 - 2.2 * dt);
+    if (ch.vel.y < -3.6) ch.vel.y = -3.6;
+    return;
+  }
+  const err = clamp(surf - FLOAT_FEET - ch.pos.y, -1.4, 1.1); // > 0 : trop bas, Archimède pousse
+  const under = ch.pos.y < surf - FLOAT_FEET - 0.15;
+  ch.vel.y += (err * 26 - ch.vel.y * (under ? 9 : 6.5)) * dt;
+  if (err < -0.2) ch.vel.y -= GRAV * 0.6 * dt;     // sorti de l'eau par un bond : retombe
+  if (ch.vel.y > 4.6) ch.vel.y = 4.6;              // remontée de plongée : vitesse de nage
+}
 function physics(ch, dt) {
   const oldY = ch.pos.y;
   ch.blocked = false;
@@ -2306,14 +2398,20 @@ function physics(ch, dt) {
   // construction immergée (escalier, dalle posés dans l'eau) — sinon le perso
   // restait debout et descendait sous l'eau au lieu de nager. La grotte est
   // couverte par le même test (son plan d'eau est aussi sous -0,4 m).
-  ch.inWater = (onTerrain && ground < -0.4) || (!onTerrain && ch.pos.y < -0.4); ch.gcol = gcol;
+  // Le niveau de l'eau suit la houle. On NAGE quand l'eau est assez profonde
+  // (sol à plus de 1,05 m sous la surface) et que les pieds sont dans l'eau ;
+  // moins profond, on PATAUGE : on marche au fond, ralenti selon la hauteur d'eau.
+  const surf = (ground < 0.5 || ch.pos.y < 0.5) ? waveAt(ch.pos.x, ch.pos.z) : 0;
+  ch.waterSurf = surf;
+  // hystérésis : un petit bond de nage ne fait pas « sortir » de l'eau
+  ch.inWater = ground < surf - SWIM_DEPTH && ch.pos.y < surf + (wasWater ? 0.7 : -0.3) && ch.mode !== 'drive'; ch.gcol = gcol;
+  ch.wadeD = !ch.inWater && ch.pos.y < surf - 0.08 && ch.pos.y - ground < 0.3 ? clamp(surf - ch.pos.y, 0, SWIM_DEPTH) : 0;
   if (ch.inWater && !wasWater) ch.splashV = Math.max(0.4, -ch.vel.y); // vitesse d'entrée dans l'eau -> éclaboussure
-  // NAGE : on flotte à la surface (pieds à -0,9 m, tête hors de l'eau) ;
-  // la touche « s'accroupir » fait plonger (jusqu'à -1,8 m), on remonte en relâchant.
   if (ch.inWater) {
-    const surfY = ch.diving ? -1.8 : -0.9;
-    if (ch.pos.y < surfY) { ch.pos.y = surfY; if (ch.vel.y < 0) ch.vel.y = 0; }
-    if (ch.pos.y <= surfY + 0.03) ch.grounded = true;
+    // on flotte : pas de sol sous les pieds, mais « posé » sur l'eau pour le reste du jeu
+    // (pas de planeur, pas de chute, IA). Le fond reste un vrai sol (ground ci-dessus).
+    ch.grounded = true;
+    if (!wasWater) ch.landV = 0; // tomber dans une eau profonde ne blesse pas
   }
 }
 
@@ -4199,7 +4297,7 @@ function botThink(b, dt) {
     } else b.stuckN = 0;
     b.lastP.copy(b.pos); b.stuckT = 0;
   }
-  if (b.inWater) speed *= 0.55;
+  if (b.inWater) speed *= 0.55; else if (b.wadeD) speed *= 1 - 0.42 * b.wadeD / SWIM_DEPTH;
   // évitement des murs : appliqué après toutes les décisions de mouvement
   // (poursuite, strafe, waypoint) pour que le bot longe les obstacles
   if (wish.lengthSq() > 0.01) steerWalls(b, wish);
@@ -4314,7 +4412,7 @@ function henchThink(h, dt) {
     const dx = h.wp.x - h.pos.x, dz = h.wp.z - h.pos.z, d = Math.hypot(dx, dz);
     if (d > 0.5) { wish.set(dx / d, 0, dz / d); h.yaw = lerpAngle(h.yaw, Math.atan2(-dx, -dz), Math.min(1, dt * 5)); }
   }
-  if (h.inWater) speed *= 0.55;
+  if (h.inWater) speed *= 0.55; else if (h.wadeD) speed *= 1 - 0.42 * h.wadeD / SWIM_DEPTH;
   // évitement des murs (comme les autres bots) : l'ombre longe les obstacles
   if (wish.lengthSq() > 0.01) steerWalls(h, wish);
   const acc = h.grounded ? 12 : 3;
@@ -7420,14 +7518,14 @@ function updatePlayer(dt) {
   if (p.mode === 'drive') { driveVehicle(p, dt); return; }
   if (p.mode === 'fall' || p.mode === 'glide') {
     airControl(p, wish, dt); physics(p, dt);
-    if (p.grounded) { p.mode = 'ground'; p.manualFall = false; p.parts.glider.visible = false; p.landT = 0.5; p.cool = Math.max(p.cool, 0.3); p.vel.y = 0; sfx('land', 0.6); const poi = inPOI(p.pos.x, p.pos.z, 10); showCenter(poi ? poi.name.toUpperCase() : '', 'Fouille les maisons et les coffres', 2.2); }
+    if (p.grounded) { p.mode = 'ground'; p.manualFall = false; p.parts.glider.visible = false; p.landT = 0.5; p.cool = Math.max(p.cool, 0.3); p.vel.y = 0; sfx('land', 0.6); if (stepSound(p) === 'step_snow') { burst(_v1.set(p.pos.x, p.pos.y + 0.1, p.pos.z), 0xf4f8ff, 18, 4.2, 0.16, 0.5, 0.8); addFootprint(p); addFootprint(p); } const poi = inPOI(p.pos.x, p.pos.z, 10); showCenter(poi ? poi.name.toUpperCase() : '', 'Fouille les maisons et les coffres', 2.2); }
     return;
   }
   if (p.downed) { // à terre : on rampe, rien d'autre
     p.ads = false; p.sprint = false; p.crouch = false; p.using = null; ghostTarget = null;
     const sp = RUN * 0.28 * (p.inWater ? 0.7 : 1);
     p.vel.x = lerp(p.vel.x, wish.x * sp, Math.min(1, 10 * dt)); p.vel.z = lerp(p.vel.z, wish.z * sp, Math.min(1, 10 * dt));
-    p.vel.y -= GRAV * dt * (p.inWater ? 0.22 : 1); if (p.inWater) p.vel.y *= Math.max(0, 1 - 2.6 * dt);
+    applyGravity(p, dt);
     physics(p, dt); checkPOIBanner(); return;
   }
   const W = weaponOf(p);
@@ -7445,7 +7543,9 @@ function updatePlayer(dt) {
   if (p.sprint) speed = RUN * 1.18;
   if (p.crouch && !sliding) speed *= 0.5;
   if (ads) speed *= 0.6; if (p.using) speed *= 0.45; if (p.inWater) speed *= 0.55;
-  const acc = p.grounded ? 14 : 4;
+  if (p.wadeD) speed *= 1 - 0.42 * p.wadeD / SWIM_DEPTH; // l'eau freine les jambes quand on patauge
+  // dans l'eau, l'élan se garde : on accélère et on freine plus lentement qu'au sol
+  const acc = p.inWater ? 3.2 : p.grounded ? 14 - 6 * (p.wadeD || 0) : 4;
   if (sliding) {
     // slight steering, speed decays over the slide; dust under the feet
     if (wish.lengthSq() > 0) { p.slideDir.lerp(_v1.set(wish.x, 0, wish.z).normalize(), Math.min(1, dt * 2.2)).normalize(); }
@@ -7461,15 +7561,15 @@ function updatePlayer(dt) {
   p.jumpBuf = Math.max(0, (p.jumpBuf || 0) - dt);
   // plongeon : « s'accroupir » (F) dans l'eau fait couler, on remonte en le relâchant
   p.diving = p.inWater && !!p.crouchToggle;
-  if ((down('jump') || p.jumpBuf > 0) && (p.grounded || p.coyote > 0) && p.vel.y <= 2 && !p.inWater && !blocked) { p.vel.y = JUMP_V * (sliding ? 1.08 : 1); p.grounded = false; p.coyote = 0; p.jumpBuf = 0; p.crouchToggle = false; p.slideT = 0; }
+  if ((down('jump') || p.jumpBuf > 0) && (p.grounded || p.coyote > 0) && p.vel.y <= 2 && !p.inWater && !blocked) { p.vel.y = JUMP_V * (sliding ? 1.08 : 1) * (1 - 0.3 * (p.wadeD || 0)); p.grounded = false; p.coyote = 0; p.jumpBuf = 0; p.crouchToggle = false; p.slideT = 0; }
   // petit bond de nage : sauter en surface fait sortir la tête de l'eau (grimper
   // sur la berge) — une seule impulsion par appui, pas de saut répété en
   // maintenant Espace (le bond ne se relance qu'en retombant, après le délai)
   p.swimHopCd = Math.max(0, (p.swimHopCd || 0) - dt);
-  if (p.inWater && !p.diving && (down('jump') || p.jumpBuf > 0) && !blocked && p.swimHopCd <= 0 && p.vel.y < 0.8) { p.vel.y = 3.4; p.swimHopCd = 0.85; p.jumpBuf = 0; }
-  // dans l'eau : gravité réduite + frein vertical -> flottaison naturelle vers la surface
-  p.vel.y -= GRAV * dt * (p.inWater ? 0.22 : 1);
-  if (p.inWater) p.vel.y *= Math.max(0, 1 - 2.6 * dt);
+  if (p.inWater && p.diving && (down('jump') || p.jumpBuf > 0) && !blocked) { p.crouchToggle = false; p.diving = false; p.jumpBuf = 0; p.swimHopCd = 0.4; } // SAUT en plongée : on remonte
+  if (p.inWater && !p.diving && (down('jump') || p.jumpBuf > 0) && !blocked && p.swimHopCd <= 0 && p.vel.y < 0.8 && p.pos.y > (p.waterSurf || 0) - FLOAT_FEET - 0.3) { p.vel.y = 3.6; p.swimHopCd = 0.85; p.jumpBuf = 0; }
+  // dans l'eau : poussée d'Archimède amortie, houle, plongée (voir applyGravity)
+  applyGravity(p, dt);
   physics(p, dt);
   if (p.landV > 26 && !p.noFall && !grottoPad(p)) { const d = (p.landV - 26) * 6; damageChar(p, d, null, false, 'chute'); }
   if (p.grounded) p.noFall = false;
@@ -7548,7 +7648,7 @@ function updateChar(ch, dt) {
     } else {
       if (!ch.hench && !ch.downed) botLoot(ch, dt);
       if (ch.hench) henchThink(ch, dt); else botThink(ch, dt);
-      ch.vel.y -= GRAV * dt;
+      applyGravity(ch, dt);
       physics(ch, dt);
       if (ch.landV > 26 && !grottoPad(ch)) damageChar(ch, (ch.landV - 26) * 6, null, false, 'chute');
     }
@@ -7564,19 +7664,58 @@ function updateChar(ch, dt) {
   ch.refreshHeld();
   if (ch.mode === 'ground' && ch.grounded && !ch.inWater) {
     const hs = Math.hypot(ch.vel.x, ch.vel.z);
-    if (hs > 3) { ch.stepT = (ch.stepT || 0) - dt * hs / 7; if (ch.stepT <= 0) { ch.stepT = 0.36; if (ch.isPlayer) sfx(stepSound(ch), 0.16); else if (player && ch.camD2 < 900) sfxAt(stepSound(ch), ch.pos, 0.6); } }
+    if (hs > 3) { ch.stepT = (ch.stepT || 0) - dt * hs / 7; if (ch.stepT <= 0) { ch.stepT = 0.36; const ss = stepSound(ch); if (ch.isPlayer) sfx(ss, 0.16); else if (player && ch.camD2 < 900) sfxAt(ss, ch.pos, 0.6); if (ss === 'step_snow') snowStep(ch, hs); } }
   } else if (ch.mode === 'ground' && ch.inWater) {
-    const hs = Math.hypot(ch.vel.x, ch.vel.z);
-    if (hs > 2) { ch.stepT = (ch.stepT || 0) - dt * hs / 7; if (ch.stepT <= 0) { ch.stepT = 0.5; if (ch.isPlayer) sfx('step_water', 0.25); else if (ch.camD2 < 900) sfxAt('step_water', ch.pos, 0.6); if (ch.camD2 < 3600) { burst(_v1.set(ch.pos.x, -0.3, ch.pos.z), 0xd8f4ff, 3, 2.5, 0.12, 0.8, 0.5); ripple(ch.pos.x, ch.pos.z, 0.55 + hs * 0.06); } } }
+    waterFX(ch, dt);
   }
+  // pataugeage : chaque pas soulève une gerbe et un anneau, plus fort dans l'eau profonde
+  if (ch.mode === 'ground' && ch.wadeD > 0.05 && ch.grounded) {
+    const hs = Math.hypot(ch.vel.x, ch.vel.z);
+    if (hs > 1.2) { ch.wadeT = (ch.wadeT || 0) - dt * hs / 6; if (ch.wadeT <= 0) { ch.wadeT = 0.34; const k = ch.wadeD / SWIM_DEPTH; const y = ch.waterSurf || 0;
+      if (ch.isPlayer) sfx('step_water', 0.18 + 0.2 * k); else if (ch.camD2 < 900) sfxAt('step_water', ch.pos, 0.5);
+      if (ch.camD2 < 3600 || ch.isPlayer) { burst(_v1.set(ch.pos.x + ch.vel.x * 0.06, y + 0.05, ch.pos.z + ch.vel.z * 0.06), 0xe4f7ff, 3 + Math.round(5 * k), 1.8 + 2.4 * k, 0.11, 0.9, 0.45); ripple(ch.pos.x, ch.pos.z, 0.3 + 0.35 * k, 0.6); } } }
+  }
+  // en sortant de l'eau, on ruisselle quelques secondes (gouttes qui tombent du corps)
+  if (ch.wasInWaterFX && !ch.inWater && ch.mode === 'ground') ch.dripT = 2.2;
+  if (ch.dripT > 0) { ch.dripT -= dt; ch.dripFx = (ch.dripFx || 0) - dt;
+    if (ch.dripFx <= 0 && (ch.isPlayer || ch.camD2 < 900)) { ch.dripFx = 0.09; burst(_v1.set(ch.pos.x + (MR() - 0.5) * 0.5, ch.pos.y + 0.5 + MR() * 1.1, ch.pos.z + (MR() - 0.5) * 0.5), 0xcfeeff, 1, 0.4, 0.06, 1.2, 0.5); } }
   // éclaboussure à l'entrée dans l'eau : plus la chute est rapide, plus le plouf est gros
   if (ch.inWater && !ch.wasInWaterFX && ch.mode === 'ground') {
     const k = Math.min(1, (ch.splashV || 1) / 14);
     if (ch.isPlayer || ch.camD2 < 6400) splashFX(ch.pos.x, ch.pos.z, k);
+    if (k > 0.45 && (ch.isPlayer || ch.camD2 < 3600)) ch.plungeT = 1.0; // gros plongeon : traînée de bulles en s'enfonçant
     if (ch.isPlayer) sfx('splash', 0.4 + 0.6 * k); else if (ch.camD2 < 3600) sfxAt('splash', ch.pos, 0.8);
   }
   ch.wasInWaterFX = ch.inWater;
   animateChar(ch, dt);
+}
+// Effets de nage : sillage en V et écume aux mains (crawl), petits anneaux sur
+// place, bulles qui remontent en plongée et après un grand plongeon.
+function waterFX(ch, dt) {
+  const near = ch.isPlayer || ch.camD2 < 3600;
+  const hs = Math.hypot(ch.vel.x, ch.vel.z), y = ch.waterSurf || 0;
+  const pose = ch.waterPose;
+  ch.wfxT = (ch.wfxT || 0) - dt;
+  if (pose === 'crawl') {
+    // entrée de main dans l'eau à chaque demi-cycle de bras : petite gerbe + clapotis
+    const st = ch.animT * (0.95 + 0.35 * Math.min(1, hs / 5)), sg = Math.sin(st) > 0;
+    if (sg !== ch.strokeS) {
+      ch.strokeS = sg;
+      if (near) {
+        const side = sg ? 1 : -1, fx = -Math.sin(ch.yaw), fz = -Math.cos(ch.yaw), rx = Math.cos(ch.yaw), rz = -Math.sin(ch.yaw);
+        burst(_v1.set(ch.pos.x + fx * 0.9 + rx * 0.35 * side, y + 0.08, ch.pos.z + fz * 0.9 + rz * 0.35 * side), 0xeef9ff, 4, 1.8, 0.1, 1, 0.4);
+        if (ch.isPlayer) sfx('step_water', 0.14); else if (ch.camD2 < 900) sfxAt('step_water', ch.pos, 0.35);
+      }
+    }
+    // sillage : anneaux qui s'ouvrent derrière le nageur
+    if (ch.wfxT <= 0 && near) { ch.wfxT = 0.24; ripple(ch.pos.x - ch.vel.x * 0.1, ch.pos.z - ch.vel.z * 0.1, 0.3 + hs * 0.035, 0.45); if (hs > 3) burst(_v1.set(ch.pos.x - ch.vel.x * 0.12, y + 0.05, ch.pos.z - ch.vel.z * 0.12), 0xf4fbff, 2, 1.0, 0.09, 0.9, 0.5); }
+  } else if (pose === 'tread' || pose === 'aim') {
+    if (ch.wfxT <= 0 && near) { ch.wfxT = 1.1 + MR() * 0.5; ripple(ch.pos.x, ch.pos.z, 0.32, 0.5); }
+  } else if (pose === 'dive') {
+    // bulles d'air : partent de la tête et remontent en oscillant
+    if (ch.wfxT <= 0 && near) { ch.wfxT = 0.32 + MR() * 0.2; burst(_v1.set(ch.pos.x, ch.pos.y + 1.0, ch.pos.z), 0xd9f3ff, 2 + (MR() < 0.3 ? 2 : 0), 0.5, 0.07, -0.18, 1.6); }
+  }
+  if (ch.plungeT > 0) { ch.plungeT -= dt; if (near && MR() < 0.6) burst(_v1.set(ch.pos.x + (MR() - 0.5) * 0.6, ch.pos.y + 0.6 + MR(), ch.pos.z + (MR() - 0.5) * 0.6), 0xe6f8ff, 2, 0.9, 0.08, -0.25, 1.4); }
 }
 function stepSound(ch) {
   const c = ch.gcol;
@@ -7684,75 +7823,100 @@ function animateChar(ch, dt) {
     return;
   }
   P.head.rotation.set(0, 0, 0);
-  // NAGE façon crawl : corps à plat dans l'eau, roulis des épaules à chaque
-  // passage de bras, battements de jambes alternés, tête hors de l'eau pour
-  // respirer. En plongée : corps allongé, bras le long du corps. Sur place :
-  // on reste à flot, petits mouvements de bras et de jambes.
+  // NAGE — quatre allures :
+  //  • sur place (tread) : corps vertical, jambes en « batteur à œufs » (cercles
+  //    alternés), mains qui godillent sous la surface ; le corps suit la houle ;
+  //  • tir / visée : buste droit, arme hors de l'eau, jambes qui battent ;
+  //  • crawl en surface : corps à plat, roulis des épaules, bras en moulinets,
+  //    battements de jambes, tête qui tourne sur le côté pour respirer tous les
+  //    deux mouvements ;
+  //  • plongée : brasse sous l'eau (traction des bras, ramené, glisse, ciseau des
+  //    jambes) ; le corps s'incline selon qu'on descend ou qu'on remonte.
   if (ch.inWater && ch.mode === 'ground') {
-    const dive = ch.pos.y < -1.25;
+    const surf = ch.waterSurf || 0;
+    const sunk = surf - FLOAT_FEET - ch.pos.y;           // > 0 : sous la ligne de flottaison
+    const dive = !!ch.diving || sunk > 0.5;
     const moving = Math.min(1, hs / 5); // 0 = sur place, 1 = nage à fond
     const ranged = ch.item && ch.item.kind === 'weapon' && ch.item.id !== 'pickaxe';
     const aiming = ranged && ((ch.waterAimT || 0) > 0 || (ch.isPlayer && (mouse.l || mouse.r)));
     const tread = !dive && (hs < 0.7 || aiming);
+    P.head.rotation.set(0, 0, 0);
     if (tread) {
-      // Maintien vertical : jambes en battements continus, pas un crawl
-      // horizontal à l'arrêt. Le buste reste stable quand l'arme tire/vise.
       m.rotation.x = 0; m.rotation.z = 0;
-      m.position.y += Math.sin(ch.animT * 1.5) * 0.025;
-      P.torso.rotation.set(0, 0, 0);
-      const k = Math.sin(ch.animT * 2.6);
-      P.hipL.rotation.x = 0.16 + k * 0.3; P.hipR.rotation.x = 0.16 - k * 0.3;
-      P.kneeL.rotation.x = -0.35 - Math.max(0, k) * 0.35;
-      P.kneeR.rotation.x = -0.35 - Math.max(0, -k) * 0.35;
+      const t = ch.animT;
+      // batteur à œufs : chaque jambe décrit un cercle, en opposition de phase
+      const kL = t * 3.1, kR = kL + Math.PI;
+      P.hipL.rotation.set(0.42 + Math.sin(kL) * 0.26, 0, 0.18 + Math.cos(kL) * 0.14);
+      P.hipR.rotation.set(0.42 + Math.sin(kR) * 0.26, 0, -0.18 - Math.cos(kR) * 0.14);
+      P.kneeL.rotation.x = -0.95 - Math.max(0, Math.cos(kL)) * 0.45;
+      P.kneeR.rotation.x = -0.95 - Math.max(0, Math.cos(kR)) * 0.45;
+      P.torso.rotation.set(0.04, Math.sin(t * 0.7) * 0.06, Math.sin(t * 1.3) * 0.03);
       P.hand.visible = !!aiming;
       if (aiming) {
         const pitch = ch.isPlayer ? ch.pitch * 0.8 : 0, kick = (ch.shotKick || 0) * 0.24;
+        P.torso.rotation.set(0, 0, 0);
         P.shR.rotation.set(Math.PI / 2 + pitch - 0.55 + kick, 0, 0);
         P.elR.rotation.set(0.55 + kick * 0.4, 0, 0);
         P.shL.rotation.set(Math.PI / 2 + pitch - 0.55 + kick, 0, -0.55);
         P.elL.rotation.set(0.45, 0, 0);
         if (ch.held) { ch.held.rotation.set(0, 0, 0); ch.held.position.set(0, 0, kick * 0.25); }
       } else {
-        const a = Math.sin(ch.animT * 1.2) * 0.2;
-        P.shL.rotation.set(0.4 + a, 0, -0.5); P.shR.rotation.set(0.4 - a, 0, 0.5);
-        P.elL.rotation.x = P.elR.rotation.x = 0.65;
+        // godille : bras écartés juste sous la surface, avant-bras qui balaient en huit
+        const sc = Math.sin(t * 2.6), sc2 = Math.sin(t * 5.2) * 0.12;
+        P.shL.rotation.set(0.55 + sc2, sc * 0.35, -0.95 - sc * 0.12);
+        P.shR.rotation.set(0.55 - sc2, -sc * 0.35, 0.95 - sc * 0.12);
+        P.elL.rotation.set(0.75 + sc * 0.25, 0, 0); P.elR.rotation.set(0.75 - sc * 0.25, 0, 0);
       }
-      P.head.rotation.set(aiming && ch.isPlayer ? -ch.pitch * 0.2 : 0, 0, 0);
+      P.head.rotation.set(aiming && ch.isPlayer ? -ch.pitch * 0.2 : Math.sin(t * 0.9) * 0.05, aiming ? 0 : Math.sin(t * 0.37) * 0.25, 0);
       ch.waterPose = aiming ? 'aim' : 'tread';
       return;
     }
     ch.waterPose = dive ? 'dive' : 'crawl';
     P.hand.visible = false; // on nage : l'arme reste au dos, bras libres
-    // corps : à plat en surface (poitrine relevée pour garder la tête hors de
-    // l'eau), bien allongé en plongée
-    m.rotation.x = dive ? -1.45 : -1.12 - moving * 0.1;
-    m.position.y += (dive ? 0 : 0.25) + Math.sin(ch.animT * 1.6) * 0.035; // léger tangage de flottaison
-    const st = ch.animT * 1.05;
-    // roulis du buste au rythme des bras (crawl)
-    P.torso.rotation.set(0.1, 0, dive ? 0 : Math.sin(st) * 0.22 * (0.35 + moving));
-    // jambes : battements alternés, plus amples et plus vifs quand on nage
-    const kick = 0.22 + 0.5 * moving + (dive ? 0.15 : 0);
-    const kf = Math.sin(st * 2.4);
-    P.hipL.rotation.x = kf * kick; P.hipR.rotation.x = -kf * kick;
-    P.kneeL.rotation.x = -0.25 - Math.max(0, kf) * 0.55 * kick; // le talon remonte quand la jambe monte
-    P.kneeR.rotation.x = -0.25 - Math.max(0, -kf) * 0.55 * kick;
     if (dive) {
-      // plongée : bras serrés le long du corps, mains qui poussent vers l'arrière
-      P.shL.rotation.set(0.35, 0, -0.12); P.shR.rotation.set(0.35, 0, 0.12);
-      P.elL.rotation.x = 0.15; P.elR.rotation.x = 0.15;
-    } else {
-      // bras : moulinets alternés — la main sort de l'eau en avant, revient le
-      // long du corps coude plié ; sur place, petits cercles pour rester à flot
-      const aL = Math.sin(st), aR = Math.sin(st + Math.PI);
-      const sw = 0.7 + 1.0 * moving;
-      P.shL.rotation.set(-0.35 + aL * sw, 0, -0.15 - Math.max(0, aL) * 0.2);
-      P.shR.rotation.set(-0.35 + aR * sw, 0, 0.15 + Math.max(0, aR) * 0.2);
-      P.elL.rotation.x = 0.2 + Math.max(0, -aL) * 1.2 * (0.3 + moving); // coude plié au retour
-      P.elR.rotation.x = 0.2 + Math.max(0, -aR) * 1.2 * (0.3 + moving);
+      // inclinaison selon la vitesse verticale : tête en bas quand on descend,
+      // relevée quand on remonte vers la surface
+      const vy = clamp(ch.vel.y, -4, 4.6);
+      m.rotation.x = -1.5 + vy * 0.14; m.rotation.z = 0;
+      m.position.y += 0.6;
+      // cycle de brasse : traction (0-0,35), ramené (0,35-0,55), glisse (0,55-1)
+      const c = (ch.animT * (0.75 + 0.55 * Math.max(moving, Math.abs(vy) / 4))) % 1;
+      let ax, az, el;
+      if (c < 0.35) { const u = c / 0.35; ax = 2.95 - u * 1.55; az = 0.15 + Math.sin(u * Math.PI) * 0.95; el = 0.1 + u * 0.5; }
+      else if (c < 0.55) { const u = (c - 0.35) / 0.2; ax = 1.4 + u * 0.6; az = 0.5 - u * 0.4; el = 0.6 + Math.sin(u * Math.PI) * 1.2; }
+      else { const u = (c - 0.55) / 0.45; ax = 2.0 + Math.min(1, u * 2.5) * 0.95; az = 0.1 + Math.min(1, u * 2.5) * 0.05; el = 0.6 * Math.max(0, 1 - u * 3); }
+      P.shL.rotation.set(ax, 0, -az); P.shR.rotation.set(ax, 0, az);
+      P.elL.rotation.set(el, 0, 0); P.elR.rotation.set(el, 0, 0);
+      // ciseau des jambes : pliées pendant le ramené, fouet vers l'arrière à la glisse
+      const fold = c >= 0.35 && c < 0.6 ? Math.sin((c - 0.35) / 0.25 * Math.PI) : 0;
+      P.hipL.rotation.set(-0.1 + fold * 0.55, 0, 0.12 + fold * 0.3); P.hipR.rotation.set(-0.1 + fold * 0.55, 0, -0.12 - fold * 0.3);
+      P.kneeL.rotation.x = P.kneeR.rotation.x = -0.15 - fold * 1.5;
+      P.torso.rotation.set(0.05, 0, 0);
+      P.head.rotation.set(0.3, 0, 0);
+      return;
     }
-    // tête : hors de l'eau en surface pour respirer, dans l'axe du corps en plongée
-    P.head.rotation.x = dive ? 0.25 : -0.5;
-    P.head.rotation.z = dive ? 0 : -Math.sin(st) * 0.06; // compense le roulis du buste
+    // CRAWL : corps à plat (poitrine relevée), un peu plus « sur l'eau » à pleine vitesse
+    m.rotation.x = -1.12 - moving * 0.12;
+    m.position.y += 0.25 + Math.sin(ch.animT * 1.6) * 0.03;
+    const st = ch.animT * (0.95 + 0.35 * moving);
+    P.torso.rotation.set(0.1, 0, Math.sin(st) * 0.24 * (0.35 + moving));
+    m.rotation.z = Math.sin(st) * 0.08 * moving;          // le corps roule entier avec les épaules
+    const kick = 0.22 + 0.5 * moving;
+    const kf = Math.sin(st * 3.0);                          // 6 battements par cycle de bras
+    P.hipL.rotation.set(kf * kick, 0, 0.04); P.hipR.rotation.set(-kf * kick, 0, -0.04);
+    P.kneeL.rotation.x = -0.2 - Math.max(0, kf) * 0.55 * kick;
+    P.kneeR.rotation.x = -0.2 - Math.max(0, -kf) * 0.55 * kick;
+    // bras : la main entre devant, tire sous le corps (coude haut), ressort à la hanche
+    // et revient par-dessus l'eau coude plié
+    const aL = Math.sin(st), aR = Math.sin(st + Math.PI);
+    const sw = 0.75 + 1.05 * moving;
+    P.shL.rotation.set(-0.35 + aL * sw, 0, -0.15 - Math.max(0, -Math.cos(st)) * 0.35);
+    P.shR.rotation.set(-0.35 + aR * sw, 0, 0.15 + Math.max(0, Math.cos(st)) * 0.35);
+    P.elL.rotation.x = 0.2 + Math.max(0, -aL) * 1.25 * (0.3 + moving);
+    P.elR.rotation.x = 0.2 + Math.max(0, -aR) * 1.25 * (0.3 + moving);
+    // respiration : la tête tourne sur le côté du bras qui ressort, un cycle sur deux
+    const br = Math.pow(Math.max(0, Math.sin(st * 0.5)), 6);
+    P.head.rotation.set(-0.5 + br * 0.15, br * 1.0, -Math.sin(st) * 0.06 - br * 0.3);
     return;
   }
   ch.waterPose = null;
@@ -7877,6 +8041,15 @@ function animateChar(ch, dt) {
   } else if (ch.reviving) { // genou à terre, mains posées sur le blessé
     m.position.y -= 0.32; P.hipL.rotation.x = 1.4; P.kneeL.rotation.x = -1.5; P.hipR.rotation.x = 0.2; P.kneeR.rotation.x = -2.0; P.torso.rotation.x = -0.35;
     const pu = Math.sin(gameT * 9) * 0.1; P.shR.rotation.set(1.3 + pu, 0, 0); P.shL.rotation.set(1.3 - pu, 0, 0); P.elR.rotation.set(0.6, 0, 0); P.elL.rotation.set(0.6, 0, 0);
+  }
+  // PATAUGER : l'eau freine les jambes -> genoux levés plus haut, buste penché en
+  // avant pour fendre l'eau, bras un peu écartés pour l'équilibre
+  if (ch.wadeD > 0.2 && ch.mode === 'ground' && !ch.crouch && !ch.downed && !ch.reviving) {
+    const w = clamp(ch.wadeD / SWIM_DEPTH, 0, 1), mv = Math.min(1, hs / 3);
+    P.hipL.rotation.x *= 1 + 0.7 * w; P.hipR.rotation.x *= 1 + 0.7 * w;
+    P.kneeL.rotation.x *= 1 + 0.6 * w; P.kneeR.rotation.x *= 1 + 0.6 * w;
+    P.torso.rotation.x -= 0.14 * w * mv;
+    if (!ch.ads && !ch.using) { P.shL.rotation.z -= 0.32 * w; P.shR.rotation.z += 0.32 * w; }
   }
   if (ch.hurtT > 0) { ch.hurtT -= dt; }
   // traînée de frappe : arc lumineux qui suit la tête de la pioche
@@ -8079,13 +8252,14 @@ function updateCamera(dt) {
   const camUnderAgency = aClamped && inAgencyBasement(camera.position.x, camera.position.z);
   if (camera.position.y < th && !camUnder && !camUnderAgency) camera.position.y = th;
   // plongée : la caméra suit sous la surface -> vue sous-marine (teinte bleue)
-  if (player.alive && player.diving && camera.position.y > -0.45) camera.position.y = -0.45;
+  // (sous la houle : le niveau de l'eau bouge avec les vagues)
+  if (player.alive && player.diving) { const ws = waveAt(camera.position.x, camera.position.z) - 0.45; if (camera.position.y > ws) camera.position.y = ws; }
   camTarget.copy(camera.position).add(d);
   camera.lookAt(camTarget);
   if (player.alive) player.mesh.visible = !scopeOn && player.mode !== 'bus' && player.mode !== 'drive';
   if (shake > 0) { shake = Math.max(0, shake - dt * 3); camera.position.x += (MR() - 0.5) * shake * 0.3; camera.position.y += (MR() - 0.5) * shake * 0.3; }
   // teinte sous-marine : la caméra passe sous la surface (mer ou eau de la Grotte)
-  const uw = camera.position.y < -0.08 && (terrainH(camera.position.x, camera.position.z) < -0.35 || inGrotto(camera.position.x, camera.position.z));
+  const uw = camera.position.y < waveAt(camera.position.x, camera.position.z) - 0.08 && (terrainH(camera.position.x, camera.position.z) < -0.35 || inGrotto(camera.position.x, camera.position.z));
   if (uw !== camUnderwater) camUnderwater = uw;
   $('uwTint').style.opacity = camUnderwater ? 0.55 : 0;
   // brouillard de plongée : présent en permanence (pas de recompilation de shader) mais
@@ -8814,16 +8988,16 @@ const AMB = { t: 0, fishT: 4 };
 const ripples = [];
 {
   const rg = new THREE.RingGeometry(0.38, 0.6, 26); rg.rotateX(-Math.PI / 2); // anneau épais, lisible de loin
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 36; i++) {
     const m = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0xf4fbff, transparent: true, opacity: 0, depthWrite: false }));
     m.visible = false; m.renderOrder = 2; scene.add(m);
     ripples.push({ m, life: 0, max: 0.8, s: 1 });
   }
 }
-function ripple(x, z, scale = 1) {
+function ripple(x, z, scale = 1, alpha = 1) {
   const r = ripples.find((q) => q.life <= 0) || ripples[0];
-  r.life = r.max = 0.7 + 0.25 * scale; r.s = scale;
-  r.m.position.set(x, 0.03, z); r.m.visible = true;
+  r.life = r.max = 0.7 + 0.25 * scale; r.s = scale; r.a = alpha;
+  r.m.position.set(x, waveAt(x, z) + 0.04, z); r.m.visible = true;
 }
 function updateRipples(dt) {
   for (const r of ripples) {
@@ -8831,15 +9005,19 @@ function updateRipples(dt) {
     r.life -= dt;
     if (r.life <= 0) { r.m.visible = false; continue; }
     const k = 1 - r.life / r.max;
+    r.m.position.y = waveAt(r.m.position.x, r.m.position.z) + 0.04; // l'anneau suit la houle
     r.m.scale.setScalar((0.6 + k * 3.6) * r.s);
-    r.m.material.opacity = (1 - k) * 0.65;
+    r.m.material.opacity = (1 - k) * 0.65 * (r.a ?? 1);
   }
 }
 // éclaboussure : gerbe blanche + anneau à la surface
 function splashFX(x, z, k = 1) {
-  burst(_v1.set(x, 0.15, z), 0xeaf8ff, 14 + Math.round(16 * k), 3.4 + 3.8 * k, 0.18, 0.95, 0.7);
-  burst(_v1.set(x, 0.1, z), 0xffffff, 6 + Math.round(6 * k), 5 + 4 * k, 0.1, 1, 0.5); // gouttelettes hautes
+  const y = waveAt(x, z);
+  burst(_v1.set(x, y + 0.15, z), 0xeaf8ff, 14 + Math.round(16 * k), 3.4 + 3.8 * k, 0.18, 0.95, 0.7);
+  burst(_v1.set(x, y + 0.1, z), 0xffffff, 6 + Math.round(6 * k), 5 + 4 * k, 0.1, 1, 0.5); // gouttelettes hautes
+  if (k > 0.5) burst(_v1.set(x, y + 0.2, z), 0xf6fcff, 8, 1.6, 0.26, 0.7, 0.9); // couronne d'écume des gros plongeons
   ripple(x, z, 0.9 + k);
+  if (k > 0.4) ripple(x, z, 0.5 + k * 0.5);
 }
 
 // ---- impact de pioche : onde de choc + éclat + étincelles ----
@@ -9190,8 +9368,81 @@ function updateFishes(dt) {
   }
 }
 
+// ---- NEIGE : flocons qui tombent dans le massif enneigé + traces de pas ----
+// Les flocons forment une boîte qui suit la caméra ; leur densité suit le poids
+// « neige » du biome sous la caméra (rien ailleurs, rien sous l'eau). Chaque pas
+// dans la neige laisse une empreinte qui s'estompe doucement (couleur qui rejoint
+// celle de la neige) et soulève une petite bouffée poudreuse.
+const SNOWF_N = LOWQ ? 500 : 1400, SNOWF_BOX = 34, SNOWF_H = 22;
+const snowF = { k: 0, pos: new Float32Array(SNOWF_N * 3), seed: [] };
+{
+  for (let i = 0; i < SNOWF_N; i++) snowF.seed.push({ x: MR() * SNOWF_BOX, y: MR() * SNOWF_H, z: MR() * SNOWF_BOX, v: 1.1 + MR() * 1.2, ph: MR() * 6.28, a: 0.3 + MR() * 0.6 });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(snowF.pos, 3));
+  const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
+  const gr = x.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 32, 32);
+  snowF.mat = new THREE.PointsMaterial({ size: 0.22, map: new THREE.CanvasTexture(c), transparent: true, opacity: 0, depthWrite: false, color: 0xffffff });
+  snowF.pts = new THREE.Points(g, snowF.mat); snowF.pts.frustumCulled = false; snowF.pts.visible = false; scene.add(snowF.pts);
+}
+function updateSnowfall(dt) {
+  const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+  // seulement au-dessus du massif enneigé (pas sur la mer voisine ni sous l'eau)
+  const want = camUnderwater ? 0 : biomeW(cx, cz).snow * clamp((terrainH(cx, cz) - 1.5) / 3, 0, 1);
+  snowF.k += (want - snowF.k) * Math.min(1, dt * 0.8);
+  snowF.mat.opacity = snowF.k * 0.9;
+  snowF.pts.visible = snowF.k > 0.02;
+  if (!snowF.pts.visible) return;
+  const t = AMB.t, wx = Math.sin(t * 0.13) * 1.2 + 0.8, wz = Math.cos(t * 0.11) * 0.8;
+  const wrap = (v, n) => ((v % n) + n) % n - n / 2;
+  for (let i = 0; i < SNOWF_N; i++) {
+    const q = snowF.seed[i];
+    snowF.pos[i * 3] = cx + wrap(q.x + t * wx + Math.sin(t * q.a * 2 + q.ph) * 0.6 - cx, SNOWF_BOX);
+    snowF.pos[i * 3 + 1] = cy + wrap(q.y - t * q.v - cy, SNOWF_H) + 4;
+    snowF.pos[i * 3 + 2] = cz + wrap(q.z + t * wz + Math.cos(t * q.a * 1.7 + q.ph) * 0.6 - cz, SNOWF_BOX);
+  }
+  snowF.pts.geometry.attributes.position.needsUpdate = true;
+}
+const FOOT_N = 260, footPrints = [];
+let footIM = null, footNext = 0;
+{
+  const fg = new THREE.CircleGeometry(0.5, 10); fg.rotateX(-Math.PI / 2); fg.scale(0.22, 1, 0.36);
+  footIM = new THREE.InstancedMesh(fg, new THREE.MeshLambertMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), FOOT_N);
+  for (let i = 0; i < FOOT_N; i++) { footIM.setMatrixAt(i, ZERO_M); footIM.setColorAt(i, _c.set(0xffffff)); footPrints.push({ life: 0 }); }
+  footIM.frustumCulled = false; footIM.receiveShadow = true; scene.add(footIM);
+}
+const FOOT_C = new THREE.Color(0x8fa3c4), FOOT_SNOW = new THREE.Color(0xe9eef7);
+function addFootprint(ch) {
+  ch.footSide = -(ch.footSide || 1);
+  const rx = Math.cos(ch.yaw), rz = -Math.sin(ch.yaw);
+  const x = ch.pos.x + rx * 0.17 * ch.footSide, z = ch.pos.z + rz * 0.17 * ch.footSide;
+  const i = footNext; footNext = (footNext + 1) % FOOT_N;
+  dummy.position.set(x, Math.max(ch.pos.y, terrainH(x, z)) + 0.1, z); dummy.rotation.set(0, ch.yaw, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+  footIM.setMatrixAt(i, dummy.matrix); footIM.instanceMatrix.needsUpdate = true;
+  footPrints[i].life = 26;
+  footIM.setColorAt(i, FOOT_C); footIM.instanceColor.needsUpdate = true;
+}
+function updateFootprints(dt) {
+  let dirty = false;
+  for (let i = 0; i < FOOT_N; i++) {
+    const f = footPrints[i];
+    if (f.life <= 0) continue;
+    f.life -= dt; dirty = true;
+    if (f.life <= 0) { footIM.setMatrixAt(i, ZERO_M); footIM.instanceMatrix.needsUpdate = true; continue; }
+    if ((i + frameN) % 6 === 0) footIM.setColorAt(i, _c.copy(FOOT_SNOW).lerp(FOOT_C, Math.min(1, f.life / 18)));
+  }
+  if (dirty) footIM.instanceColor.needsUpdate = true;
+}
+// pas dans la neige : empreinte + bouffée de poudreuse (appelée à chaque pas)
+function snowStep(ch, hs) {
+  if (ch.gcol || ch.wadeD > 0) return;
+  if (!(ch.isPlayer || ch.camD2 < 2500)) return;
+  addFootprint(ch);
+  burst(_v1.set(ch.pos.x, ch.pos.y + 0.08, ch.pos.z), 0xf4f8ff, hs > 8 ? 4 : 2, 1.2 + hs * 0.12, 0.09, 0.55, 0.45);
+}
 function updateAmbient(dt) {
   AMB.t += dt;
+  updateSnowfall(dt);
+  updateFootprints(dt);
   updateBirds(dt);
   updateBflies(dt);
   updateFireflies();
@@ -9367,7 +9618,7 @@ window.render_game_to_text = () => JSON.stringify({
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
 window.__game = { structs, rebuildHouse, towers, outline,
-  ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; }, get bus() { return bus; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
+  ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; }, get bus() { return bus; }, waveAt, get footprints() { return footPrints.filter((f) => f.life > 0).length; }, get snowfall() { return snowF.k; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on) => setDisguise(player, on), get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; },
   // capture libre (QA visuelle) : rendu depuis un point de vue arbitraire
   snap: (x, y, z, lx, ly, lz) => { const p0 = camera.position.clone(), q0 = camera.quaternion.clone(); camera.position.set(x, y, z); camera.lookAt(lx, ly, lz); camera.updateMatrixWorld(); renderer.render(scene, camera); const u = renderer.domElement.toDataURL('image/png'); camera.position.copy(p0); camera.quaternion.copy(q0); return u; } };

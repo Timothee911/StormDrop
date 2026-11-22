@@ -46,6 +46,31 @@ Refaite pour se rapprocher de la Grotte du Chapitre 2 Saison 2 :
 - **Herbe** : trois verts mélangés à grande échelle. Au sol, le shader dessine des brins, des creux sombres entre les touffes, des pointes éclairées, du trèfle et de petites fleurs des champs. Les touffes en 3D ont des pieds plus sombres et des pointes plus claires.
 - **Terre** : plaques de terre battue dans les prairies et sentiers sinueux à travers l'île, avec un bord irrégulier contre l'herbe. On y voit des mottes, des cailloux, des fissures et quelques pousses. Aucune touffe d'herbe ne pousse sur la terre.
 
+## Eau et neige refaites
+
+- **Flottaison** : plus de hauteur fixe. On flotte grâce à une poussée d'Archimède amortie qui suit la houle de la mer (même formule que le shader de l'eau). Le nageur monte et descend avec les vagues.
+- **Plongeon et plongée** : un saut de haut dans l'eau profonde ne blesse pas. On s'enfonce de plusieurs mètres puis on remonte en douceur. La touche s'accroupir fait plonger jusqu'au fond, en relâchant ou avec SAUT on remonte. Dans l'eau, l'élan se garde : on accélère et on freine plus lentement.
+- **Pataugeage** : en eau peu profonde on marche au fond, ralenti selon la hauteur d'eau, et on saute moins haut. Chaque pas fait une gerbe et un anneau.
+- **Animations de nage** :
+  - sur place : jambes en batteur à œufs et mains qui godillent ;
+  - crawl : roulis du corps, la tête tourne pour respirer, écume aux mains, sillage ;
+  - plongée : brasse sous l'eau avec ciseau des jambes, le corps s'incline selon qu'on descend ou remonte, bulles d'air ;
+  - en eau peu profonde : genoux levés ;
+  - en sortant de l'eau : gouttes qui tombent du corps.
+- **Lagon de la Grotte** : eau calme, sans houle.
+- **Neige** : le sol enneigé est dessiné par le shader. On y voit :
+  - un bord irrégulier où l'herbe d'altitude perce ;
+  - des congères, des rides de vent et des ombres bleues dans les pentes ;
+  - des plaques de glace et des paillettes qui scintillent au soleil.
+- **Sapins enneigés** : chaque étage porte une calotte de neige au bord irrégulier.
+- **Flocons et traces** : des flocons tombent au-dessus du massif enneigé, pas ailleurs. Chaque pas laisse une empreinte qui s'efface et une bouffée de poudreuse.
+- **QA** : `.github/scripts/qa-water-snow.cjs` contient 10 contrôles :
+  - flottaison sur la houle ;
+  - plongeon de 20 m sans dégâts ;
+  - plongée puis remontée ;
+  - passage nage, pataugeage, terre ferme ;
+  - flocons et empreintes dans la neige.
+
 ## Agence, voitures et eau
 
 - **Sous-sol B1** : archives et local technique séparés, couloir vers le coffre, poteaux, conduites, éclairage, signalétique et garde-corps d'escalier. Les deux pièces, le scanner et la remontée au hall sont accessibles sans saut.
