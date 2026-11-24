@@ -38,6 +38,46 @@ def load(path):
     return smooth(orient(np.concatenate([P[idx], N[idx]], axis=2)))
 
 
+def pecs(Y, F):
+    """Modèle les pectoraux : affine le maillage du buste, puis pousse deux masses vers l'avant
+    (bord bas net, sillon du sternum, fondu vers l'épaule)."""
+    for _ in range(2):
+        Y = list(Y); out = []; mid = {}
+
+        def m(a, b):
+            k = (min(a, b), max(a, b))
+            if k not in mid: mid[k] = len(Y); Y.append((Y[a] + Y[b]) / 2)
+            return mid[k]
+        fine = []
+        for a, b, c in F:
+            g = (Y[a] + Y[b] + Y[c]) / 3
+            fine.append(1.36 < g[1] < 1.72 and abs(g[0]) < 0.24 and g[2] < 0.03)
+            if fine[-1]: m(a, b), m(b, c), m(c, a)
+        for a, b, c in F:  # coupe conforme : les voisins suivent, donc aucune fissure
+            for _k in range(3):
+                e = [mid.get((min(u, v), max(u, v))) for u, v in ((a, b), (b, c), (c, a))]
+                n = sum(x is not None for x in e)
+                if n == 0 or n == 3 or (n == 1 and e[0] is not None) or (n == 2 and e[2] is None): break
+                a, b, c = b, c, a
+            ab, bc, ca = e
+            if n == 3: out += [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]
+            elif n == 2: out += [[ab, b, bc], [a, ab, bc], [a, bc, c]]
+            elif n == 1: out += [[a, ab, c], [ab, b, c]]
+            else: out.append([a, b, c])
+        Y, F = np.array(Y), np.array(out)
+    sm = lambda a, b, v: (lambda t: t * t * (3 - 2 * t))(np.clip((v - a) / (b - a), 0, 1))
+    x, y, z = np.abs(Y[:, 0]), Y[:, 1], Y[:, 2]
+    base = 1.492 + 0.035 * sm(0.1, 0.2, x) + 0.012 * sm(0.03, 0.0, x)  # bord bas, remonte vers l'aisselle
+    up = sm(base - 0.012, base + 0.02, y) * sm(1.69, 1.6, y)
+    wide = sm(0.0, 0.034, x) * sm(0.225, 0.12, x)
+    front = sm(0.03, -0.03, z)
+    d = 0.025 * up * wide * front
+    d -= 0.006 * np.exp(-((y - base + 0.012) / 0.012) ** 2) * wide * front  # pli sous le pectoral
+    d -= 0.006 * np.exp(-(x / 0.01) ** 2) * sm(1.46, 1.5, y) * sm(1.68, 1.6, y) * front  # sternum
+    Y[:, 2] -= d
+    return Y, F
+
+
 def smooth(T, crease=50):
     """Une passe de subdivision de Loop sur le corps (pas sur les petites pièces des mains),
     puis normales lissées : silhouette organique au lieu des grosses facettes du modèle."""
@@ -79,6 +119,7 @@ def smooth(T, crease=50):
         ab, bc, ca = m(a, b), m(b, c), m(c, a)
         out += [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]
     Y, F = np.array(Y), np.array(out)
+    Y, F = pecs(Y, F)
     G = np.cross(Y[F[:, 1]] - Y[F[:, 0]], Y[F[:, 2]] - Y[F[:, 0]])
     U = G / np.maximum(1e-12, np.linalg.norm(G, axis=1, keepdims=True))
     at = {}
@@ -318,7 +359,7 @@ def ball(c, r, nu=10, nv=7):
 BALLS = []
 for sfx in ('L', 'R'):
     e, k, h, sh = RAD['el' + sfx], RAD['knee' + sfx], RAD['hip' + sfx], RAD['sh' + sfx]
-    re = max(0.04, min(e[2], math.hypot(e[0], e[1]))); rs = [0.06, 0.06, sh[2]]
+    re = max(0.04, min(e[2], math.hypot(e[0], e[1]))); rs = [0.05, 0.054, sh[2] * 0.9]
     for g, bn, z, r in (('sh', 'arm_', 'shirt', rs), ('el', 'fore_', 'shirt', [re * 0.95] * 3),
                         ('knee', 'knee_', 'pants', [k[0] * 0.97, min(k[0], k[2]), k[2] * 0.97]),
                         ('hip', 'hip_', 'pants', [h[0] * 0.95, min(h[0], h[2]), h[2] * 0.95])):

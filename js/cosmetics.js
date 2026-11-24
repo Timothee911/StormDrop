@@ -813,8 +813,20 @@ function sqGeo(bone, i) {
   }
   return g;
 }
+// tête visible : l'avant est rentré, le visage sculpté (faceGeo) le recouvre
+function headCore(i) {
+  return geo('headcore' + i, () => {
+    const g = sqGeo('head', i).clone(), p = g.attributes.position;
+    for (let k = 0; k < p.count; k++) {
+      const x = p.getX(k), y = p.getY(k), z = p.getZ(k) - SQ_HC.z, a = Math.abs(Math.atan2(x, -z));
+      const f = 1 - 0.2 * sst(1.68, 1.4, a) * sst(0.288, 0.262, y) * sst(0.05, 0.066, y);
+      p.setXYZ(k, x * f, y, SQ_HC.z + z * f);
+    }
+    return g;
+  });
+}
 function sqFill(group, bone, M) {
-  (SQUELETTE.parts[bone] || []).forEach((p, i) => { const m = new THREE.Mesh(sqGeo(bone, i), M[p.m]); m.castShadow = true; group.add(m); });
+  (SQUELETTE.parts[bone] || []).forEach((p, i) => { const m = new THREE.Mesh(bone === 'head' ? headCore(i) : sqGeo(bone, i), M[p.m]); m.castShadow = true; group.add(m); });
 }
 // --- Surface du mannequin : lancer de rayon sur les pièces, pour poser visage, cheveux
 // et vêtements exactement dessus (calculé une seule fois, puis gardé en cache).
@@ -910,7 +922,8 @@ function sqGrid(key, nu, nv, f) { // surface (u, v) dans [0, 1]², avec un bord 
 function sqFacePatch(y0, y1, amax, off) {
   return sqGrid(`f${y0},${y1},${amax},${off}`, 22, 4, (u, v, rim) => {
     const y = y0 + (y1 - y0) * v, a = (u * 2 - 1) * amax, o = new THREE.Vector3(0, Math.max(y, 0.08), SQ_HC.z), d = new THREE.Vector3(Math.sin(a), 0, -Math.cos(a)); // sous le menton : tombe droit
-    const h = sqCast('head', o, d), l = (h ? h.distanceTo(o) : 0.09) + (rim ? -0.004 : off);
+    faceZ(0, 0.2);
+    const h = sqCast('head', o, d), f = sqCast('face', o, d), l = Math.max(h ? h.distanceTo(o) : 0.09, f ? f.distanceTo(o) : 0) + (rim ? -0.004 : off);
     return [d.x * l, y, SQ_HC.z + d.z * l];
   });
 }
@@ -926,47 +939,142 @@ const hairline = (front, back) => (a) => { const t = Math.min(1, Math.max(0, (a 
 
 const sqNeckZ = () => { let z0 = 9, z1 = -9; for (const t of sqTris('head')) for (const v of t) if (v.y < 0.045) { z0 = Math.min(z0, v.z); z1 = Math.max(z1, v.z); } return SQUELETTE.pivots.head[2] + (z0 + z1) / 2; };
 
-// --- Visage : yeux, paupières, sourcils, nez, bouche, oreilles, posés sur la tête du mannequin
+// --- Visage : une seule surface sculptée sur l'avant de la tête (arcades, orbites, nez,
+// pommettes, lèvres, menton, mâchoire), teintée par sommet (lèvres, joues, ombres des yeux),
+// plus des yeux sphériques sous paupières, des sourcils et des oreilles.
+const EYE = { x: 0.0365, y: 0.193, r: 0.0222 };
+const gau = (v, s) => Math.exp(-v * v / (2 * s * s));
+const sst = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+// relief du visage : poussée vers l'avant (z) et vers l'extérieur (r) au point (x, y)
+function faceRelief(x, y) {
+  const X = Math.abs(x); let z = 0, r = 0;
+  // nez : arête qui s'élargit vers le bout, dessous net, ailes
+  const t = Math.min(1, Math.max(0, (0.203 - y) / 0.058));
+  const h = (0.003 + 0.019 * Math.pow(t, 1.35)) * sst(0.1295, 0.1395, y) * sst(0.216, 0.196, y);
+  z += h * Math.exp(-Math.pow(X / (0.0082 + 0.0042 * t), 2.4));
+  z += 0.0095 * gau(X - 0.0135, 0.0052) * gau(y - 0.1425, 0.0058);
+  z -= 0.005 * gau(X - 0.0068, 0.0028) * gau(y - 0.1335, 0.0026); // narines
+  // arcades, orbites, coin interne de l'œil
+  z += 0.0065 * gau(X - 0.034, 0.024) * gau(y - 0.2235, 0.0085) - 0.002 * gau(X, 0.006) * gau(y - 0.22, 0.008);
+  z -= 0.0125 * Math.exp(-Math.pow((X - EYE.x) / 0.0225, 4) - Math.pow((y - EYE.y) / 0.0165, 4));
+  z -= 0.004 * gau(X - 0.0145, 0.005) * gau(y - 0.193, 0.011);
+  // pommettes, creux des joues, sillon
+  r += 0.0055 * gau(X - 0.064, 0.018) * gau(y - 0.166, 0.013);
+  r -= 0.0008 * gau(X - 0.058, 0.018) * gau(y - 0.126, 0.014);
+  z -= 0.0005 * gau(X - 0.027 - (0.135 - y) * 0.28, 0.003) * sst(0.1, 0.112, y) * sst(0.145, 0.13, y);
+  const m = y - 5 * X * X; // commissures légèrement relevées
+  // bouche : volume, lèvres, fente, commissures
+  z += 0.004 * gau(X, 0.024) * gau(m - 0.103, 0.016);
+  z += 0.0048 * gau(X, 0.0155) * gau(m - 0.1088 + X * 0.07, 0.0038) - 0.0012 * gau(X, 0.0028) * gau(m - 0.1115, 0.004);
+  z += 0.0068 * gau(X, 0.0135) * gau(m - 0.0955 - X * 0.05, 0.0046);
+  z -= 0.0052 * Math.exp(-Math.pow(X / 0.0225, 6)) * gau(m - 0.1025, 0.0016);
+  z -= 0.0026 * gau(X - 0.0235, 0.0035) * gau(m - 0.1025, 0.004);
+  z -= 0.0035 * gau(X, 0.016) * gau(y - 0.0865, 0.0038); // pli sous la lèvre
+  z += 0.0085 * gau(X, 0.0165) * gau(y - 0.0735, 0.0095); // menton
+  r += 0.0055 * gau(X - 0.07, 0.02) * gau(y - 0.108, 0.02); // angle de la mâchoire
+  r += 0.004 * gau(X - 0.045, 0.02) * gau(y - 0.078, 0.012);
+  return [z, r];
+}
+// teinte par sommet (multiplie la couleur de peau)
+function faceTint(x, y) {
+  const X = Math.abs(x), c = [1, 1, 1], mix = (k, r, g, b) => { c[0] *= 1 + (r - 1) * k; c[1] *= 1 + (g - 1) * k; c[2] *= 1 + (b - 1) * k; };
+  mix(gau(X - 0.052, 0.015) * gau(y - 0.148, 0.013) * 0.8, 1, 0.8, 0.76); // joues
+  mix(gau(X, 0.012) * gau(y - 0.143, 0.008) * 0.55, 1, 0.84, 0.8); // bout du nez
+  mix(Math.exp(-Math.pow((X - EYE.x) / 0.024, 4) - Math.pow((y - EYE.y) / 0.017, 4)), 0.9, 0.78, 0.74); // orbites
+  const m = y - 5 * X * X;
+  const up = 0.1125 - 0.0028 * gau(X, 0.003) - 5 * X * X, lo = 0.0905 + 8 * X * X;
+  mix(sst(up + 0.0016, up - 0.0006, m) * sst(lo - 0.0016, lo + 0.0006, m) * sst(0.0255, 0.022, X), 0.84, 0.53, 0.5); // lèvres
+  mix(sst(0.0248, 0.021, X) * gau(m - 0.1025, 0.0014), 0.36, 0.2, 0.2); // fente
+  mix(gau(X - 0.0068, 0.0026) * gau(y - 0.1335, 0.0022) * 0.85, 0.4, 0.26, 0.24); // narines
+  mix(gau(X, 0.013) * gau(y - 0.0862, 0.003) * 0.3, 0.8, 0.7, 0.68);
+  mix(gau(X - 0.058, 0.02) * gau(y - 0.118, 0.014) * 0.12, 0.82, 0.74, 0.72); // creux des joues
+  return c;
+}
+function faceGeo() {
+  return geo('sqface', () => {
+    const nu = 52, AM = 1.75, rows = [];
+    for (let y = 0.29; y > 0.058;) { rows.push(y); y -= 0.0024 + 0.0018 * sst(0.11, 0.17, y) + 0.0012 * sst(0.086, 0.07, y) + 0.0034 * sst(0.225, 0.26, y); }
+    const nv = rows.length, L = [], A = [];
+    for (let i = 0; i <= nu; i++) { const q = i / nu * 2 - 1; A.push(AM * (0.5 * q + 0.5 * q * q * q)); }
+    // surface de départ : tête du mannequin, adoucie pour effacer ses facettes
+    const low = (a) => 0.06 + 0.032 * sst(0.75, 1.5, Math.abs(a)); // bas du visage : menton puis ligne de mâchoire
+    const yAt = (j, a) => (rows[j] >= 0.125 ? rows[j] : low(a) + (rows[j] - 0.058) * (0.125 - low(a)) / 0.067);
+    for (let j = 0; j < nv; j++) { L.push([]); for (let i = 0; i <= nu; i++) {
+      const y = Math.max(0.073, yAt(j, A[i])), o = new THREE.Vector3(0, y, SQ_HC.z), h = sqCast('head', o, new THREE.Vector3(Math.sin(A[i]), 0, -Math.cos(A[i])));
+      L[j].push(h ? h.distanceTo(o) : 0.085);
+    } }
+    const B0 = L.map((r) => r.slice());
+    for (let k = 0; k < 36; k++) { const S = L.map((r) => r.slice());
+      for (let j = 1; j < nv - 1; j++) for (let i = 1; i < nu; i++) L[j][i] = (S[j][i] * 2 + S[j - 1][i] + S[j + 1][i] + S[j][i - 1] + S[j][i + 1]) / 6; }
+    const pos = [], col = [], idx = [];
+    for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
+      const jj = Math.min(j, nv - 1), a = A[i], y = yAt(jj, a), sn = Math.sin(a), cs = Math.cos(a);
+      const edge = sst(0, 0.1, 1 - Math.abs(a) / AM) * sst(0.29, 0.262, y); // raccord avec le crâne
+      let l = B0[jj][i] + (L[jj][i] - B0[jj][i]) * edge;
+      const x0 = l * sn, rel = cs > -0.1 ? faceRelief(x0, y) : [0, 0];
+      const jaw = sst(low(a) + 0.02, low(a), y);
+      l += rel[1] * edge + 0.0008;
+      const chin = sst(1.35, 0.7, Math.abs(a));
+      l *= 1 - 0.13 * jaw * jaw * chin; // arrondi sous le menton et la mâchoire
+      let x = l * sn, z = SQ_HC.z - l * cs - rel[0] * edge * (1 - 0.6 * jaw), yy = y;
+      if (i === 0 || i === nu || j === 0) { x -= sn * 0.004; z += cs * 0.004; }
+      if (j === nv) { const q = 0.06 + 0.36 * chin; x *= 1 - q; z = SQ_HC.z + (z - SQ_HC.z) * (1 - q * 1.15); yy = y + 0.004 * chin; } // dessous du menton
+      const c = faceTint(x0, y); pos.push(x, yy, z); col.push(1 + (c[0] - 1) * edge, 1 + (c[1] - 1) * edge, 1 + (c[2] - 1) * edge);
+    }
+    const w = nu + 1;
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * w + i, b = a + w; idx.push(a, b + 1, a + 1, a, b, b + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  });
+}
+// z du visage sculpté (repli : la tête) et distance de la peau dans la direction a
+function faceZ(x, y) {
+  if (!SQ_TRI.has('face')) { const g = faceGeo(), a = g.attributes.position, x2 = g.index, T = []; for (let k = 0; k < x2.count; k += 3) T.push([0, 1, 2].map((c) => new THREE.Vector3().fromBufferAttribute(a, x2.getX(k + c)))); SQ_TRI.set('face', T); }
+  return Math.min(sqZ('face', x, y), sqZ('head', x, y));
+}
+const IRIS = [0x3f7fb8, 0x6b4a2a, 0x4d8a55, 0x7a8a96, 0x8a6a2c];
 function buildFace(head, s) {
   const skin = mat(s.skin, { roughness: 0.55 }), base = new THREE.Color(s.skin);
-  const tone = (c, k, o) => mat(base.clone().lerp(new THREE.Color(c), k).getHex(), o || { roughness: 0.55 });
-  const fz = (x, y) => sqZ('head', x, y);
-  for (const sx of [-1, 1]) { // oreilles
-    const ear = sph(head, 0.026, sx * 0.095, 0.185, -0.012, skin, 0.42, 1.25, 0.8); ear.rotation.set(-0.15, sx * 0.35, 0);
-    sph(head, 0.015, sx * 0.103, 0.186, -0.016, tone(0x8a3a2a, 0.28), 0.3, 1.2, 0.75);
-  }
-  if (s.extra !== 'mask') { // nez : un seul volume sculpté (base, bout, arête), narines esquissées
-    const y0 = 0.134, zt = fz(0, 0.192), zb = fz(0, y0);
-    const nose = part(head, loftGeo('nez', [[0, 0.007, 0.006, 0.01], [0.006, 0.0165, 0.0135, 0.012], [0.014, 0.0165, 0.0165, 0.012], [0.026, 0.0105, 0.0125, 0.012], [0.042, 0.0085, 0.0075, 0.012], [0.06, 0.0095, 0.001, 0.012]], 2.1, 16, 4), skin, 0, y0, zb + 0.001);
-    nose.rotation.x = Math.atan((zt - zb) / (0.192 - y0));
-    for (const sx of [-1, 1]) sph(head, 0.0032, sx * 0.0065, y0 + 0.0018, zb - 0.0075, tone(0x3a1010, 0.5), 1.1, 0.6, 1);
-  }
-  if (s.extra !== 'mask') { // bouche : lèvres et commissure
-    const y = 0.099, lip = tone(0xa83a3a, 0.42, { roughness: 0.4 });
-    sph(head, 0.021, 0, y + 0.0045, fz(0, y + 0.005) + 0.001, lip, 1, 0.27, 0.42);
-    sph(head, 0.0185, 0, y - 0.0055, fz(0, y - 0.006) + 0.001, lip, 1, 0.36, 0.48);
-    rbox(head, 0.037, 0.0028, 0.008, 0, y, fz(0, y) - 0.005, tone(0x2a0a0a, 0.75), 0.001);
+  const tone = (c, k) => mat(base.clone().lerp(new THREE.Color(c), k).getHex(), { roughness: 0.55 });
+  part(head, faceGeo(), mat(s.skin, { roughness: 0.55, vertexColors: true, side: THREE.DoubleSide }), 0, 0, 0);
+  faceZ(0, 0.2); // prépare la surface pour les accessoires
+  for (const sx of [-1, 1]) { // oreilles : pavillon, creux, lobe
+    const e = new THREE.Group(); e.position.set(sx * 0.099, 0.183, -0.004); e.rotation.set(-0.12, sx * 0.45, sx * -0.1); head.add(e);
+    part(e, SPHERE_LO, skin, 0, 0.003, 0, 0.0095, 0.031, 0.0205);
+    part(e, SPHERE_LO, tone(0x7a2a1a, 0.3), sx * 0.0055, 0.004, -0.002, 0.005, 0.02, 0.0115);
+    part(e, SPHERE_LO, skin, 0, -0.021, -0.004, 0.008, 0.011, 0.0105);
   }
   if (s.extra === 'shades' || s.extra === 'visor') return; // yeux cachés
-  const white = mat(0xf7f8ff, { roughness: 0.25 }), iris = mat(s.eyes || 0x3f6f8f, { roughness: 0.15 });
-  const pupil = mat(0x07070a, { roughness: 0.1 }), shine = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.6 });
-  const lash = mat(0x1a1210, { roughness: 0.8 }), brow = mat(s.brows || s.hair || 0x2f2318, { roughness: 0.9 });
+  const id = [...(s.name || '')].reduce((n, c) => n + c.charCodeAt(0), 0), ec = new THREE.Color(s.eyes || IRIS[id % IRIS.length]);
+  const white = mat(0xf4f5f8, { roughness: 0.2 }), iris = mat(ec.getHex(), { roughness: 0.12 }), ring = mat(ec.clone().lerp(new THREE.Color(0x05060a), 0.65).getHex(), { roughness: 0.2 });
+  const pupil = mat(0x050507, { roughness: 0.08 }), shine = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.7 });
+  const lash = mat(0x17100d, { roughness: 0.8 }), brow = mat(s.brows || s.hair || 0x2f2318, { roughness: 0.95 }), lid = tone(0x7a3a2c, 0.12);
+  const R = EYE.r;
   for (const sx of [-1, 1]) {
-    const x = sx * 0.037, y = 0.192, ry = sx * 0.3;
-    const e = new THREE.Group(); e.position.set(x, y, fz(x, y) + 0.004); e.rotation.y = -ry; head.add(e);
-    sph(e, 0.0245, 0, 0.0005, 0.005, skin, 1.12, 0.92, 0.36); // orbite et paupières
-    sph(e, 0.0215, 0, 0, 0.0035, white, 1, 0.72, 0.42);
-    sph(e, 0.0132, -sx * 0.0025, 0, -0.0018, iris, 1, 1, 0.36);
-    sph(e, 0.0068, -sx * 0.0025, 0, -0.0046, pupil, 1, 1, 0.36);
-    sph(e, 0.0034, -sx * 0.0025 + 0.0045, 0.0055, -0.006, shine, 1, 1, 0.4);
-    const l = sph(e, 0.0225, 0, 0.0145, -0.0005, lash, 1.04, 0.17, 0.42); l.rotation.z = -sx * 0.1; // ligne de cils
-    sph(e, 0.0215, 0, -0.0145, 0.001, tone(0x6a3020, 0.25), 0.8, 0.08, 0.4); // paupière inférieure
-    const by = y + 0.036;
-    for (const [dx, dy, w, rz] of [[-0.011, 0, 0.026, 0.1], [0.011, 0.0005, 0.026, -0.22]]) { // sourcil en deux segments
-      const b = rbox(head, w, 0.0095, 0.011, x + sx * dx, by + dy, fz(x + sx * dx, by) + 0.001, brow, 0.0045); b.rotation.set(0, -ry - sx * dx * 8, sx * rz);
-    }
+    const e = new THREE.Group(); e.position.set(sx * EYE.x, EYE.y, faceZ(sx * EYE.x, EYE.y) + 0.0105); head.add(e);
+    part(e, EYE_GEO.ball(), white, 0, 0, 0, R, R, R);
+    const g = new THREE.Group(); g.rotation.set(-0.02, -sx * 0.06, 0); e.add(g); // regard droit devant
+    part(g, EYE_GEO.cap(0.74), ring, 0, 0, 0, R * 1.008, R * 1.008, R * 1.008);
+    part(g, EYE_GEO.cap(0.64), iris, 0, 0, 0, R * 1.02, R * 1.02, R * 1.02);
+    part(g, EYE_GEO.cap(0.33), pupil, 0, 0, 0, R * 1.032, R * 1.032, R * 1.032);
+    part(g, SPHERE_LO, shine, 0.0052, 0.0058, -R * 0.965, 0.0028, 0.0028, 0.0016);
+    const k = R * 1.09, tilt = sx * 0.05; // paupières : coques autour de l'œil, coin externe un peu relevé
+    part(e, EYE_GEO.shell(0, 1.04), lid, 0, 0, 0, k, k, k).rotation.z = tilt;
+    part(e, EYE_GEO.shell(0.99, 0.13), lash, 0, 0, 0, k * 1.035, k * 1.035, k * 1.035).rotation.z = tilt;
+    part(e, EYE_GEO.shell(Math.PI - 1.08, 1.08), lid, 0, 0, 0, k * 0.99, k * 0.99, k * 0.99).rotation.z = tilt * 0.6;
+    part(head, sqGrid('brow' + sx, 14, 3, (u, v, rim) => { // sourcil : arc effilé collé à l'arcade
+      const q = sx > 0 ? u : 1 - u, x = sx * (0.0155 + q * 0.046), th = 0.0062 * (1 - 0.62 * Math.pow(q, 2.2)) * Math.sqrt(sst(-0.12, 0.2, q));
+      const y = 0.2275 + 0.0052 * Math.sin(Math.min(1, q * 1.1) * Math.PI * 0.72) - 0.0055 * sst(0.6, 1, q) + (v * 2 - 1) * th;
+      return [x, y, faceZ(x, y) + (rim ? 0.003 : -0.0032)];
+    }), brow, 0, 0, 0);
   }
 }
+const SPHERE_LO = new THREE.SphereGeometry(1, 12, 8);
+const EYE_GEO = {
+  ball: () => geo('eyeball', () => new THREE.SphereGeometry(1, 18, 12)),
+  cap: (t) => geo('eyecap' + t, () => new THREE.SphereGeometry(1, 20, 4, 0, Math.PI * 2, 0, t).rotateX(-Math.PI / 2)),
+  shell: (a, l) => geo(`eyelid${r3(a)},${r3(l)}`, () => new THREE.SphereGeometry(1, 20, 6, 0, Math.PI * 2, a, l)),
+};
 
 // --- Vêtements communs : ceinture, col, fermeture, poches, manchettes, genouillères, baskets
 function buildOutfit(s, P) {
@@ -984,7 +1092,6 @@ function buildOutfit(s, P) {
     [[-0.1, 0.22, 0.14], [0.1, 0.22, 0.14], [-0.045, 0.34, 0.18], [0.05, 0.4, 0.17], [-0.14, 0.46, 0.14], [0.14, 0.5, 0.14]].forEach(([x, y, h], i) => { for (const d of [-1, 1]) part(torso, sqTorsoPatch('tig' + i, y - h / 2, y + h / 2, (v) => x + Math.sin(v * 5) * 0.01, (v) => 0.004 + Math.sin(v * Math.PI) * 0.016, 0.005, d), st, 0, 0, 0); });
   } else {
     part(torso, sqTorsoPatch('zip', 0.1, 0.74, () => 0, () => 0.008, 0.005, -1, 2, 18), trim, 0, 0, 0); // fermeture
-    for (const sx of [-1, 1]) { sqOn(torso, 'torso', 0.085, 0.085, 0.022, sx * 0.105, 0.5, trim, 0.01); sqOn(torso, 'torso', 0.09, 0.024, 0.032, sx * 0.105, 0.535, mat(s.shirt, { roughness: 0.85 }), 0.008); } // poches
   }
   for (const [el, b] of [[elL, 'fore_L'], [elR, 'fore_R']]) part(el, sqBand(b, -0.272, -0.235, 0.008), trim, 0, 0, 0); // manchettes
   for (const [hip, b, sx] of [[hipL, 'hip_L', -1], [hipR, 'hip_R', 1]]) { // poches cargo
