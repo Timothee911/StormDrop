@@ -26,7 +26,9 @@ const puppeteer = require('puppeteer');
     const setup = await page.evaluate(() => {
       const g = window.__game, p = g.player, m = g.mates[0];
       window.__place = (c, x, z) => { c.mode = 'ground'; c.parts.glider.visible = false; c.pos.set(x, g.terrainH(x, z) + 0.05, z); c.vel.set(0, 0, 0); c.grounded = true; c.mesh.visible = true; };
-      window.__findFlat = () => { for (let x = -300; x < 300; x += 12) for (let z = -300; z < 300; z += 12) { const h = g.terrainH(x, z); if (h > 3 && h < 12 && Math.abs(g.terrainH(x + 20, z) - h) < 0.6 && Math.abs(g.terrainH(x, z + 20) - h) < 0.6 && Math.abs(g.terrainH(x - 20, z) - h) < 0.6 && !g.castRay(new g.THREE.Vector3(x, h + 1.4, z), new g.THREE.Vector3(1, 0, 0), 25, null)) return { x, z }; } return { x: 0, z: 30 }; };
+      // couloir dégagé : ni tronc, ni rocher, ni mur dans une bande de 5 m de large (25 m devant, 8 m derrière)
+      window.__clear = (x, h, z) => { g.scene.updateMatrixWorld(); for (const dz of [-2.5, -1.7, -0.9, 0, 0.9, 1.7, 2.5]) for (const [dx, far] of [[1, 25], [-1, 8]]) for (const y of [0.9, 1.4]) if (g.castRay(new g.THREE.Vector3(x, h + y, z + dz), new g.THREE.Vector3(dx, 0, 0), far, null)) return false; return true; };
+      window.__findFlat = () => { for (let x = -300; x < 300; x += 12) for (let z = -300; z < 300; z += 12) { const h = g.terrainH(x, z); if (h > 3 && h < 12 && Math.abs(g.terrainH(x + 20, z) - h) < 0.6 && Math.abs(g.terrainH(x, z + 20) - h) < 0.6 && Math.abs(g.terrainH(x - 20, z) - h) < 0.6 && window.__clear(x, h, z)) return { x, z }; } return { x: 0, z: 30 }; };
       const f = window.__findFlat(); window.__flat = f;
       g.jumpFromBus(); window.__place(p, f.x, f.z); window.__place(m, f.x + 6, f.z);
       p.hp = 100; p.shield = 0;
@@ -153,6 +155,6 @@ const puppeteer = require('puppeteer');
     check('aucune erreur JS pendant le test', errors.length === 0, errors);
     console.log(`\n${count} contrôles OK`);
   } catch (e) {
-    console.error('FAIL |', e.message); process.exitCode = 1;
+    console.error('FAIL |', e.message); if (process.env.GITHUB_ACTIONS) console.log('::error title=qa-revive-ping::' + String(e.message).split(String.fromCharCode(10))[0].slice(0, 600)); process.exitCode = 1;
   } finally { await browser.close(); }
 })();
