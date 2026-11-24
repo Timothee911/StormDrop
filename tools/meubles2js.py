@@ -42,9 +42,10 @@ def crease(m, deg=38):
     V = np.array(V); return dict(m, P=P[V], N=np.array(NN), uv=m['uv'][V], col=m['col'][V], F=np.array(G))
 
 
-def add(id, file, axis, size, tris, rot=0, tint=False, h=0):
+def add(id, file, axis, size, tris, rot=0, tint=False, h=0, drop=(), keep=None, deg=38):
     """axis : dimension imposée (0 = largeur x, 1 = hauteur y, 2 = profondeur z), size en mètres"""
-    ms = load(D + file + '.glb')
+    ms = [m for m in load(D + file + '.glb') if m['mat'].get('name') not in drop and m['mat'].get('pbrMetallicRoughness', {}).get('baseColorFactor', [1, 1, 1, 1])[3] > 0.9]  # sans les vitres
+    if keep: ms = [dict(m, F=m['F'][keep(m['P'][m['F']].mean(1))]) for m in ms]; ms = [compact(m) for m in ms if len(m['F'])]
     P = np.concatenate([m['P'] for m in ms]); a = np.radians(rot); R = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]])
     P = P @ R.T; k = size / (P.max(0) - P.min(0))[axis]; P = P * k; lo, hi = P.min(0), P.max(0); off = np.array([(lo[0] + hi[0]) / 2, lo[1], (lo[2] + hi[2]) / 2])
     tot = sum(len(m['F']) for m in ms); parts = []; top = None
@@ -57,7 +58,7 @@ def add(id, file, axis, size, tris, rot=0, tint=False, h=0):
     for m in parts: FF.append(m['F'] + o); o += len(m['P'])
     M = dict(P=np.concatenate([m['P'] for m in parts]), N=np.concatenate([m['N'] for m in parts]), uv=np.concatenate([m['uv'] for m in parts]), col=np.concatenate([m['col'] for m in parts]), F=np.concatenate(FF))
     if h: s = h / (hi - lo)[1]; M['P'] = M['P'] * [1, s, 1]; hi = hi.copy(); hi[1] = lo[1] + h
-    M = crease(compact(decimate(fuse(M), tris)))
+    M = crease(compact(decimate(fuse(M), tris)), deg)
     if tint:  # la teinte principale devient blanche : elle est donnée par l'instance
         c = M['col']; M['col'] = np.repeat(np.clip(c.mean(1) / np.median(c.mean(1)), 0.15, 1.1)[:, None], 3, 1)
     Q = 32000 / np.abs(M['P']).max()
@@ -116,5 +117,23 @@ add('papiers', 'Various Stacks of Paper', 2, 0.45, 300)
 add('bloc', 'Notebook', 2, 0.28, 120)
 add('trophee', 'Trophy', 1, 0.45, 300)
 add('skate', 'Skateboard', 0, 0.85, 320)
+# objets muraux : dos contre le mur (-z), face vers la pièce (+z)
+add('horloge', 'Analog clock', 1, 0.5, 360, rot=-90)
+add('tableaub', 'Whiteboard', 0, 1.5, 120)
+add('liege', 'Message board', 0, 1.2, 320, rot=-90)
+add('cible', 'Dartboard', 1, 0.62, 500, rot=-90)
+add('calend', 'Calendar', 1, 0.75, 1600, deg=10)
+add('aeration', 'Air Vent', 1, 0.5, 324, rot=-90, deg=10)
+add('photos', 'Polaroids', 0, 0.8, 1000, rot=-90, deg=10)
+add('etagmur', 'Wall Shelf', 0, 1.1, 92, rot=-90)
+add('postit', 'Sticky Notes', 1, 0.55, 24, tint=True)
+add('sortie', 'Fire Exit Sign', 0, 0.75, 643, rot=-90)
+add('inter', 'Light Switch', 1, 0.17, 156, rot=-90)
+add('prise', 'Electrical outlet', 1, 0.16, 120)
+add('serviette', 'Towel Rack', 0, 0.7, 192)
+add('rideau', 'Curtains Double', 1, 1.95, 160, tint=True, drop=('LightMetal',), keep=lambda c: c[:, 0] < 0)
+add('store', 'Window Blinds', 0, 1.6, 300, h=0.4)
+add('camera', 'CCTV Camera', 1, 0.36, 420)
+for i, a in enumerate(['Wall Art 02', 'Wall Art 03', 'Wall Art 05', 'Wall Art 06', 'Wall Art 06-1U5roiXQZAM']): add(f'art{i}', a, 1, 1.0, 130, rot=180)
 s = '// Généré par tools/meubles2js.py depuis le pack « Office Pack » : ne pas modifier à la main.\nexport const MEUBLES = ' + json.dumps(OUT, separators=(',', ':')) + ';\n'
 open(ROOT + '/js/meubles.js', 'w', encoding='utf-8', newline='\n').write(s); print('meubles.js', len(s) // 1024, 'Ko', len(OUT))

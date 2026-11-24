@@ -23,7 +23,7 @@ function partGeo(p) {
   return g;
 }
 const DATA = { ...NATURE, ...MEUBLES };
-export const MEUBLE_IDS = Object.keys(MEUBLES);
+export const MEUBLE_SIZE = Object.fromEntries(Object.entries(MEUBLES).map(([k, o]) => [k, o.size]));
 const LEAFY = { leaf: 1, leafr: 1, pine: 1 }, CUT = { leaf: 1, leafr: 1, pine: 1, leaves: 1, flowers: 1 };
 export const TREE_INFO = Object.fromEntries(Object.entries(NATURE).filter(([, o]) => o.far).map(([k, o]) => [k, { can: o.can, top: o.top }]));
 

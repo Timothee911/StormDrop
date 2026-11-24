@@ -17,6 +17,7 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 
 - Maisons et immeubles sont meublés avec l'« Office Pack » : bureaux équipés, canapés, fauteuils, bibliothèques, armoires, salles d'eau, cartons, plantes, distributeurs, fontaines, imprimantes, lampes. Les immeubles mélangent étages de bureaux et logements.
 - `tools/meubles2js.py` remet chaque modèle à l'échelle, le simplifie et met ses couleurs dans les sommets (`js/meubles.js`, 0,5 Mo, aucune image).
+- Murs intérieurs : tableaux, horloges, panneaux, étagères, cibles, calendriers, rideaux, stores, interrupteurs et prises, jamais sur une porte, une fenêtre ou la cage d'escalier. Un mur détruit emporte ce qui y est accroché.
 - Les gros meubles sont solides, les petits objets sont décoratifs. Un meuble n'est dessiné qu'à proximité de la caméra.
 
 ## Feel de la pioche

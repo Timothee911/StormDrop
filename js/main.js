@@ -4,7 +4,7 @@ import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createFlora, scatterPlants, TREE_INFO, MEUBLE_IDS } from './flora.js';
+import { createFlora, scatterPlants, TREE_INFO, MEUBLE_SIZE } from './flora.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints, ARM, SHADOW_OUTFITS, SHADOW_OUTFIT_IDS } from './cosmetics.js';
 
@@ -1487,17 +1487,58 @@ function wallWithOpenings(s, ly, H, T, ops, hex, o) {
     const mid = (a + b) / 2, len = b - a;
     return s.ax === 'x' ? makeStructBox(s.x + mid, ly + y0, s.z, len, y1 - y0, T, matC(hex), o) : makeStructBox(s.x, ly + y0, s.z + mid, T, y1 - y0, len, matC(hex), o);
   };
-  let cur = a0;
+  let cur = a0; s.segs = []; // pans pleins (sans ouverture) : on y accroche les objets muraux
+  const seg = (a, b) => { const col = mk(a, b, 0, H); if (col) s.segs.push({ a, b, col }); };
   for (const op of ops) {
     const l = op.u - op.w / 2, r = op.u + op.w / 2;
-    mk(cur, l, 0, H);
+    seg(cur, l);
     op.sill = mk(l, r, 0, op.y0);
     op.lintel = mk(l, r, op.y1, H);
     op.side = op.sill || op.lintel;
     cur = r;
   }
-  mk(cur, a1, 0, H);
+  seg(cur, a1);
   return ops;
+}
+// Objets muraux (pack 3D) sur la face intérieure d'un mur. Chaque objet est lié au pan de mur qui
+// le porte : si le mur est détruit, il disparaît. o.skip(u0, u1) : zones interdites (escalier).
+const WALL_HOME = [['art', 1.75], ['art', 1.75], ['horloge', 2.15], ['cible', 1.75], ['calend', 1.7], ['photos', 1.7], ['etagmur', 1.6], ['liege', 1.7], ['art', 1.75], ['serviette', 1.35]];
+const WALL_OFFICE = [['tableaub', 1.7], ['liege', 1.7], ['horloge', 2.3], ['calend', 1.7], ['postit', 1.6], ['aeration', 2.9], ['art', 1.75], ['photos', 1.7]];
+function wallDecor(s, ly, H, T, ops, o) {
+  const ry = s.ax === 'x' ? (s.out < 0 ? 0 : Math.PI) : (s.out < 0 ? Math.PI / 2 : -Math.PI / 2);
+  const hang = (id, u, yc, col, hex = null, k = 1, n = null) => {
+    if (!col) return null;
+    const z = MEUBLE_SIZE[id], off = -(n ?? T / 2 + z[2] * k / 2 + 0.008) * s.out;
+    const it = flora.add(id, s.ax === 'x' ? s.x + u : s.x + off, ly + yc - z[1] * k / 2, s.ax === 'x' ? s.z + off : s.z + u, ry, k, k, k, hex === null ? null : _fc.setHex(hex));
+    (col.hung = col.hung || []).push(it); return it;
+  };
+  const segAt = (u) => { const g = s.segs.find((q) => u > q.a + 0.1 && u < q.b - 0.1); return g && g.col; };
+  const cloth = pick([o.accent, 0xe8dcc4, 0x4a6a8a, 0x9a4a4a, 0x6a8a5a]);
+  for (const op of ops) {
+    if (op.kind === 'win' && op.lintel && R() < 0.75 && !(o.skip && o.skip(op.u - op.w / 2 - 0.5, op.u + op.w / 2 + 0.5))) { // rideaux de part et d'autre (l'ouverture reste libre), ou store relevé
+      if (R() < 0.6) { for (const sd of [-1, 1]) hang('rideau', op.u + sd * (op.w / 2 + 0.06), op.y1 - 0.72, op.lintel, cloth, 0.95, T / 2 + 0.16); sbox(s, 0x2b2f36, op.u, ly + op.y1 + 0.2, -(T / 2 + 0.16), op.w + 0.8, 0.04, 0.04, op.lintel); } else hang('store', op.u, op.y1 - 0.14, op.lintel, null, 1, T / 2 + 0.14);
+    }
+    if (op.kind === 'door') {
+      const e = op.w / 2 + 0.42;
+      hang('inter', op.u + e, 1.3, segAt(op.u + e));
+      if (o.office) { hang('sortie', op.u, op.y1 + 0.5, op.lintel); hang('extinct', op.u - e, 0.95, segAt(op.u - e)); hang('camera', op.u + e + 0.2, H - 0.36, segAt(op.u + e + 0.2), null, 1, T / 2 + 0.4); }
+    }
+  }
+  const list = o.office ? WALL_OFFICE : WALL_HOME, half = s.len / 2;
+  for (const g of s.segs) {
+    let u = Math.max(g.a + 0.55, -half + 0.62); const end = Math.min(g.b - 0.55, half - 0.62);
+    while (end - u > 0.45) {
+      const [kind, y] = pick(list), id = kind === 'art' ? 'art' + ((R() * 5) | 0) : kind, k = kind === 'art' ? pick([0.85, 1, 1.2]) : 1, w = MEUBLE_SIZE[id][0] * k;
+      if (w > end - u) { u += 0.3; continue; }
+      const c = u + w / 2 + Math.min(0.25, (end - u - w) / 2);
+      if (R() < 0.72 && !(o.skip && o.skip(c - w / 2 - 0.2, c + w / 2 + 0.2))) {
+        hang(id, c, y, g.col, kind === 'postit' ? pick([0xffe14d, 0xff9ad0, 0x8ee07a]) : null, k);
+        if (kind === 'etagmur') { hang('livres', c - 0.25, y + 0.22, g.col, null, 1, T / 2 + 0.2); hang(pick(['cactus', 'trophee', 'mug']), c + 0.28, y + 0.3, g.col, null, 0.8, T / 2 + 0.2); }
+      }
+      u = c + w / 2 + rand(0.5, 1.2);
+    }
+    const m = (g.a + g.b) / 2; if (g.b - g.a > 1.4 && R() < 0.4 && !(o.skip && o.skip(m - 0.2, m + 0.2))) hang('prise', m, 0.45, g.col);
+  }
 }
 // =====================================================================
 // Portes réelles : elles se ferment, bloquent le passage et s'ouvrent avec E
@@ -1657,7 +1698,7 @@ function gableRoof(cx, cz, topY, w, d, roofH, bodyHex, roofHex, opts = {}) {
   }
 }
 // Meubles du pack 3D : instanciés par flora, visibles seulement autour de la caméra.
-{ const FD = LOWQ ? 26 : HIGHQ ? 62 : 46; for (const id of MEUBLE_IDS) flora.kind(id, { R: FD, fade: FD }); }
+{ const FD = LOWQ ? 26 : HIGHQ ? 62 : 46; for (const id in MEUBLE_SIZE) { const r = Math.max(...MEUBLE_SIZE[id]) < 0.4 ? FD * 0.5 : FD; flora.kind(id, { R: r, fade: r }); } }
 const HOME_SETS = ['table', 'bed', 'sofa', 'shelf', 'rug', 'tv', 'desk', 'wardrobe', 'plant', 'armchair', 'boxes', 'bath'];
 const OFFICE_SETS = ['desk', 'files', 'cooler', 'desk', 'lounge', 'vending', 'shelf', 'desk', 'plant', 'boxes', 'printer', 'sofa'];
 const _fc = new THREE.Color();
@@ -1682,7 +1723,7 @@ function furniture(cx, cz, y, w, d, skipCorner, accent, avoid, office) {
     } else if (k === 'bed') { // pas de lit dans le pack : le lit d'origine, avec chevet et lampe
       hbox(0x6e4a2c, x, y, z, 1.4, 0.4, 2.1); hbox(accent, x, y + 0.4, z + s * 0.15, 1.35, 0.16, 1.7); hbox(0xffffff, x, y + 0.4, z - s * 0.75, 1.0, 0.2, 0.45); hbox(0x6e4a2c, x, y, z - s * 1.05, 1.5, 1.0, 0.12);
       put('chevet', 1.04, 0, -0.72); put('lampebur', 1.04, 0.55, -0.74); solid(0, -0.03, 0.75, 1.08, 0.6); solid(1.04, -0.72, 0.28, 0.28, 0.55);
-    } else if (k === 'sofa') { put('tapisrond', 0, 0.01, 0.75); put('canape', 0, 0, 0, 0, accent); put('coussin', 0, 0.42, 0.12); solid(0, 0, 1.05, 0.48, 0.84); }
+    } else if (k === 'sofa') { put('tapisrond', 0, 0.01, 0.75); put('canape', 0, 0, 0, 0, accent); put('coussin', 0, 0.48, 0.12); solid(0, 0, 1.05, 0.48, 0.84); }
     else if (k === 'armchair') { put('fauteuil', -0.25, 0, 0, rand(-0.3, 0.3), accent); put(pick(['lampe', 'lampe2']), 0.75, 0, -0.25); solid(-0.25, 0, 0.62, 0.48, 0.79); solid(0.75, -0.25, 0.16, 0.16, 1.5); }
     else if (k === 'lounge') { put('tablerond'); put('pouf', -1.0, 0, 0.25, rand(6.28), accent); put('pouf', 0.95, 0, 0.35, rand(6.28), 0x3b6fd1); small(0.46, ['cafe', 'mug', 'soda'], 0.2, 0.1); put('bloc', -0.25, 0.46, 0); solid(0, 0, 0.55, 0.55, 0.46); }
     else if (k === 'shelf') { put('biblio'); put('livres', -0.4, 1.75, 0, 0.5); small(1.75, ['cactus', 'trophee'], 0.45, 0); solid(0, 0, 0.75, 0.2, 1.8); }
@@ -1792,6 +1833,8 @@ function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
           }
         }
       }
+      // rampe intérieure dans l'angle nord-ouest des maisons à étage : mur laissé nu
+      wallDecor(s, ly, H, T, ops, { accent, office: style === 'bunker', skip: twoStory && (i === 0 || i === 3) ? (u0) => u0 < -s.len / 2 + 4.6 : null });
     });
     // corner posts + floor band
     const ch = H, cy = ly;
@@ -1896,7 +1939,7 @@ function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
   const X0 = cx - w / 2 + T / 2 + 0.05, Z0 = cz - d / 2 + T / 2 + 0.05;
   const cellA = [X0, Z0], cellB = [X0 + 4, Z0 + 4];
   for (let f = 0; f < floors; f++) {
-    const ly = baseY + f * H;
+    const ly = baseY + f * H, office = R() < 0.6; // étage de bureaux ou logement
     sides.forEach((s, i) => {
       const ops = [];
       const n = Math.max(2, Math.floor((s.len - 1) / 3.2));
@@ -1929,6 +1972,7 @@ function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
         }
       }
       if (f === 0) sbox(s, PAL.accent, 0, ly + 3.2, T / 2 + 0.05, Math.min(5, s.len * 0.45), 0.6, 0.12); // shop sign band
+      wallDecor(s, ly, H, T, ops, { accent: PAL.accent, office, skip: i === 0 ? (u0) => u0 < -s.len / 2 + 4.6 : i === 3 ? (u0) => u0 < -s.len / 2 + 8.8 : null });
     });
     // floor ledge + corner pilasters
     for (const s of sides) sbox(s, PAL.trim, 0, ly + H - 0.2, 0, s.len + 0.7, 0.3, T + 0.3);
@@ -1949,7 +1993,7 @@ function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
     // coffre posé avant le mobilier de l'étage
     const tAvoid = [];
     if (R() < 0.5) { const c = spawnChest(cx + w / 4 + rand(-1, 1), fy - 0.02, cz + rand(-d / 4, d / 4)); tAvoid.push({ x: c.x, z: c.z }); }
-    furniture(cx + w / 8, cz + d / 8, fy, w * 0.7, d * 0.7, true, PAL.accent, tAvoid, R() < 0.6);
+    furniture(cx + w / 8, cz + d / 8, fy, w * 0.7, d * 0.7, true, PAL.accent, tAvoid, office);
     lootSpots.push({ x: cx + rand(0, w / 3), y: fy + 0.05, z: cz + rand(0, d / 3) });
   }
   // rooftop: parapet, water tank, AC units, antenna
@@ -2687,6 +2731,7 @@ function destroyStruct(col) {
   if (col.subs) { for (const sc of col.subs) removeCollider(sc); col.alive = false; } else removeCollider(col);
   if (col.house) rebuildHouse(col.house, col.chunk);
   scene.remove(col.mesh); removeTarget(col.mesh);
+  if (col.hung) { for (const it of col.hung) flora.remove(it); col.hung = null; } // objets accrochés à ce mur
   if (col.deco) { if (Array.isArray(col.deco)) col.deco.forEach((d) => scene.remove(d)); else scene.remove(col.deco); }
   if (col.key) builds.delete(col.key);
   const color = col.mat === 'wood' ? 0xc48a4a : col.mat === 'stone' ? 0x9aa3ad : 0x8fa6bf;
