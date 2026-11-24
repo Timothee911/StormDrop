@@ -65,13 +65,24 @@ def image(name, data, size, q=80, white=False):
     im = im.resize((size, size), Image.Resampling.LANCZOS); f = f'{IMG}/{name}.webp'; im.save(f, quality=q, method=6, exact=True); IMGS[name] = os.path.getsize(f)
 
 
-def tree(id, file, k, bark, leaf, nb, nl, fb, fl):
+def fuller(m, degs):
+    # feuillage étoffé : copies tournées autour du tronc, qui comblent les trous de la canopée
+    ms = [m]
+    for i, g in enumerate(degs):
+        a = np.radians(g); R = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]]); k = 1 + 0.03 * (i + 1)
+        ms.append(dict(m, P=m['P'] @ R.T * [k, 1, k], N=m['N'] @ R.T))
+    o = 0; F = []
+    for q in ms: F.append(q['F'] + o); o += len(q['P'])
+    return dict(m, P=np.concatenate([q['P'] for q in ms]), N=np.concatenate([q['N'] for q in ms]), uv=np.concatenate([q['uv'] for q in ms]), col=np.concatenate([q['col'] for q in ms]), F=np.concatenate(F))
+
+
+def tree(id, file, k, bark, leaf, nb, nl, fb, fl, degs=(), grow=1.0, flt=0):
     ms = [vscale(m, k) for m in load(D + file + '.glb')]; b = next(m for m in ms if m['mat']['name'].startswith('Bark')); l = next((m for m in ms if m['mat']['name'].startswith('Lea')), None)
     image(bark, b['img'], 512, 72)
-    near = [enc(decimate(biggest(b, 0.97), nb), bark)]; far = [enc(decimate(biggest(b, 0.72), fb), bark)]; info = {}
+    near = [enc(decimate(biggest(b, 0.97), nb), bark)]; far = [enc(decimate(biggest(b, 0.9), fb), bark)]; info = {}
     if l is not None:
-        image(leaf, l['img'], 512, 60, True); l = leafshade(l)
-        near.append(enc(thin(l, nl), leaf)); far.append(enc(decimate(thin(l, fl, 0.82), 170), leaf))
+        image(leaf, l['img'], 512, 60, True); l = leafshade(fuller(l, degs))
+        near.append(enc(thin(l, nl, grow), leaf)); far.append(enc(decimate(thin(l, fl, grow * 0.87), flt or 10 ** 6), leaf))
         lo, hi = l['P'].min(0), l['P'].max(0); info['can'] = [round(float(x), 2) for x in (*((lo + hi) / 2), *((hi - lo) / 2 * 0.86))]
     P = b['P']; top = float(P[:, 1].max()); base = P[(P[:, 1] > 0.25) & (P[:, 1] < 1.4)]
     info['top'] = round(top, 2); info['r'] = round(float(np.percentile(np.linalg.norm(base[:, [0, 2]], axis=1), 70)), 2)
@@ -97,15 +108,15 @@ def bake(m):  # l'herbe n'a qu'un dégradé : la couleur passe dans les sommets
     return dict(m, col=(c ** 2.2) * (0.55 + 0.45 * m['col']))
 
 
-tree('tree0', 'Tree-t9KbsfYdXz', 1.0, 'bark', 'leaf', 420, 400, 70, 56)
-tree('tree1', 'Tree-qZtx0AHhcy', 1.0, 'bark', 'leaf', 460, 440, 80, 60)
-tree('tree2', 'Tree-QVOop92WmG', 0.9, 'bark', 'leaf', 420, 440, 70, 60)
-tree('pine0', 'Pine-79gmlLnweB', 0.95, 'bark', 'pine', 380, 55, 60, 24)
-tree('pine1', 'Pine-Zt62gceKXZ', 1.15, 'bark', 'pine', 380, 55, 60, 20)
-tree('pine2', 'Pine', 1.0, 'bark', 'pine', 320, 55, 60, 24)
-tree('twist', 'Twisted Tree-8oraKn9m0x', 0.62, 'bark2', 'leafr', 700, 480, 130, 70)
-tree('dead0', 'Dead Tree', 0.6, 'bark2', None, 620, 0, 120, 0)
-tree('dead1', 'Dead Tree-MlmK5488ou', 0.75, 'bark2', None, 620, 0, 120, 0)
+tree('tree0', 'Tree-t9KbsfYdXz', 1.0, 'bark', 'leaf', 420, 760, 170, 250, (100, 220), 1.0)
+tree('tree1', 'Tree-qZtx0AHhcy', 1.0, 'bark', 'leaf', 460, 820, 180, 270, (110,), 1.0)
+tree('tree2', 'Tree-QVOop92WmG', 0.9, 'bark', 'leaf', 420, 800, 170, 260, (100, 215), 1.0)
+tree('pine0', 'Pine-79gmlLnweB', 0.95, 'bark', 'pine', 380, 55, 130, 40, (), 1.17, 320)
+tree('pine1', 'Pine-Zt62gceKXZ', 1.15, 'bark', 'pine', 380, 72, 130, 40, (40,), 1.0, 320)
+tree('pine2', 'Pine', 1.0, 'bark', 'pine', 320, 60, 130, 40, (), 1.17, 320)
+tree('twist', 'Twisted Tree-8oraKn9m0x', 0.62, 'bark2', 'leafr', 700, 900, 260, 300, (140,), 1.0)
+tree('dead0', 'Dead Tree', 0.6, 'bark2', None, 620, 0, 220, 0)
+tree('dead1', 'Dead Tree-MlmK5488ou', 0.75, 'bark2', None, 620, 0, 220, 0)
 for i, f in enumerate(['Rock Medium', 'Rock Medium-s1OJ3bBzqc', 'Rock Medium-JQxF95498B']): deco(f'rock{i}', f, 1, {'Rocks': ('rocks', dec(340))})
 bl = lambda n: (lambda m: thin(leafshade(m), n))
 deco('bush', 'Bush', 1.0, {'Leaves_TwistedTree': ('leafr', bl(230))})

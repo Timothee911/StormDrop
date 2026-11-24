@@ -1233,7 +1233,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
 const flora = createFlora(scene, windT, { lowq: LOWQ, highq: HIGHQ });
 // Grass : touffes de fines lames courbes (dégradé sombre -> clair), très nombreuses, qui ondulent au vent
 {
-  const N = LOWQ ? 9000 : HIGHQ ? 62000 : 38000;
+  const N = LOWQ ? 9000 : HIGHQ ? 54000 : 36000;
   const gr = mulberry32(90210); // générateur local : ne modifie pas la génération du reste du monde
   const rr = (a, b) => a + (b - a) * gr();
   // une touffe = 12 lames : chacune a un pied large, un segment médian et une pointe, penchée vers l'extérieur
@@ -1353,17 +1353,16 @@ let trunkIM, leafIM, leafBallIM, rockIM, cactusIM;
   trunkIM = new THREE.InstancedMesh(trunkG, hitMat, pts.length);
   leafIM = new THREE.InstancedMesh(coneG, hitMat, pts.length);
   leafBallIM = new THREE.InstancedMesh(ballG, hitMat, pts.length);
-  const TR = LOWQ ? 28 : HIGHQ ? 75 : 55; // distance du modèle détaillé
+  const TR = LOWQ ? 70 : HIGHQ ? 160 : 115; // distance du modèle complet : l'arbre est déjà entier bien avant qu'on arrive
   for (const id in TREE_INFO) flora.kind(id, { R: TR, sway: 0.006, snow: id.startsWith('pine'), cast: true });
   const lc = new THREE.Color(), off = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
   pts.forEach((p, i) => {
     const s = rand(0.85, 1.35), k = R(), v = (R() * 3) | 0, ry = rand(6.283);
     const tree = { i, x: p.x, z: p.z, y: p.h - 0.2, s, hp: 150, alive: true, ims: null };
     let id;
-    if (p.snow > 0.3) id = k < 0.06 ? 'dead0' : 'pine' + v;                                     // neige : sapins, quelques troncs morts
-    else if (p.desert > 0.2) id = k < 0.45 ? 'dead' + (v & 1) : 'tree' + v;                      // lisière du désert : arbres secs
+    if (p.snow > 0.3) id = 'pine' + v;                                                          // neige : sapins
+    else if (p.desert > 0.2) id = k < 0.2 ? 'dead' + (v & 1) : 'tree' + v;                      // lisière du désert : arbres secs
     else if (k < 0.04) id = 'twist';                                                             // grand arbre tortueux, rare
-    else if (k < 0.07) id = 'dead' + (v & 1);
     else id = (R() < 0.45 + p.forest * 0.25 ? 'pine' : 'tree') + v;
     if (id.startsWith('pine')) { if (p.snow > 0.3) lc.setHSL(0.38 + rand(0.03), 0.38, 0.25 + rand(0.05)); else lc.setHSL(0.32 + rand(-0.03, 0.05), 0.56 + rand(0.12), 0.25 + rand(0.07)); }
     else if (id === 'twist') lc.setHSL(rand(0, 0.075), 0.66 + rand(0.12), 0.4 + rand(0.07));

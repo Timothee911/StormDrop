@@ -47,7 +47,7 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uWind = wind; sh.uniforms.uCamP = uCam;
       let head = '\nuniform float uWind; uniform vec3 uCamP;', body = '\nvec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);';
-      if (o.fade) body += `\ntransformed *= 1.0 - smoothstep(${(o.fade * 0.72).toFixed(1)}, ${o.fade.toFixed(1)}, distance(ip, uCamP));`;
+      if (o.fade) body += `\ntransformed *= 1.0 - smoothstep(${(o.fade * 0.88).toFixed(1)}, ${o.fade.toFixed(1)}, distance(ip, uCamP));`;
       if (o.sway) body += `\nfloat sw = sin(uWind * 1.5 + ip.x * 0.13 + ip.z * 0.09 + position.y * 0.5) * 0.6 + sin(uWind * 3.1 + ip.x * 0.4 + position.x * 1.7 + position.z * 1.3) * 0.25;
         float swk = ${o.sway.toFixed(4)} * ${leafy ? 'position.y' : 'position.y * position.y * 2.0'};
         transformed.x += sw * swk; transformed.z += sw * swk * 0.6;`;
@@ -65,7 +65,7 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
       // feuillage collé à la caméra : il se dissout (trame) pour ne jamais boucher la vue
       if (leafy) sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
         float camD = length(vViewPosition);
-        if (camD < 4.2) { float ig = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715)))); if (ig > smoothstep(0.9, 4.2, camD) + 0.04) discard; }`);
+        if (camD < 2.0) { float ig = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715)))); if (ig > smoothstep(0.5, 2.0, camD) + 0.04) discard; }`);
       // feuilles : même éclairage des deux côtés (les normales du pack forment une boule douce)
       if (plant) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal *= faceDirection;');
     };
@@ -112,7 +112,7 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
   // id : modèle ; o : { R (distance du détail), sway, fade, snow, cast }
   function kind(id, o) {
     const d = DATA[id];
-    const K = { id, R: o.R || 0, all: [], cells: null, near: lod(id, 'near', d.near, o, !!o.cast), far: d.far ? lod(id, 'far', d.far, o, false) : null, whole: !!o.whole };
+    const K = { id, R: o.R || 0, all: [], cells: null, near: lod(id, 'near', d.near, o, !!o.cast), mid: d.far ? lod(id, 'near', d.near, o, false) : null, far: d.far ? lod(id, 'far', d.far, o, false) : null, whole: !!o.whole };
     if (!d.far && !o.whole) K.cells = new Map();
     kinds.set(id, K); return K;
   }
@@ -126,9 +126,9 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
     dirtyKinds.add(K); return it;
   }
   function remove(it) { const a = it.K.all, i = a.indexOf(it); if (i >= 0) a.splice(i, 1); dirtyKinds.add(it.K); }
-  const last = new THREE.Vector3(1e9, 0, 0), N = [], F = [];
+  const last = new THREE.Vector3(1e9, 0, 0), N = [], M = [], F = [];
   function refresh(K, c) {
-    N.length = 0; F.length = 0;
+    N.length = 0; M.length = 0; F.length = 0;
     if (K.whole) { fill(K.near, K.all); return; }
     const R2 = K.R * K.R;
     if (K.cells) {
@@ -139,8 +139,9 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
       }
       fill(K.near, N); return;
     }
-    for (const it of K.all) ((it.x - c.x) ** 2 + (it.y - c.y) ** 2 + (it.z - c.z) ** 2 < R2 ? N : F).push(it);
-    fill(K.near, N); fill(K.far, F);
+    // arbres : modèle complet jusqu'à R (ombre portée seulement près), puis version allégée, si loin que l'échange ne se voit pas
+    for (const it of K.all) { const q = (it.x - c.x) ** 2 + (it.y - c.y) ** 2 + (it.z - c.z) ** 2; (q < Math.min(R2, 6400) ? N : q < R2 ? M : F).push(it); }
+    fill(K.near, N); fill(K.mid, M); fill(K.far, F);
   }
   return {
     kind, add, remove,
@@ -150,9 +151,9 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
       if (last.distanceToSquared(cam) > 16) { last.copy(cam); for (const K of kinds.values()) if (!K.whole || dirtyKinds.has(K)) refresh(K, cam); dirtyKinds.clear(); }
       else if (dirtyKinds.size) { for (const K of dirtyKinds) refresh(K, last); dirtyKinds.clear(); }
     },
-    stats() { const o = {}; for (const [k, K] of kinds) o[k] = [K.all.length, K.near.ims ? K.near.ims[0].count : 0, K.far && K.far.ims ? K.far.ims[0].count : 0]; return o; },
+    stats() { const o = {}; for (const [k, K] of kinds) o[k] = [K.all.length, (K.near.ims ? K.near.ims[0].count : 0) + (K.mid && K.mid.ims ? K.mid.ims[0].count : 0), K.far && K.far.ims ? K.far.ims[0].count : 0]; return o; },
     // meshes créés (compilation des shaders avant le début de partie)
-    warm() { for (const K of kinds.values()) { ensure(K.near, 1); if (K.far) ensure(K.far, 1); } last.x = 1e9; },
+    warm() { for (const K of kinds.values()) { ensure(K.near, 1); if (K.mid) ensure(K.mid, 1); if (K.far) ensure(K.far, 1); } last.x = 1e9; },
     highq,
   };
 }
@@ -162,11 +163,11 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
 export function scatterPlants(flora, dirtW, { lowq, highq }) {
   const gr = mulberry32(70707), rr = (a, b) => a + (b - a) * gr(), q = lowq ? 0.3 : highq ? 1 : 0.6, D = lowq ? 0.6 : highq ? 1 : 0.8;
   const K = (id, R, o = {}) => flora.kind(id, { R: R * D, fade: R * D, ...o });
-  K('bush', 110, { sway: 0.02, cast: true }); K('bushf', 100, { sway: 0.02, cast: true });
-  K('fern', 60, { sway: 0.05 }); K('plant', 55, { sway: 0.03 }); K('plant2', 45, { sway: 0.03 }); K('clover', 30, { sway: 0.03 });
-  K('flowA', 50, { sway: 0.05 }); K('flowB', 50, { sway: 0.05 }); K('mush', 35); K('shelf', 35);
-  K('wispy', 50, { sway: 0.06 }); K('tall', 55, { sway: 0.07 });
-  for (let i = 0; i < 3; i++) K('peb' + i, 45);
+  K('bush', 190, { sway: 0.02, cast: true }); K('bushf', 180, { sway: 0.02, cast: true });
+  K('fern', 100, { sway: 0.05 }); K('plant', 95, { sway: 0.03 }); K('plant2', 80, { sway: 0.03 }); K('clover', 45, { sway: 0.03 });
+  K('flowA', 80, { sway: 0.05 }); K('flowB', 80, { sway: 0.05 }); K('mush', 60); K('shelf', 60);
+  K('wispy', 80, { sway: 0.06 }); K('tall', 85, { sway: 0.07 });
+  for (let i = 0; i < 3; i++) K('peb' + i, 70);
   const col = new THREE.Color();
   // pose n plantes là où ok(contexte) l'accepte ; grp = taille d'un petit groupe autour du point
   function scatter(ids, n, ok, size, opt = {}) {
