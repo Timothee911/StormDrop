@@ -1,6 +1,6 @@
 // Cosmetics catalog + procedural character / pickaxe / glider / backpack models + emote poses
 import * as THREE from 'three';
-import { KAIA } from './kaia.js';
+import { SQUELETTE } from './squelette.js';
 
 export const RARITIES = {
   common: { name: 'Commun', color: '#9aa3b5', grad: ['#b9c0cc', '#6e7687'] },
@@ -33,7 +33,6 @@ export const SKINS = {
   surf: { name: 'Surfeur Solaire', rarity: 'uncommon', shirt: 0x00c2c7, pants: 0xffa52d, skin: 0xc68b5e, hat: 0xffffff, style: 'none', extra: 'shades', desc: 'Toujours sur la vague.' },
   // Agents du Chapitre 2 Saison 2
   ombre: { name: 'Ombre', rarity: 'rare', shirt: 0x1a1a22, pants: 0x14141c, skin: 0xb07a52, hat: 0x111118, style: 'fedora', extra: 'shades', desc: 'L’uniforme parfait de l’ombre.' },
-  kaia: { name: 'Kaia Volt', rarity: 'legendary', model: 'kaia', shirt: 0x2b2f3a, pants: 0x2b2f3a, skin: 0xf2b88c, hat: 0x1a1008, style: 'none', desc: 'Tenue tactique, élan électrique.' },
   midas: { name: 'Midas', rarity: 'legendary', shirt: 0xd9a900, pants: 0x8a6a00, skin: 0xf2c6a0, hat: 0x1a1a1a, style: 'fedora', extra: 'shades', accent: 0xffc400, desc: 'Tout ce qu’il touche devient or.' },
   brutus: { name: 'Brutus', rarity: 'epic', shirt: 0x3a4a5a, pants: 0x2a3a4a, skin: 0xd9a77c, hat: 0x222831, style: 'helmet', extra: 'visor', accent: 0x39ff88, desc: 'Le colosse de La Grotte.' },
   skye: { name: 'Skye', rarity: 'epic', shirt: 0xff8fc7, pants: 0xffffff, skin: 0xf2c6a0, hair: 0x6b4226, hat: 0xff8fc7, style: 'beanie', desc: 'Toujours accompagnée d’Ollie.' },
@@ -157,15 +156,6 @@ function roundedBoxGeo(w, h, d, r) {
     return g;
   });
 }
-// Segment de membre : capsule effilée verticale, haut à y=0 (articulation), bas à y=-len.
-function limbGeo(r1, r2, len) {
-  return geo(`lb${r3(r1)},${r3(r2)},${r3(len)}`, () => {
-    const pts = [];
-    for (let i = 0; i <= 4; i++) { const a = -Math.PI / 2 + i / 4 * Math.PI / 2; pts.push(new THREE.Vector2(Math.max(0, Math.cos(a) * r2), -len + r2 + Math.sin(a) * r2)); }
-    for (let i = 0; i <= 4; i++) { const a = i / 4 * Math.PI / 2; pts.push(new THREE.Vector2(Math.max(0, Math.cos(a) * r1), -r1 + Math.sin(a) * r1)); }
-    return new THREE.LatheGeometry(pts, 12);
-  });
-}
 // Volume sculpté par sections : chaque anneau [y, demi-largeur, profondeur avant (-z),
 // profondeur arrière (+z)] est une super-ellipse d'exposant n (2 = ellipse, plus = plus carré).
 // Les anneaux sont interpolés en Catmull-Rom pour une silhouette lisse (torse, tête, bassin).
@@ -197,15 +187,6 @@ function loftGeo(key, rings, n = 2.5, seg = 24, steps = 4) {
     return g;
   });
 }
-// point de la surface avant (-z) d'un loft en (x, y), interpolation linéaire des anneaux
-function loftFront(rings, n, x, y) {
-  let rx = rings[0][1], f = rings[0][2];
-  for (let i = 1; i < rings.length; i++) {
-    const a = rings[i - 1], b = rings[i];
-    if (y >= a[0] && y <= b[0]) { const t = (y - a[0]) / (b[0] - a[0]); rx = a[1] + (b[1] - a[1]) * t; f = a[2] + (b[2] - a[2]) * t; break; }
-  }
-  return -f * Math.max(0, 1 - Math.abs(x / rx) ** n) ** (1 / n);
-}
 const SPHERE = new THREE.SphereGeometry(1, 16, 12);
 const DOME = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
 // Bande courbe autour du visage (lunettes, visière, masque) : arc de cylindre ouvert face à -z.
@@ -214,7 +195,6 @@ function part(g, geometry, m, x, y, z, sx = 1, sy = 1, sz = 1) {
   const o = new THREE.Mesh(geometry, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = true; g.add(o); return o;
 }
 export function rbox(g, w, h, d, x, y, z, m, r = Math.min(w, h, d) * 0.3) { return part(g, roundedBoxGeo(w, h, d, r), m, x, y, z); }
-function limb(g, r1, r2, len, x, y, z, m, sz = 1) { return part(g, limbGeo(r1, r2, len), m, x, y, z, 1, 1, sz); }
 function dome(g, r, x, y, z, m, sx = 1, sy = 1, sz = 1) { return part(g, DOME, m, x, y, z, r * sx, r * sy, r * sz); }
 // Sphère / cylindre / cône : formes organiques pour un rendu moins cubique.
 export function sph(g, r, x, y, z, m, sx = 1, sy = 1, sz = 1) { return part(g, SPHERE, m, x, y, z, r * sx, r * sy, r * sz); }
@@ -222,14 +202,13 @@ export function cyl(g, rt, rb, h, x, y, z, m, seg = 12) {
   return part(g, geo(`cy${r3(rt)},${r3(rb)},${r3(h)},${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, seg)), m, x, y, z);
 }
 
-// Tête façon Fortnite : crâne et visage sculptés d'un seul volume (mâchoire carrée,
-// pommettes, menton), grands yeux expressifs avec ligne de cils, nez modelé, lèvres.
+// Volume de tête de référence (0,4 × 0,5 × 0,42 m) sur lequel sont dessinées coiffes et
+// cheveux ; makeCharMesh le ramène à la taille de la tête du mannequin.
 const HEAD_RINGS = [
   [0.0, 0.05, 0.14, 0.02], [0.035, 0.1, 0.185, 0.07], [0.1, 0.152, 0.2, 0.15], [0.18, 0.182, 0.205, 0.19],
   [0.26, 0.196, 0.205, 0.215], [0.34, 0.2, 0.198, 0.222], [0.42, 0.18, 0.168, 0.2], [0.475, 0.12, 0.11, 0.14], [0.5, 0.03, 0.03, 0.04],
 ];
 const HEAD_N = 2.25;
-const faceZ = (x, y) => loftFront(HEAD_RINGS, HEAD_N, x, y);
 // Coque de cheveux : le crâne gonflé d'une épaisseur au-dessus d'une ligne inclinée
 // (yFront au front, yBack à la nuque) ; en dessous, la coque rentre en douceur sous la
 // peau, ce qui donne une lisière nette sans marches d'escalier.
@@ -247,39 +226,11 @@ function hairGeo(yFront, yBack, th = 0.016) {
     return g;
   });
 }
-function buildFace(head, s, skinM, dark) {
-  part(head, loftGeo('head', HEAD_RINGS, HEAD_N, 24, 4), skinM, 0, 0, 0); // crâne + visage
-  limb(head, 0.016, 0.021, 0.09, 0, 0.27, faceZ(0, 0.27) + 0.002, skinM).rotation.x = 0.34; // arête du nez
-  sph(head, 0.024, 0, 0.183, faceZ(0, 0.183) - 0.018, skinM, 1, 0.9, 1); // bout du nez
-  for (const sx of [-1, 1]) sph(head, 0.015, sx * 0.022, 0.176, faceZ(0.022, 0.176) - 0.004, skinM); // ailes du nez
-  for (const sx of [-1, 1]) sph(head, 0.055, sx * 0.194, 0.24, 0.03, skinM, 0.4, 1, 0.7); // oreilles
-  if (s.extra === 'shades' || s.extra === 'visor' || s.style === 'balaclava') return;
-  const white = mat(0xf7f8ff, { roughness: 0.2 }), iris = mat(s.eyes || 0x4a2e1a, { roughness: 0.15 });
-  const pupil = mat(0x07070a, { roughness: 0.1 }), shine = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.6 });
-  for (const sx of [-1, 1]) {
-    const x = sx * 0.08, z = faceZ(x, 0.27);
-    sph(head, 0.046, x, 0.27, z + 0.016, white, 1, 0.78, 0.5); // globe
-    sph(head, 0.028, x, 0.268, z - 0.004, iris, 1, 1, 0.42); // iris
-    sph(head, 0.014, x, 0.268, z - 0.009, pupil, 1, 1, 0.4); // pupille
-    sph(head, 0.007, x + sx * -0.009, 0.279, z - 0.015, shine); // reflet
-    sph(head, 0.048, x, 0.296, z + 0.012, dark, 1.06, 0.26, 0.55); // ligne de cils
-    const brow = rbox(head, 0.105, 0.03, 0.035, sx * 0.085, 0.335, faceZ(sx * 0.085, 0.335) + 0.006, mat(s.brows || s.hair || 0x2f2318), 0.013);
-    brow.rotation.z = -sx * 0.12; brow.rotation.y = sx * 0.25; // sourcils épais
-  }
-  if (s.extra !== 'mask') {
-    const lip = mat(new THREE.Color(s.skin).lerp(new THREE.Color(0xa83a3a), 0.4).getHex(), { roughness: 0.4 });
-    sph(head, 0.042, 0, 0.106, faceZ(0, 0.106) + 0.004, lip, 1, 0.3, 0.45); // lèvre supérieure
-    sph(head, 0.038, 0, 0.084, faceZ(0, 0.084) + 0.006, lip, 1, 0.38, 0.5); // lèvre inférieure
-    rbox(head, 0.07, 0.007, 0.012, 0, 0.096, faceZ(0, 0.096) - 0.004, mat(0x3a1414), 0.003); // commissure
-  }
-}
 function buildHead(head, s) {
-  const skinM = mat(s.skin, { roughness: 0.55 });
   const hat = mat(s.hat), dark = mat(0x14141c);
   const acc = s.accent !== undefined ? mat(s.accent, { emissive: s.accent, emissiveIntensity: 0.6 }) : hat;
   const st = s.style;
   if (st === 'astro') {
-    buildFace(head, s, skinM, dark);
     const glass = new THREE.Mesh(new THREE.SphereGeometry(0.4, 18, 14), new THREE.MeshStandardMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.3 }));
     glass.position.y = 0.24; glass.castShadow = true; head.add(glass);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.05, 8, 20), mat(0xdfe4ee, { metalness: 0.4, roughness: 0.4 }));
@@ -294,12 +245,13 @@ function buildHead(head, s) {
     rbox(head, 0.06, 0.22, 0.03, 0, 0.1, -0.232, steel, 0.012); // nasal
     for (let i = 0; i < 3; i++) rbox(head, 0.3, 0.02, 0.02, 0, 0.06 + i * 0.05, -0.228, dark, 0.008); // grille
     rbox(head, 0.1, 0.34, 0.4, 0, 0.66, 0.04, hat, 0.05); // panache
-  } else buildFace(head, s, skinM, dark);
-  // cheveux : coque qui dégage le front et descend sur la nuque, mèches en volume
+  }
+  // cheveux : calotte inclinée qui dégage le front et descend sur la nuque, mèches en volume
+  const scalp = (m, y = 0.3) => { const d = dome(head, 0.226, 0, y, 0.012, m, 1.03, 1.0, 1.1); d.rotation.x = 0.35; return d; };
   const hairC = s.hair || 0x2f2318;
   if (st === 'none' || st === 'cap' || st === 'capback' || st === 'ears' || st === 'crown' || st === 'mohawk' || s.hair) {
     const hairM = mat(hairC, { roughness: 0.9 });
-    part(head, st === 'mohawk' ? hairGeo(0.39, 0.3, 0.008) : hairGeo(0.37, 0.12), hairM, 0, 0, 0);
+    scalp(hairM, st === 'mohawk' ? 0.36 : 0.3);
     if (st === 'none') for (const [x, rz] of [[-0.09, 0.5], [0.0, 0.2], [0.09, -0.35]]) { // mèches sur le front
       const m = sph(head, 0.075, x, 0.5, -0.1, hairM, 1, 0.55, 1.5); m.rotation.set(-0.5, 0, rz);
     }
@@ -345,7 +297,7 @@ function buildHead(head, s) {
     for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; cyl(head, 0, 0.04, 0.14, Math.sin(a) * 0.18, 0.62, Math.cos(a) * 0.19, gold, 8); }
   }
   if (st === 'horns') {
-    part(head, hairGeo(0.37, 0.12), mat(0x3a0a14), 0, 0, 0);
+    scalp(mat(0x3a0a14));
     cyl(head, 0.012, 0.05, 0.32, -0.18, 0.62, 0, acc, 10).rotation.z = 0.4;
     cyl(head, 0.012, 0.05, 0.32, 0.18, 0.62, 0, acc, 10).rotation.z = -0.4;
   }
@@ -382,21 +334,18 @@ function buildHead(head, s) {
   if (s.extra === 'mask') part(head, arcGeo(0.178, 0.16, 2.6), mat(s.shirt, { side: THREE.DoubleSide }), 0, 0.11, -0.03);
 }
 // Bretelles partagées : deux sangles visibles dans le dos, plaquées sur la face
-// arrière du sac (comme un vrai sac à dos porté), + deux sangles sur la poitrine.
+// arrière du sac (comme un vrai sac à dos porté).
 function backpackStraps(torso, color, z, yTop = 0.72, yBot = 0.3, sx = 0.15, ry = 0, rx = 0.05) {
   const m = mat(color, { roughness: 0.7 });
   const h = Math.max(0.2, yTop - yBot), cy = (yTop + yBot) / 2;
   for (const s of [-1, 1]) {
     const b = rbox(torso, 0.06, h, 0.03, s * sx, cy, z, m, 0.012); // sangle sur le sac
     b.rotation.x = rx; b.rotation.y = s * ry; // ry : épouse les objets ronds
-    if (!PACK_ALONE) onChest(torso, 0.05, 0.34, 0.022, s * 0.16, 0.49, m, 0.008); // sangle poitrine
   }
 }
-// Sac à dos seul (vignettes) : sans personnage ni sangles de poitrine
-let PACK_ALONE = false;
+// Sac à dos seul (vignettes)
 export function makeBackpack(id) {
-  const g = new THREE.Group(); PACK_ALONE = true;
-  try { buildBackpack(g, id); } finally { PACK_ALONE = false; }
+  const g = new THREE.Group(); buildBackpack(g, id);
   return g;
 }
 function buildBackpack(torso, id) {
@@ -852,230 +801,82 @@ export function makeParachute(id = 'default') {
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
-// Anneaux [y, demi-largeur, avant, arrière] du torse (repère du groupe torse, y=0 aux hanches) :
-// silhouette en V façon Fortnite, taille fine, pectoraux et trapèzes marqués.
-const PELVIS_RINGS = [[-0.07, 0.1, 0.08, 0.09], [-0.03, 0.2, 0.135, 0.15], [0.04, 0.25, 0.155, 0.172], [0.13, 0.258, 0.155, 0.168], [0.2, 0.256, 0.152, 0.16], [0.25, 0.24, 0.14, 0.15]];
-const CHEST_RINGS = [[0.15, 0.24, 0.14, 0.14], [0.24, 0.252, 0.152, 0.148], [0.34, 0.275, 0.168, 0.152], [0.45, 0.315, 0.2, 0.162], [0.54, 0.33, 0.206, 0.17], [0.62, 0.335, 0.183, 0.17], [0.68, 0.275, 0.143, 0.15], [0.735, 0.17, 0.1, 0.11], [0.77, 0.08, 0.065, 0.07]];
-const CHEST_N = 2.6;
-// Basket sculptée le long du pied (loft couché : y du loft = du talon vers la pointe,
-// « avant » = sous le pied, « arrière » = dessus) : talon, tige montante, cou-de-pied, pointe.
-const SHOE_RINGS = [[0, 0.055, 0.035, 0.06], [0.03, 0.088, 0.048, 0.11], [0.1, 0.094, 0.05, 0.135], [0.18, 0.091, 0.05, 0.095], [0.26, 0.097, 0.05, 0.068], [0.32, 0.09, 0.048, 0.058], [0.36, 0.05, 0.035, 0.035]];
-const SOLE_RINGS = [[-0.005, 0.06, 0.03, 0.03], [0.03, 0.097, 0.032, 0.032], [0.18, 0.095, 0.032, 0.032], [0.27, 0.102, 0.032, 0.032], [0.34, 0.093, 0.03, 0.03], [0.372, 0.05, 0.024, 0.024]];
-// z de la surface avant du buste en (x, y) : pour poser poches, fermeture, rayures
-const chestFront = (x, y) => loftFront(CHEST_RINGS, CHEST_N, x, y);
-// détail plaqué sur le buste : posé sur la surface et tourné selon sa courbure
-function onChest(torso, w, h, d, x, y, m, r) {
-  const b = rbox(torso, w, h, d, x, y, chestFront(x, y) - d * 0.15, m, r);
-  b.rotation.y = -Math.atan((chestFront(x + 0.01, y) - chestFront(x - 0.01, y)) / 0.02);
-  b.rotation.x = Math.atan((chestFront(x, y + 0.01) - chestFront(x, y - 0.01)) / 0.02);
-  return b;
-}
-// --- Kaia Volt : modèle importé (kaia.js, généré depuis kaia-volt.obj) --------------------
-// Même squelette que le personnage procédural : hanches/genoux/épaules/coudes/tête/torse,
-// pour que toutes les animations et emotes du jeu fonctionnent telles quelles.
-const KAIA_GEO = new Map(), KAIA_MAT = new Map();
-function kaiaBuf(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; }
-function kaiaGeo(bone, i) {
-  const k = bone + i; let g = KAIA_GEO.get(k);
+// ---------------------------------------------------------------------------
+// MANNEQUIN COMMUN (squelette.js, généré depuis squelette.glb) : tous les skins
+// partagent ce corps, découpé sur le squelette du perso (hanches/genoux/épaules/
+// coudes/tête/torse) pour que toutes les animations et emotes fonctionnent.
+// Chaque skin le teinte (haut, pantalon, peau, mains, chaussures) et y ajoute
+// sa coiffe, ses accessoires et son sac à dos.
+// ---------------------------------------------------------------------------
+const SQ_GEO = new Map();
+function sqBuf(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; }
+function sqGeo(bone, i) {
+  const k = bone + i; let g = SQ_GEO.get(k);
   if (!g) {
-    const p = KAIA.parts[bone][i];
+    const p = SQUELETTE.parts[bone][i];
     g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(new Int16Array(kaiaBuf(p.p)), (v) => v / KAIA.Q), 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(Float32Array.from(new Int8Array(kaiaBuf(p.n)), (v) => v / 127), 3));
-    g.setIndex(new THREE.BufferAttribute(new Uint16Array(kaiaBuf(p.i)), 1));
+    g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(new Int16Array(sqBuf(p.p)), (v) => v / SQUELETTE.Q), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(Float32Array.from(new Int8Array(sqBuf(p.n)), (v) => v / 127), 3));
+    g.setIndex(new THREE.BufferAttribute(new Uint16Array(sqBuf(p.i)), 1));
     g.computeBoundingSphere();
-    KAIA_GEO.set(k, g);
+    SQ_GEO.set(k, g);
   }
   return g;
 }
-function kaiaMat(name) {
-  let m = KAIA_MAT.get(name);
-  if (!m) { const d = KAIA.mats[name]; m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(d.c[0], d.c[1], d.c[2], THREE.LinearSRGBColorSpace), roughness: d.r }); KAIA_MAT.set(name, m); }
-  return m;
+function sqFill(group, bone, M) {
+  (SQUELETTE.parts[bone] || []).forEach((p, i) => { const m = new THREE.Mesh(sqGeo(bone, i), M[p.m]); m.castShadow = true; group.add(m); });
 }
-function kaiaFill(group, bone) {
-  (KAIA.parts[bone] || []).forEach((p, i) => { const m = new THREE.Mesh(kaiaGeo(bone, i), kaiaMat(p.m)); m.castShadow = true; group.add(m); });
-}
-function buildKaia(cos) {
-  const pv = KAIA.pivots, at = (grp, v) => { grp.position.set(v[0], v[1], v[2]); return grp; };
+export function makeCharMesh(cos) {
+  const s = cos.skinDef || SKINS[cos.skin] || SKINS.recrue;
+  const pv = SQUELETTE.pivots, at = (grp, v) => { grp.position.set(v[0], v[1], v[2]); return grp; };
+  const armored = s.style === 'astro' || s.style === 'knight';
+  const M = {
+    shirt: mat(s.shirt, { roughness: 0.85 }),
+    pants: mat(s.pants, { roughness: 0.9 }),
+    skin: mat(s.skin, { roughness: 0.55 }),
+    hand: s.gloves !== undefined ? mat(s.gloves, { roughness: 0.45 }) : armored ? mat(0xdfe4ee, { roughness: 0.5 }) : mat(s.skin, { roughness: 0.55 }),
+    shoe: mat(s.shoes !== undefined ? s.shoes : 0x23232f, { roughness: 0.4 }),
+  };
   const g = new THREE.Group();
   const hipL = at(new THREE.Group(), pv.hipL), hipR = at(new THREE.Group(), pv.hipR);
   const kneeL = at(new THREE.Group(), pv.kneeL), kneeR = at(new THREE.Group(), pv.kneeR);
   hipL.add(kneeL); hipR.add(kneeR);
-  const torso = new THREE.Group(); torso.position.y = KAIA.torsoY;
+  const torso = new THREE.Group(); torso.position.y = SQUELETTE.torsoY;
   const head = at(new THREE.Group(), pv.head); torso.add(head);
   const shL = at(new THREE.Group(), pv.shL), shR = at(new THREE.Group(), pv.shR);
   const elL = at(new THREE.Group(), pv.elL), elR = at(new THREE.Group(), pv.elR);
   shL.add(elL); shR.add(elR); torso.add(shL, shR);
-  kaiaFill(torso, 'torso'); kaiaFill(head, 'head');
-  kaiaFill(hipL, 'hip_L'); kaiaFill(hipR, 'hip_R'); kaiaFill(kneeL, 'knee_L'); kaiaFill(kneeR, 'knee_R');
-  kaiaFill(shL, 'arm_L'); kaiaFill(shR, 'arm_R'); kaiaFill(elL, 'fore_L'); kaiaFill(elR, 'fore_R');
-  // sac à dos : prévu pour le torse large du perso procédural, on l'aplatit pour le buste fin de Kaia
-  const pack = new THREE.Group(); pack.scale.z = 0.7; torso.add(pack); buildBackpack(pack, cos.backpack);
-  const hand = new THREE.Group(); hand.position.set(pv.hand[0], pv.hand[1], pv.hand[2]); hand.rotation.x = -Math.PI / 2; elR.add(hand);
+  sqFill(torso, 'torso', M); sqFill(head, 'head', M);
+  sqFill(hipL, 'hip_L', M); sqFill(hipR, 'hip_R', M); sqFill(kneeL, 'knee_L', M); sqFill(kneeR, 'knee_R', M);
+  sqFill(shL, 'arm_L', M); sqFill(shR, 'arm_R', M); sqFill(elL, 'fore_L', M); sqFill(elR, 'fore_R', M);
+  // coiffe et accessoires du skin : dessinés pour une tête de 0,4 × 0,5 × 0,42 m,
+  // ramenés à la boîte de la tête du mannequin
+  const H = SQUELETTE.head, wear = new THREE.Group();
+  wear.position.set(0, H.chin, H.z); wear.scale.set(H.w / 0.4, (H.top - H.chin) / 0.5, H.d / 0.42);
+  head.add(wear); buildHead(wear, s);
+  if (s.extra === 'scarf') { // écharpe autour du cou + pan sur la poitrine
+    const sc = mat(s.accent || 0xd94848);
+    cyl(torso, 0.085, 0.105, 0.08, 0, 0.72, 0.01, sc, 16).scale.z = 1.1;
+    rbox(torso, 0.07, 0.2, 0.035, 0.06, 0.6, -0.11, sc, 0.015).rotation.x = -0.12;
+  }
+  // sac à dos : prévu pour le buste large de l'ancien perso, resserré pour le mannequin
+  const pack = new THREE.Group(); pack.scale.set(0.75, 1, 0.85); pack.position.z = -0.01; torso.add(pack);
+  buildBackpack(pack, cos.backpack);
+  const hand = at(new THREE.Group(), pv.hand); hand.rotation.x = -Math.PI / 2; elR.add(hand);
   g.add(hipL, hipR, torso);
   const glider = makeParachute(cos.glider); glider.visible = false; g.add(glider);
+  g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
   return { group: g, hipL, hipR, kneeL, kneeR, torso, head, shL, shR, elL, elR, hand, glider };
 }
 // ---------------------------------------------------------------------------
 // TENUES DE L'OMBRE (déguisement en partie, via les cabines téléphoniques, et
-// uniformes des hommes de main) : trois modèles complets posés sur le squelette
-// du perso, qui suivent donc toutes les animations.
+// uniformes des hommes de main) : teintes et coiffes appliquées au mannequin commun.
 export const SHADOW_OUTFITS = {
   agent: { name: 'Agent de l’Ombre', outfit: 'suit', shirt: 0x17181f, pants: 0x121319, skin: 0xb07a52, hat: 0x0e0e13, shoes: 0x0a0a0c, gloves: 0x0c0c10, style: 'fedora', extra: 'shades', accent: 0x0c0c10 },
   garde: { name: 'Garde de l’Ombre', outfit: 'tactical', shirt: 0x1d2026, pants: 0x181b20, skin: 0xb07a52, hat: 0x121418, shoes: 0x141518, gloves: 0x101114, style: 'balaclava', accent: 0x101114 },
   officier: { name: 'Officier de l’Ombre', outfit: 'officer', shirt: 0x101015, pants: 0x0f0f14, skin: 0xc58c64, hat: 0x0d0d12, shoes: 0x060608, gloves: 0x0b0b0e, style: 'peaked', extra: 'shades', accent: 0xc9a227 },
 };
 export const SHADOW_OUTFIT_IDS = Object.keys(SHADOW_OUTFITS);
-function buildShadowOutfit(s, torso, head, shL, shR, hipL, hipR, kneeL, kneeR) {
-  const jacket = mat(s.shirt, { roughness: 0.6 });
-  const black = mat(0x08080b, { roughness: 0.5 });
-  const red = mat(0xc0141e, { roughness: 0.4, emissive: 0x5a0008, emissiveIntensity: 0.35 });
-  const gold = mat(0xc9a227, { metalness: 0.65, roughness: 0.3 });
-  const white = mat(0xeef0f4, { roughness: 0.6 });
-  const steel = mat(0x8d949e, { metalness: 0.7, roughness: 0.35 });
-  // insigne de l'Ombre : disque rouge cerclé, motif sombre au centre
-  const insignia = (x, y, k = 1) => {
-    onChest(torso, 0.075 * k, 0.075 * k, 0.014, x, y, red, 0.035 * k);
-    onChest(torso, 0.035 * k, 0.035 * k, 0.02, x, y, black, 0.017 * k);
-  };
-  // chaussures de ville / rangers : on recouvre la basket par une coque lisse
-  const shoeOver = (m, k = 1) => { for (const kn of [kneeL, kneeR]) { rbox(kn, 0.17, 0.11 * k, 0.32, 0, -0.39 + (k - 1) * 0.04, 0.06, m, 0.05); rbox(kn, 0.18, 0.03, 0.33, 0, -0.445, 0.06, black, 0.012); } };
-  if (s.outfit === 'suit') {
-    // costume noir ajusté : revers, chemise blanche, cravate, pochette, oreillette
-    onChest(torso, 0.14, 0.28, 0.014, 0, 0.6, white, 0.02);                       // plastron de chemise
-    onChest(torso, 0.045, 0.27, 0.022, 0, 0.53, black, 0.015);                    // cravate
-    onChest(torso, 0.06, 0.045, 0.026, 0, 0.68, black, 0.015);                    // nœud
-    for (const sx of [-1, 1]) { const l = onChest(torso, 0.075, 0.3, 0.02, sx * 0.105, 0.56, mat(0x0d0d12, { roughness: 0.35 }), 0.012); l.rotation.z = sx * 0.32; } // revers satinés
-    for (const y of [0.33, 0.41]) sph(torso, 0.016, 0, y, chestFront(0, y) - 0.012, black); // boutons
-    onChest(torso, 0.07, 0.03, 0.018, -0.17, 0.585, white, 0.008);                // pochette
-    insignia(0.17, 0.6, 0.8);
-    // pans de la veste qui descendent sur les hanches
-    const hem = cyl(torso, 0.262, 0.29, 0.2, 0, 0.13, 0.005, jacket, 22); hem.scale.z = 0.66;
-    // oreillette et son fil spiralé vers le col
-    sph(head, 0.032, -0.205, 0.23, 0.02, black);
-    limb(head, 0.007, 0.007, 0.22, -0.2, 0.13, 0.06, mat(0xd8dde4, { roughness: 0.3 })).rotation.x = 0.2;
-    shoeOver(mat(0x060607, { metalness: 0.2, roughness: 0.18 })); // richelieus vernis
-    for (const sh of [shL, shR]) { const el = sh.children.find((c) => c.isGroup); if (el) cyl(el, 0.07, 0.068, 0.04, 0, -0.235, 0, white, 12); } // manchettes de chemise
-  } else if (s.outfit === 'tactical') {
-    // gilet pare-balles à plaques, porte-chargeurs, radio, brassard rouge, rangers
-    const vest = mat(0x2a2e35, { roughness: 0.85 });
-    onChest(torso, 0.46, 0.36, 0.06, 0, 0.5, vest, 0.04);                          // plaque avant
-    rbox(torso, 0.46, 0.38, 0.07, 0, 0.5, 0.175, vest, 0.04);                      // plaque arrière
-    for (const sx of [-1, 1]) rbox(torso, 0.06, 0.4, 0.34, sx * 0.25, 0.5, 0.0, vest, 0.02); // flancs
-    for (const sx of [-1, 1]) rbox(torso, 0.09, 0.04, 0.36, sx * 0.17, 0.72, 0.0, vest, 0.015); // bretelles
-    for (const x of [-0.13, 0, 0.13]) { onChest(torso, 0.1, 0.13, 0.05, x, 0.38, mat(0x23262c, { roughness: 0.9 }), 0.02); onChest(torso, 0.1, 0.03, 0.06, x, 0.45, black, 0.01); } // porte-chargeurs
-    onChest(torso, 0.07, 0.12, 0.05, 0.16, 0.61, black, 0.015);                    // radio
-    limb(torso, 0.008, 0.008, 0.16, 0.18, 0.72, -0.15, black).rotation.z = 0.3;    // antenne
-    insignia(-0.14, 0.6, 0.85);
-    for (const sh of [shL]) cyl(sh, 0.098, 0.098, 0.08, 0, -0.16, 0, red, 14);     // brassard
-    for (const sh of [shL, shR]) sph(sh, 0.1, 0, -0.02, 0, vest, 1.15, 0.75, 1.15); // épaulières
-    for (const kn of [kneeL, kneeR]) rbox(kn, 0.16, 0.15, 0.07, 0, -0.01, -0.09, mat(0x2a2e35, { roughness: 0.7 }), 0.03).rotation.x = -0.1; // genouillères renforcées
-    rbox(hipR, 0.08, 0.2, 0.13, 0.11, -0.12, 0.0, black, 0.025);                    // holster de cuisse
-    for (const y of [-0.08, -0.2]) cyl(hipR, 0.135, 0.135, 0.025, 0, y, 0, black, 14);
-    shoeOver(mat(0x141518, { roughness: 0.7 }), 1.6);                                // rangers montantes
-  } else if (s.outfit === 'officer') {
-    // long manteau croisé à boutons dorés, épaulettes à franges, ceinturon, écharpe rouge
-    const coat = jacket;
-    for (const sx of [-1, 1]) for (const y of [0.36, 0.46, 0.56]) sph(torso, 0.017, sx * 0.09, y, chestFront(sx * 0.09, y) - 0.012, gold); // double rangée
-    for (const sx of [-1, 1]) { const l = onChest(torso, 0.08, 0.2, 0.02, sx * 0.12, 0.64, mat(0x18181f, { roughness: 0.4 }), 0.012); l.rotation.z = sx * 0.4; } // revers
-    const sash = onChest(torso, 0.07, 0.62, 0.02, 0.02, 0.48, red, 0.012); sash.rotation.z = 0.62; // écharpe en diagonale
-    cyl(torso, 0.27, 0.27, 0.07, 0, 0.21, 0, black, 22).scale.z = 0.66;            // ceinturon
-    rbox(torso, 0.1, 0.075, 0.03, 0, 0.21, -0.185, gold, 0.012);                    // boucle dorée
-    insignia(-0.16, 0.6, 0.9);
-    for (const sx of [-1, 1]) { // épaulettes dorées à franges
-      rbox(torso, 0.16, 0.035, 0.14, sx * 0.3, 0.7, 0, gold, 0.015);
-      for (let i = 0; i < 5; i++) limb(torso, 0.01, 0.01, 0.07, sx * (0.23 + i * 0.035), 0.67, -0.06, gold);
-    }
-    // pans du manteau : dos et côtés jusqu'aux genoux (ouverts devant pour la marche)
-    rbox(torso, 0.5, 0.66, 0.035, 0, -0.2, 0.17, coat, 0.015);
-    for (const sx of [-1, 1]) { const p = rbox(torso, 0.035, 0.62, 0.3, sx * 0.27, -0.18, 0.03, coat, 0.012); p.rotation.z = sx * 0.06; }
-    for (const sx of [-1, 1]) { const p = rbox(torso, 0.13, 0.58, 0.03, sx * 0.19, -0.17, -0.16, coat, 0.012); p.rotation.z = sx * 0.08; }
-    for (const sh of [shL, shR]) { const el = sh.children.find((c) => c.isGroup); if (el) cyl(el, 0.074, 0.07, 0.07, 0, -0.22, 0, gold, 12); } // parements dorés
-    shoeOver(mat(0x060607, { metalness: 0.25, roughness: 0.15 }), 2.2);              // bottes cavalières
-  }
-}
-export function makeCharMesh(cos) {
-  const s = cos.skinDef || SKINS[cos.skin] || SKINS.recrue;
-  if (s.model === 'kaia') return buildKaia(cos);
-  const g = new THREE.Group();
-  const shirt = mat(s.shirt, { roughness: 0.85 }), pants = mat(s.pants, { roughness: 0.9 });
-  const skinM = mat(s.skin, { roughness: 0.55 }), dark = mat(0x1a1a22, { roughness: 0.6 });
-  const bootM = mat(0x23232f, { roughness: 0.4 }), soleM = mat(0xd8d4c8, { roughness: 0.7 });
-  const armored = s.style === 'astro' || s.style === 'knight';
-  const gloveM = s.gloves !== undefined ? mat(s.gloves, { roughness: 0.45 }) : armored ? mat(0xdfe4ee, { roughness: 0.5 }) : skinM;
-  const metal = mat(0xc0c8d0, { metalness: 0.7, roughness: 0.35 });
-
-  // --- jambes : pantalon cargo (cuisse, poche latérale), genouillère, mollet, grosse chaussure ---
-  const hipL = new THREE.Group(), hipR = new THREE.Group();
-  hipL.position.set(-0.155, 0.88, 0); hipR.position.set(0.155, 0.88, 0);
-  // genou : articulation à 0,42 m sous la hanche ; rotation.x < 0 replie la jambe vers l'arrière
-  const kneeL = new THREE.Group(), kneeR = new THREE.Group();
-  const shoeM = mat(s.shoes || 0x2a2d38, { roughness: 0.55 }), stripeM = mat(s.shirt, { roughness: 0.6 }), laceM = mat(0xf2f2f2, { roughness: 0.8 });
-  for (const hip of [hipL, hipR]) {
-    const outer = hip === hipL ? -1 : 1, knee = hip === hipL ? kneeL : kneeR;
-    limb(hip, 0.13, 0.095, 0.46, 0, 0.02, 0, pants, 1.05); // cuisse
-    rbox(hip, 0.05, 0.15, 0.14, outer * 0.112, -0.22, 0, pants, 0.02); // poche cargo
-    rbox(hip, 0.052, 0.035, 0.145, outer * 0.114, -0.15, 0, dark, 0.012); // rabat
-    knee.position.set(0, -0.42, 0); hip.add(knee);
-    sph(knee, 0.093, 0, 0, 0, pants, 1, 1, 1.05); // rotule (raccord cuisse/jambe quand le genou plie)
-    limb(knee, 0.1, 0.07, 0.36, 0, 0, 0, pants, 1.08); // jambe et mollet
-    rbox(knee, 0.15, 0.14, 0.06, 0, -0.01, -0.085, dark, 0.028).rotation.x = -0.1; // genouillère
-    // basket montante : tige rembourrée, empeigne sculptée, semelle en gomme, lacets, bande latérale
-    cyl(knee, 0.084, 0.09, 0.08, 0, -0.31, 0.005, shoeM, 12); // col rembourré
-    part(knee, loftGeo('shoe', SHOE_RINGS, 2.3, 20, 4), shoeM, 0, -0.37, 0.12).rotation.x = -Math.PI / 2; // empeigne
-    part(knee, loftGeo('sole', SOLE_RINGS, 3.2, 20, 3), soleM, 0, -0.428, 0.122).rotation.x = -Math.PI / 2; // semelle
-    for (const [y, z] of [[-0.236, 0.0], [-0.259, -0.04], [-0.278, -0.08]]) rbox(knee, 0.075, 0.012, 0.024, 0, y, z, laceM, 0.005).rotation.x = -0.45; // lacets
-    for (const sx of [-1, 1]) rbox(knee, 0.012, 0.035, 0.15, sx * 0.093, -0.38, -0.02, stripeM, 0.005).rotation.x = -0.25; // bande latérale
-  }
-  // --- torse : bassin, ceinture, buste en V, col montant, détails ---
-  const torso = new THREE.Group(); torso.position.y = 0.88;
-  part(torso, loftGeo('pelvis', PELVIS_RINGS, 2.4), pants, 0, 0, 0); // bassin
-  part(torso, loftGeo('belt', [[0.18, 0.268, 0.165, 0.172], [0.245, 0.268, 0.165, 0.172]], 2.4, 24, 1), s.accent !== undefined ? mat(s.accent) : dark, 0, 0, 0); // ceinture
-  rbox(torso, 0.09, 0.07, 0.03, 0, 0.212, -0.17, metal, 0.012); // boucle
-  rbox(torso, 0.1, 0.12, 0.07, 0.19, 0.17, 0.11, dark, 0.025).rotation.y = -0.6; // pochette de ceinture
-  part(torso, loftGeo('chest', CHEST_RINGS, CHEST_N), shirt, 0, 0, 0); // buste
-  for (let i = 0; i < 6; i++) onChest(torso, 0.02, 0.085, 0.014, 0, 0.29 + i * 0.07, dark, 0.006); // fermeture éclair
-  if (cos.backpack !== 'sac') for (const sx of [-1, 1]) onChest(torso, 0.12, 0.11, 0.03, sx * 0.15, 0.49, dark, 0.014); // poches poitrine
-  part(torso, loftGeo('collar', [[0.68, 0.2, 0.15, 0.16], [0.75, 0.155, 0.12, 0.13], [0.8, 0.15, 0.118, 0.128]], 2.3, 24, 3), dark, 0, 0, 0); // col montant
-  if (s.extra === 'tiger') { // rayures de tigre sur le t-shirt
-    const stripe = mat(0x241009, { roughness: 0.7 });
-    for (const [x, y, h] of [[-0.22, 0.34, 0.2], [0.22, 0.34, 0.2], [-0.07, 0.46, 0.3], [0.09, 0.5, 0.26], [-0.24, 0.57, 0.16], [0.24, 0.57, 0.16]])
-      onChest(torso, 0.06, h, 0.02, x, y, stripe, 0.009);
-  }
-  if (s.extra === 'scarf') { cyl(torso, 0.17, 0.2, 0.13, 0, 0.76, 0, mat(s.accent || 0xd94848), 16).scale.z = 0.85; rbox(torso, 0.12, 0.3, 0.06, 0.12, 0.55, 0.2, mat(s.accent || 0xd94848), 0.025); }
-  cyl(torso, 0.072, 0.08, 0.16, 0, 0.79, 0, armored ? mat(s.shirt) : skinM, 12); // cou
-  buildBackpack(torso, cos.backpack);
-  // tête légèrement réduite : proportions héroïques (~1/7 de la taille)
-  const head = new THREE.Group(); head.position.y = 0.83; head.scale.setScalar(0.9); torso.add(head);
-  buildHead(head, s);
-  // --- bras : deltoïde, biceps, coudière, avant-bras galbé, manchette, main (paume, doigts, pouce) ---
-  const shL = new THREE.Group(), shR = new THREE.Group();
-  shL.position.set(-0.385, 0.66, 0); shR.position.set(0.385, 0.66, 0);
-  // coude : articulation à 0,42 m sous l'épaule ; rotation.x > 0 replie l'avant-bras vers l'avant
-  const elL = new THREE.Group(), elR = new THREE.Group();
-  for (const sx of [-1, 1]) sph(torso, 0.092, sx * 0.295, 0.6, 0, shirt, 1.1, 0.85, 1.1); // masse d'épaule : prolonge les trapèzes
-  for (const sh of [shL, shR]) {
-    const inner = sh === shL ? 1 : -1, el = sh === shL ? elL : elR; // côté du corps
-    sph(sh, 0.092, inner * 0.01, -0.06, 0, shirt, 1.08, 1.32, 1.1).rotation.z = -inner * 0.35; // deltoïde allongé, incliné vers le cou
-    limb(sh, 0.09, 0.072, 0.42, 0, -0.03, 0, shirt); // haut du bras
-    el.position.set(0, -0.42, 0); sh.add(el);
-    sph(el, 0.074, 0, 0, 0, shirt); // articulation
-    sph(el, 0.074, 0, 0, 0.014, dark, 1, 0.8, 1); // coudière
-    limb(el, 0.08, 0.06, 0.26, 0, 0, 0, shirt); // avant-bras
-    cyl(el, 0.068, 0.066, 0.05, 0, -0.245, 0, dark, 12); // manchette
-    rbox(el, 0.085, 0.11, 0.12, 0, -0.31, 0, gloveM, 0.038); // paume
-    rbox(el, 0.08, 0.09, 0.11, 0, -0.38, -0.006, gloveM, 0.034).rotation.x = 0.18; // doigts repliés
-    limb(el, 0.025, 0.021, 0.08, inner * 0.045, -0.28, -0.045, gloveM).rotation.z = inner * 0.5; // pouce
-  }
-  torso.add(shL, shR);
-  const hand = new THREE.Group(); hand.position.set(0, -0.32, 0); hand.rotation.x = -Math.PI / 2; elR.add(hand);
-  if (s.outfit) buildShadowOutfit(s, torso, head, shL, shR, hipL, hipR, kneeL, kneeR);
-  g.add(hipL, hipR, torso);
-  const glider = makeParachute(cos.glider); glider.visible = false; g.add(glider);
-  g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
-  return { group: g, hipL, hipR, kneeL, kneeR, torso, head, shL, shR, elL, elR, hand, glider };
-}
 
 // Emote poses. Returns vertical offset for the whole body.
 // Remet coudes et genoux à leur flexion naturelle (légèrement pliés).
