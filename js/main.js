@@ -94,7 +94,7 @@ renderer.shadowMap.enabled = !LOWQ;
 renderer.shadowMap.type = HIGHQ ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.2;
 
 const scene = new THREE.Scene();
 const FOG_COL = new THREE.Color(0xbfe6ff); // couleur d'horizon (gardée pour le ciel), plus aucun brouillard sur la map
@@ -204,7 +204,7 @@ let skyMat = null, sunDisc = null, stars = null;
   sun.position.set(500, 700, 350); sun.visible = false; scene.add(sun); sunDisc = sun;
 }
 
-const hemi = new THREE.HemisphereLight(0xc4dcff, 0x9aa57a, 1.15); // cool fill: shadows read bluish against the warm sun
+const hemi = new THREE.HemisphereLight(0xd2e4ff, 0xbfc0a0, 1.8); // cool fill: shadows read bluish against the warm sun
 scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xffe8c4, 2.4);
 sunLight.castShadow = true;
@@ -7596,7 +7596,7 @@ function botLoot(b, dt) {
 // =====================================================================
 // Player update
 // =====================================================================
-let camDistNow = 3.6, fovNow = 72, shoulderNow = 0.85;
+let camDistNow = 2.9, fovNow = 72, shoulderNow = 0.78;
 const camTarget = new THREE.Vector3();
 function onFirePress() {
   if (!player || !player.alive) return;
@@ -8290,19 +8290,19 @@ function updateCamera(dt) {
   const ads = player && player.alive && player.ads && player.mode === 'ground';
   scopeOn = ads && W.scope;
   const BF = SET.fov;
-  let dist = 4.3, sh = 1.0, fov = BF, up = 1.75;
+  let dist = 2.9, sh = 0.78, fov = BF, up = 1.7; // vue rapprochée, au-dessus de l'épaule
   let pivot;
   if (!player.alive && spectateTarget && spectateTarget.alive && state === 'playing') {
     pivot = _v3.copy(spectateTarget.pos).add(_v1.set(0, 1.6, 0));
-    camYaw = lerpAngle(camYaw, spectateTarget.yaw, Math.min(1, dt * 3)); camPitch = lerp(camPitch, -0.15, dt * 3); dist = 5; sh = 0.6;
+    camYaw = lerpAngle(camYaw, spectateTarget.yaw, Math.min(1, dt * 3)); camPitch = lerp(camPitch, -0.15, dt * 3); dist = 3.6; sh = 0.6;
     const sp = document.getElementById('spectate'); sp.style.display = 'block'; sp.textContent = `Spectateur : ${spectateTarget.name}`;
   } else if (!player.alive || state === 'over') {
     pivot = _v3.copy(player.pos).add(_v1.set(0, 1.5, 0));
     camYaw += dt * 0.15; dist = 9; sh = 0;
   } else if (player.mode === 'bus') { pivot = _v3.copy(bus.pos); dist = 22; sh = 0; }
-  else if (player.mode === 'drive' && player.vehicle) { pivot = _v3.copy(player.vehicle.pos).add(_v1.set(0, 2.2, 0)); dist = player.vehicle.kind === 'boat' ? 8.5 : 7.5; sh = 0; fov = BF + Math.min(10, Math.abs(player.vehicle.speed) * 0.4); }
-  else if (player.mode === 'fall' || player.mode === 'glide') { pivot = _v3.copy(player.pos).add(_v1.set(0, 1.4, 0)); dist = 7; sh = 0; fov = player.mode === 'fall' ? BF + 8 + Math.max(0, -player.vel.y - 30) * 0.3 : BF + 2; }
-  else { pivot = _v3.copy(player.pos).add(_v1.set(0, player.crouch ? up - 0.4 : up, 0)); if (player.emoting) { dist = 6; sh = 0; } if (ads) { dist = 2.0; sh = 0.75; fov = W.scope ? 16 : BF * 0.68; } if (player.sprint) fov = BF + 6; if (editing || buildMode) dist = 4.6; }
+  else if (player.mode === 'drive' && player.vehicle) { pivot = _v3.copy(player.vehicle.pos).add(_v1.set(0, 2.2, 0)); dist = player.vehicle.kind === 'boat' ? 7.6 : 6.6; sh = 0; fov = BF + Math.min(10, Math.abs(player.vehicle.speed) * 0.4); }
+  else if (player.mode === 'fall' || player.mode === 'glide') { pivot = _v3.copy(player.pos).add(_v1.set(0, 1.4, 0)); dist = 5.4; sh = 0; fov = player.mode === 'fall' ? BF + 8 + Math.max(0, -player.vel.y - 30) * 0.3 : BF + 2; }
+  else { pivot = _v3.copy(player.pos).add(_v1.set(0, player.crouch ? up - 0.4 : up, 0)); if (player.emoting) { dist = 4.4; sh = 0; } if (ads) { dist = 1.65; sh = 0.6; fov = W.scope ? 16 : BF * 0.68; } if (player.sprint) fov = BF + 6; if (editing || buildMode) dist = 3.8; }
   sh *= shoulderSide;
   camDistNow = lerp(camDistNow, dist, Math.min(1, dt * 10));
   shoulderNow = lerp(shoulderNow, sh, Math.min(1, dt * 10));
@@ -8316,7 +8316,7 @@ function updateCamera(dt) {
     // origine du raycast avec le même décalage d'épaule réduit que la position finale
     // (utilise la distance lissée de la frame précédente), sinon le coin d'un mur
     // côté épaule peut être raté et laissait la caméra le traverser.
-    const shRay = shoulderNow * Math.min(1, camColDist / 2.5);
+    const shRay = shoulderNow * Math.min(1, camColDist / 1.8);
     _camO.set(pivot.x + rx * shRay, pivot.y, pivot.z + rz * shRay); _camD.copy(d).negate();
     raycaster.set(_camO, _camD); raycaster.far = cd + 0.3; raycaster.near = 0;
     const hs = raycaster.intersectObjects(rayTargets, false);
@@ -8328,7 +8328,7 @@ function updateCamera(dt) {
   cd = Math.min(cd, camColDist);
   // caméra très proche (mur derrière le joueur) : on réduit aussi le décalage d'épaule
   // pour que le joueur reste bien dans le cadre au lieu de sortir de l'écran.
-  const shEff = shoulderNow * Math.min(1, cd / 2.5);
+  const shEff = shoulderNow * Math.min(1, cd / 1.8);
   camera.position.set(pivot.x - d.x * cd + rx * shEff, pivot.y - d.y * cd, pivot.z - d.z * cd + rz * shEff);
   const th = terrainH(camera.position.x, camera.position.z) + 0.4;
   // Grotte : la caméra reste entre le sol rocheux et le plafond du tunnel/de la
@@ -9598,8 +9598,8 @@ function updateDayNight(dt) {
   const A = TOD_KEYS[i], B = TOD_KEYS[i + 1], t = (tod - A[0]) / (B[0] - A[0]);
   if (skyMat) { lerpHex(A[1], B[1], t, skyMat.uniforms.top.value); lerpHex(A[2], B[2], t, skyMat.uniforms.mid.value); }
   lerpHex(A[3], B[3], t, FOG_COL); if (skyMat) skyMat.uniforms.bot.value.copy(FOG_COL);
-  lerpHex(A[4], B[4], t, sunLight.color); sunLight.intensity = lerp(A[5], B[5], t); hemi.intensity = lerp(A[6], B[6], t);
-  const night = clamp(1 - sunLight.intensity / 1.2, 0, 1);
+  lerpHex(A[4], B[4], t, sunLight.color); const sunI = lerp(A[5], B[5], t); sunLight.intensity = sunI * 1.12 + 0.1; hemi.intensity = lerp(A[6], B[6], t) * 1.4 + 0.2; // ombres et nuits nettement plus claires
+  const night = clamp(1 - sunI / 1.2, 0, 1);
   nightF = night;
   // l'eau reflète le ciel du moment (plein jour, crépuscule aurore/rouge ou nuit)
   if (skyMat) { WSKY.top.copy(skyMat.uniforms.top.value); WSKY.mid.copy(skyMat.uniforms.mid.value); }
@@ -9625,7 +9625,7 @@ function updateDayNight(dt) {
     CLOUD_TINT.setRGB(1, 1, 1).lerp(_cT.setRGB(1.0, 0.66, 0.5), dusk * 0.8).lerp(_cT.setRGB(0.13, 0.16, 0.24), nightK * 0.95);
     for (const g of clouds) for (const sp of g.children) sp.material.color.copy(sp.userData.base).multiply(CLOUD_TINT);
   }
-  renderer.toneMappingExposure = 1.1 + night * 0.25;
+  renderer.toneMappingExposure = 1.2 + night * 0.3;
   const lampOn = night > 0.4;
   for (const c of chests) if (!c.opened && lampOn && c.light.intensity) c.light.intensity *= 1.4;
 }

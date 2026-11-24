@@ -65,7 +65,7 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
       // feuillage collé à la caméra : il se dissout (trame) pour ne jamais boucher la vue
       if (leafy) sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
         float camD = length(vViewPosition);
-        if (camD < 5.5) { float ig = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715)))); if (ig > smoothstep(1.2, 5.5, camD) + 0.04) discard; }`);
+        if (camD < 4.2) { float ig = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715)))); if (ig > smoothstep(0.9, 4.2, camD) + 0.04) discard; }`);
       // feuilles : même éclairage des deux côtés (les normales du pack forment une boule douce)
       if (plant) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal *= faceDirection;');
     };
