@@ -4,6 +4,7 @@ import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createFlora, scatterPlants, TREE_INFO } from './flora.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints, ARM, SHADOW_OUTFITS, SHADOW_OUTFIT_IDS } from './cosmetics.js';
 
@@ -1229,6 +1230,7 @@ const CYL_HI = new THREE.CylinderGeometry(0.5, 0.5, 1, 32); // tours rondes de l
 const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
 
 // =====================================================================
+const flora = createFlora(scene, windT, { lowq: LOWQ, highq: HIGHQ });
 // Grass : touffes de fines lames courbes (dégradé sombre -> clair), très nombreuses, qui ondulent au vent
 {
   const N = LOWQ ? 9000 : HIGHQ ? 62000 : 38000;
@@ -1260,12 +1262,10 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
     return g;
   })();
   const flower = (() => {
-    const st = new THREE.CylinderGeometry(0.02, 0.025, 0.5, 4); st.translate(0, 0.25, 0); st.deleteAttribute('uv');
-    const hd = new THREE.IcosahedronGeometry(0.1, 0); hd.translate(0, 0.54, 0); hd.deleteAttribute('uv');
-    const ct = new THREE.IcosahedronGeometry(0.045, 0); ct.translate(0, 0.62, 0); ct.deleteAttribute('uv');
-    // tiges vertes, têtes à la couleur de l'instance, coeur jaune
+    const st = new THREE.CylinderGeometry(0.016, 0.022, 0.5, 3, 1, true); st.translate(0, 0.25, 0); st.deleteAttribute('uv');
+    // tige verte ; la corolle est un modèle du pack (flora), posée au sommet
     const mk = (g, v) => { const gg = g.index ? g.toNonIndexed() : g; gg.setAttribute('head', new THREE.BufferAttribute(new Float32Array(gg.attributes.position.count).fill(v), 1)); return gg; };
-    return mergeGeometries([mk(st, 0), mk(hd, 1), mk(ct, 2)]);
+    return mk(st, 0);
   })();
   const sway = (sh, isFlower) => {
     sh.uniforms.uWind = windT;
@@ -1284,7 +1284,8 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
   const grass = new THREE.InstancedMesh(tuft, gm, N), flowers = new THREE.InstancedMesh(flower, fm, NF);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color(), col2 = new THREE.Color();
   const GR = [0x4fbf3a, 0x63cf45, 0x3fa634, 0x86d653, 0x58c040, 0x74c94a], DRY = new THREE.Color(0xc2bd5c), DARK = new THREE.Color(0x2b7d33);
-  const FL = [0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff, 0xa98bff, 0xff8a3d, 0x5ac8ff];
+  const FR = LOWQ ? 60 : HIGHQ ? 130 : 95; // corolles : dessinées jusqu'à FR mètres
+  for (let i = 0; i < 5; i++) flora.kind('petal' + i, { R: FR, fade: FR, sway: 0.02 });
   let ng = 0, nf = 0, guard = 0;
   while ((ng < N || nf < NF) && guard++ < N * 14) {
     const a = gr() * 6.283, r = Math.sqrt(gr()) * ISLAND_R * 0.95, x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z, h = terrainH(x, z);
@@ -1299,7 +1300,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
     if (!isF && ng >= N) continue;
     if (!isF && patch < 0.3 && gr() < 0.5) continue;
     q.setFromAxisAngle(up, gr() * 6.283);
-    if (isF) { const k = 0.8 + gr() * 0.6; sc.set(k, k, k); m4.compose(ps.set(x, h - 0.05, z), q, sc); flowers.setMatrixAt(nf, m4); flowers.setColorAt(nf, col.setHex(FL[(gr() * FL.length) | 0])); nf++; }
+    if (isF) { const k = 0.8 + gr() * 0.6; sc.set(k, k, k); m4.compose(ps.set(x, h - 0.05, z), q, sc); flowers.setMatrixAt(nf, m4); nf++; flora.add('petal' + ((gr() * 5) | 0), x, h - 0.05 + 0.48 * k, z, gr() * 6.283, k * 1.25, k * 1.25, k * 1.25, null, 0, rr(-0.35, 0.35), rr(-0.35, 0.35)); }
     else {
       const tall = gr() < 0.1 ? 1.4 : 1, k = (0.75 + gr() * 0.5) * tall;
       sc.set(k, k * (0.85 + gr() * 0.5), k); m4.compose(ps.set(x, h - 0.04, z), q, sc);
@@ -1317,7 +1318,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
 const trees = [], rocks = [], cacti = [];
 const dummy = new THREE.Object3D();
 const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
-let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
+let trunkIM, leafIM, leafBallIM, rockIM, cactusIM;
 {
   const pts = [], cpts = [];
   // pas deux arbres l'un dans l'autre : distance minimale entre deux pieds d'arbre/cactus
@@ -1341,78 +1342,48 @@ let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
     const dens = fbm(x * 0.02 + 40, z * 0.02);
     if (dens < 0.42 - bw.forest * 0.25 && R() < 0.8 - bw.forest * 0.4) continue; // forests clustered
     if (tooClose(x, z)) continue;
-    pts.push({ x, z, h, snow: bw.snow });
+    pts.push({ x, z, h, snow: bw.snow, desert: bw.desert, forest: bw.forest });
   }
+  // ce qu'on voit : les modèles du pack (flora). Ce qu'on touche : trois volumes simples et
+  // invisibles par arbre (tronc, cône ou boule de feuillage) pour les tirs et la récolte.
   const trunkG = new THREE.CylinderGeometry(0.28, 0.42, 1, 6); trunkG.translate(0, 0.5, 0);
-  const leafG = new THREE.ConeGeometry(1, 1, 7); leafG.translate(0, 0.5, 0);
-  // houppier du feuillu : trois boules fusionnées => grosse canopée ronde (arbre « à l'ancienne »)
-  const ballG = mergeGeometries([
-    new THREE.IcosahedronGeometry(0.72, 1).translate(-0.58, 0.12, 0.22),
-    new THREE.IcosahedronGeometry(1, 1).translate(0, 0.55, 0),
-    new THREE.IcosahedronGeometry(0.68, 1).translate(0.58, 0.1, -0.25),
-  ]);
-  trunkIM = new THREE.InstancedMesh(trunkG, matC(0x7a4a26), pts.length);
-  // sapins enneigés : chaque étage porte une calotte de neige au bord irrégulier
-  // (shader : la neige tient sur le haut du cône et sur les faces tournées vers le ciel)
-  const snowLeafMat = () => {
-    const mt = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
-    mt.onBeforeCompile = (sh) => {
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aSnowI; varying float vSnowI; varying float vLy; varying vec3 vSP;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSnowI = aSnowI; vLy = position.y; vSP = (instanceMatrix * vec4(position, 1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-        varying float vSnowI; varying float vLy; varying vec3 vSP;
-        float lh(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.7); }
-        float ln(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-          return mix(mix(lh(i), lh(i + vec2(1.0, 0.0)), f.x), mix(lh(i + vec2(0.0, 1.0)), lh(i + vec2(1.0, 1.0)), f.x), f.y); }`)
-        .replace('#include <color_fragment>', `#include <color_fragment>
-        if (vSnowI > 0.01) {
-          float edge = 0.58 - vSnowI * 0.32 + (ln(vSP.xz * 2.6 + vSP.y * 1.7) - 0.5) * 0.22;
-          float cap = smoothstep(edge, edge + 0.05, vLy);
-          float rim = smoothstep(0.1, 0.0, vLy) * vSnowI * step(0.5, ln(vSP.xz * 5.0 + 3.0));   // neige accrochée au bord des branches
-          float sm = clamp(max(cap, rim), 0.0, 1.0) * clamp(vSnowI * 1.6, 0.0, 1.0);
-          vec3 sc = mix(vec3(0.82, 0.88, 0.97), vec3(0.98, 0.99, 1.0), ln(vSP.xz * 1.3 + 9.0));
-          diffuseColor.rgb = mix(diffuseColor.rgb, sc, sm);
-        }`);
-    };
-    return mt;
-  };
-  const leafG2 = leafG.clone();
-  const snowI1 = new THREE.InstancedBufferAttribute(new Float32Array(pts.length), 1), snowI2 = new THREE.InstancedBufferAttribute(new Float32Array(pts.length), 1);
-  leafG.setAttribute('aSnowI', snowI1); leafG2.setAttribute('aSnowI', snowI2);
-  leafIM = new THREE.InstancedMesh(leafG, snowLeafMat(), pts.length);
-  leaf2IM = new THREE.InstancedMesh(leafG2, snowLeafMat(), pts.length);
-  leafBallIM = new THREE.InstancedMesh(ballG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), pts.length);
-  const lc = new THREE.Color(), snowC = new THREE.Color(0xeef6ff);
+  const coneG = new THREE.ConeGeometry(1, 1, 7); coneG.translate(0, 0.5, 0);
+  const ballG = new THREE.IcosahedronGeometry(1, 1);
+  const hitMat = new THREE.MeshBasicMaterial();
+  trunkIM = new THREE.InstancedMesh(trunkG, hitMat, pts.length);
+  leafIM = new THREE.InstancedMesh(coneG, hitMat, pts.length);
+  leafBallIM = new THREE.InstancedMesh(ballG, hitMat, pts.length);
+  const TR = LOWQ ? 28 : HIGHQ ? 75 : 55; // distance du modèle détaillé
+  for (const id in TREE_INFO) flora.kind(id, { R: TR, sway: 0.006, snow: id.startsWith('pine'), cast: true });
+  const lc = new THREE.Color(), off = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
   pts.forEach((p, i) => {
-    const s = rand(0.85, 1.35);
-    const round = p.snow < 0.3 && R() < 0.45; // deux espèces : sapin stylisé et feuillu rond
+    const s = rand(0.85, 1.35), k = R(), v = (R() * 3) | 0, ry = rand(6.283);
     const tree = { i, x: p.x, z: p.z, y: p.h - 0.2, s, hp: 150, alive: true, ims: null };
-    if (round) {
-      // feuillu : tronc plus haut, canopée ronde de trois boules
-      dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(s, 3.4 * s, s); dummy.updateMatrix();
-      trunkIM.setMatrixAt(i, dummy.matrix);
-      leafIM.setMatrixAt(i, ZERO_M); leaf2IM.setMatrixAt(i, ZERO_M);
-      dummy.position.set(p.x, tree.y + 3.1 * s, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(2.3 * s, 2.1 * s, 2.3 * s); dummy.updateMatrix(); leafBallIM.setMatrixAt(i, dummy.matrix);
-      lc.setHSL(0.27 + rand(-0.035, 0.045), 0.62 + rand(0.13), 0.35 + rand(0.09));
-      leafBallIM.setColorAt(i, lc);
-      tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + 5 * s });
-    } else {
-      // sapin : deux étages de cônes bien pleins
-      dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, rand(6.28), 0); dummy.scale.set(s, 2.8 * s, s); dummy.updateMatrix();
-      trunkIM.setMatrixAt(i, dummy.matrix);
-      leafBallIM.setMatrixAt(i, ZERO_M);
-      dummy.position.set(p.x, tree.y + 2.0 * s, p.z); dummy.scale.set(3.0 * s, 4.6 * s, 3.0 * s); dummy.updateMatrix(); leafIM.setMatrixAt(i, dummy.matrix);
-      dummy.position.set(p.x, tree.y + 4.3 * s, p.z); dummy.scale.set(2.2 * s, 3.6 * s, 2.2 * s); dummy.updateMatrix(); leaf2IM.setMatrixAt(i, dummy.matrix);
-      lc.setHSL(0.27 + rand(-0.04, 0.05), 0.55 + rand(0.15), 0.32 + rand(0.1));
-      if (p.snow > 0.3) { lc.setHSL(0.38 + rand(0.03), 0.38, 0.22 + rand(0.05)); leafIM.setColorAt(i, lc); lc.offsetHSL(0, 0, 0.03); leaf2IM.setColorAt(i, lc); snowI1.setX(i, Math.min(1, p.snow * 0.85)); snowI2.setX(i, Math.min(1, p.snow * 1.1)); }
-      else { leafIM.setColorAt(i, lc); lc.offsetHSL(0.01, 0, 0.05); leaf2IM.setColorAt(i, lc); }
-      tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + 3.2 * s });
+    let id;
+    if (p.snow > 0.3) id = k < 0.06 ? 'dead0' : 'pine' + v;                                     // neige : sapins, quelques troncs morts
+    else if (p.desert > 0.2) id = k < 0.45 ? 'dead' + (v & 1) : 'tree' + v;                      // lisière du désert : arbres secs
+    else if (k < 0.04) id = 'twist';                                                             // grand arbre tortueux, rare
+    else if (k < 0.07) id = 'dead' + (v & 1);
+    else id = (R() < 0.45 + p.forest * 0.25 ? 'pine' : 'tree') + v;
+    if (id.startsWith('pine')) { if (p.snow > 0.3) lc.setHSL(0.38 + rand(0.03), 0.38, 0.25 + rand(0.05)); else lc.setHSL(0.32 + rand(-0.03, 0.05), 0.56 + rand(0.12), 0.25 + rand(0.07)); }
+    else if (id === 'twist') lc.setHSL(rand(0, 0.075), 0.66 + rand(0.12), 0.4 + rand(0.07));
+    else lc.setHSL(0.27 + rand(-0.035, 0.035), 0.64 + rand(0.13), 0.34 + rand(0.08));
+    const T = TREE_INFO[id], bark = 0;
+    tree.flora = flora.add(id, p.x, tree.y, p.z, ry, s, s * rand(0.95, 1.08), s, lc, p.snow > 0.3 ? Math.min(1, p.snow * 1.1) : bark);
+    dummy.position.set(p.x, tree.y, p.z); dummy.rotation.set(0, ry, 0); dummy.scale.set(s, T.top * s * (T.can ? 0.8 : 0.95), s); dummy.updateMatrix(); trunkIM.setMatrixAt(i, dummy.matrix);
+    leafIM.setMatrixAt(i, ZERO_M); leafBallIM.setMatrixAt(i, ZERO_M);
+    if (T.can) {
+      const [cx, cy, cz, rx, hy, rz] = T.can, pine = id.startsWith('pine');
+      off.set(cx, 0, cz).applyAxisAngle(Y, ry).multiplyScalar(s);
+      dummy.position.set(p.x + off.x, tree.y + (pine ? cy - hy : cy) * s, p.z + off.z); dummy.scale.set(rx * s, (pine ? hy * 2.1 : hy) * s, rz * s); dummy.updateMatrix();
+      (pine ? leafIM : leafBallIM).setMatrixAt(i, dummy.matrix);
     }
+    tree.col = addCollider({ type: 'box', minX: p.x - 0.5 * s, maxX: p.x + 0.5 * s, minZ: p.z - 0.5 * s, maxZ: p.z + 0.5 * s, minY: tree.y, maxY: tree.y + (T.can && !id.startsWith('pine') ? 5 : 3.2) * s });
     tree.col.tree = tree;
     trees.push(tree);
   });
-  for (const t of trees) t.ims = [trunkIM, leafIM, leaf2IM, leafBallIM];
-  for (const im of [trunkIM, leafIM, leaf2IM, leafBallIM]) { im.castShadow = true; im.receiveShadow = true; im.userData.treeIM = true; im.userData.list = trees; scene.add(im); addTarget(im); }
+  for (const t of trees) t.ims = [trunkIM, leafIM, leafBallIM];
+  for (const im of [trunkIM, leafIM, leafBallIM]) { im.visible = false; im.userData.treeIM = true; im.userData.list = trees; scene.add(im); addTarget(im); }
   // Cacti (desert)
   const cacG = mergeGeometries([
     new THREE.CylinderGeometry(0.42, 0.48, 3.4, 8).translate(0, 1.7, 0),
@@ -1443,19 +1414,23 @@ let trunkIM, leafIM, leaf2IM, leafBallIM, rockIM, cactusIM;
     if (h < 1.2 || inPOI(x, z, 4)) continue;
     rpts.push({ x, z, h });
   }
-  rockIM = new THREE.InstancedMesh(rg, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), rpts.length);
+  rockIM = new THREE.InstancedMesh(rg, hitMat, rpts.length); // volume invisible pour les tirs et la pioche
+  for (let i = 0; i < 3; i++) flora.kind('rock' + i, { whole: true, cast: true });
   rpts.forEach((p, i) => {
     const s = rand(0.9, 2.4);
-    dummy.position.set(p.x, p.h + s * 0.25, p.z); dummy.rotation.set(rand(3), rand(3), rand(3)); dummy.scale.set(s * 1.2, s * 0.9, s); dummy.updateMatrix();
+    dummy.position.set(p.x, p.h + s * 0.4, p.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(s * 1.02, s * 0.66, s * 0.85); dummy.updateMatrix();
     rockIM.setMatrixAt(i, dummy.matrix);
-    const v = rand(0.5, 0.65); rockIM.setColorAt(i, new THREE.Color(v, v * 1.01, v * 1.05));
     const rock = { i, x: p.x, z: p.z, s, hp: 200, alive: true };
+    // modèle ajusté au volume solide (±s, ±0,8 s, haut de s) : on ne traverse pas la pierre qu'on voit
+    const v = (R() * 3) | 0, k = s / [1.5, 1.6, 1.7][v];
+    rock.flora = flora.add('rock' + v, p.x, p.h - 0.12 * s, p.z, (R() < 0.5 ? 0 : Math.PI) + rand(-0.25, 0.25), k, k * 1.02, k * [0.95, 0.8, 0.68][v]);
     rock.col = addCollider({ type: 'box', minX: p.x - s, maxX: p.x + s, minZ: p.z - s * 0.8, maxZ: p.z + s * 0.8, minY: p.h - 1, maxY: p.h + s * 1.0 });
     rock.col.rock = rock;
     rocks.push(rock);
   });
-  rockIM.castShadow = rockIM.receiveShadow = true; rockIM.userData.rockIM = true; scene.add(rockIM); addTarget(rockIM);
+  rockIM.visible = false; rockIM.userData.rockIM = true; scene.add(rockIM); addTarget(rockIM);
 }
+scatterPlants(flora, groundDirtW, { lowq: LOWQ, highq: HIGHQ });
 
 // Houses
 const chests = [], ammoBoxes = [], lootSpots = [];
@@ -3915,6 +3890,7 @@ function harvestTree(t, ch, crit, from) {
   if (t.hp <= 0) {
     t.alive = false; removeCollider(t.col);
     for (const im of t.ims) { im.setMatrixAt(t.i, ZERO_M); im.instanceMatrix.needsUpdate = true; }
+    if (t.flora) flora.remove(t.flora);
     burst(_v1.set(t.x, t.y + 3, t.z), 0x4caf50, 22, 6, 0.4, 0.7, 1.2);
     sfxAt('break', _v1, 0.8);
   }
@@ -3925,7 +3901,7 @@ function harvestRock(r, ch, crit, from) {
   r.hp -= 50 * k; ch.mats.stone = Math.min(999, ch.mats.stone + 12 * k); if (ch.isPlayer) matGain('stone', 12 * k, from || _v1.set(r.x, r.y + 0.8, r.z));
   if (r.hp <= 0 && ch.isPlayer) weakHide();
   if (r.hp <= 0) {
-    r.alive = false; removeCollider(r.col); rockIM.setMatrixAt(r.i, ZERO_M); rockIM.instanceMatrix.needsUpdate = true;
+    r.alive = false; removeCollider(r.col); flora.remove(r.flora); rockIM.setMatrixAt(r.i, ZERO_M); rockIM.instanceMatrix.needsUpdate = true;
     burst(_v1.set(r.x, terrainH(r.x, r.z) + 1, r.z), 0x9aa3ad, 20, 6, 0.4, 1, 1.0); sfxAt('break', _v1, 0.8);
   }
 }
@@ -7163,6 +7139,7 @@ function warmupShaders() {
   const vis = [];
   for (const c of chars) { vis.push([c.mesh, c.mesh.visible], [c.parts.glider, c.parts.glider.visible]); c.mesh.visible = true; c.parts.glider.visible = true; }
   impIM.count = 1; dummy.position.set(0, -50, 0); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); impIM.setMatrixAt(0, dummy.matrix); impIM.setColorAt(0, _c.set(0xffffff));
+  flora.warm();
   try { outline.compile(scene, camera); } catch (e) {}
   for (const [o, v] of vis) o.visible = v;
   impIM.count = 0;
@@ -9715,6 +9692,7 @@ function frame() {
     const lp = player.alive ? player.pos : camera.position;
     sunLight.position.copy(lp).add(SUN_OFF); sunLight.target.position.copy(lp);
   } else { sunLight.position.copy(SUN_OFF).multiplyScalar(1.5); sunLight.target.position.set(0, 0, 0); }
+  flora.update(camera.position);
   syncLin(); outline.render(scene, camera);
   updateConfetti(dt);
   fpsAcc += dt; fpsN++;
@@ -9736,11 +9714,11 @@ window.render_game_to_text = () => JSON.stringify({
   build: { piece: buildPiece, rotation: buildRot, editing: !!editing }, marker: { on: marker.on, pos: marker.pos.toArray() }, shoulder: shoulderSide, inventoryOpen: touchBagOpen,
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { structs, rebuildHouse, towers, outline,
+window.__game = { flora, structs, rebuildHouse, towers, outline,
   ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; }, get bus() { return bus; }, waveAt, get footprints() { return footPrints.filter((f) => f.life > 0).length; }, get snowfall() { return snowF.k; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on, outfit) => setDisguise(player, on, false, outfit), SHADOW_OUTFITS, get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; },
   // capture libre (QA visuelle) : rendu depuis un point de vue arbitraire
-  snap: (x, y, z, lx, ly, lz) => { const p0 = camera.position.clone(), q0 = camera.quaternion.clone(); camera.position.set(x, y, z); camera.lookAt(lx, ly, lz); camera.updateMatrixWorld(); renderer.render(scene, camera); const u = renderer.domElement.toDataURL('image/png'); camera.position.copy(p0); camera.quaternion.copy(q0); return u; } };
+  snap: (x, y, z, lx, ly, lz) => { const p0 = camera.position.clone(), q0 = camera.quaternion.clone(); camera.position.set(x, y, z); camera.lookAt(lx, ly, lz); camera.updateMatrixWorld(); flora.update(camera.position); renderer.render(scene, camera); const u = renderer.domElement.toDataURL('image/png'); camera.position.copy(p0); camera.quaternion.copy(q0); return u; } };
 // storm est aussi exposé directement : window.__game.storm
 
 // Auto-start the match once everything is built

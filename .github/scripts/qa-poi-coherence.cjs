@@ -133,4 +133,4 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules/puppeteer'))
   } finally {
     await browser.close();
   }
-})().catch((e) => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e); if (process.env.GITHUB_ACTIONS) console.log('::error title=qa-poi-coherence::' + String((e && e.message) || e).split(String.fromCharCode(10))[0].slice(0, 600)); process.exitCode = 1; });

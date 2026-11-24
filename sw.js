@@ -1,10 +1,20 @@
 // STORMDROP service worker: the game works offline once it has been opened one time.
-const VERSION = 'stormdrop-v80';
+const VERSION = 'stormdrop-v81';
 const CORE = [
   './',
   './game.html',
   './touch-hud.css',
   './icons/icon-192.png',
+  './img/nature/bark.webp',
+  './img/nature/bark2.webp',
+  './img/nature/flowers.webp',
+  './img/nature/leaf.webp',
+  './img/nature/leafr.webp',
+  './img/nature/leaves.webp',
+  './img/nature/mush.webp',
+  './img/nature/path.webp',
+  './img/nature/pine.webp',
+  './img/nature/rocks.webp',
   './img/lobby-bg.webp',
   './img/lobby-bg-small.webp',
   './icons/icon-512-maskable.png',
@@ -14,6 +24,8 @@ const CORE = [
   './js/audio.js',
   './js/cosmetics.js',
   './js/squelette.js',
+  './js/flora.js',
+  './js/nature.js',
   './js/lobby.js',
   './js/landscape.js',
   './js/lock.js',

@@ -198,4 +198,4 @@ const puppeteer = require('puppeteer');
     check('aucune nouvelle erreur JavaScript', errors.length === 0, errors);
     console.log(`${count} contrôles validés.`);
   } finally { await browser.close(); }
-})().catch(e => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e); if (process.env.GITHUB_ACTIONS) console.log('::error title=qa-vehicles-water-patrols::' + String((e && e.message) || e).split(String.fromCharCode(10))[0].slice(0, 600)); process.exitCode = 1; });

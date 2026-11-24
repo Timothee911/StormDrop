@@ -6,6 +6,13 @@ Battle royale web complet en Three.js, jouable dans le navigateur et installable
 
 Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Requin, Le Yacht, La Grotte, La Plateforme) patrouillés par des Ombres et cinq boss mythiques (Midas, Skye, Meowscles, Brutus, TNTina). Chaque boss et chaque Ombre possède désormais son circuit propre : 22 rondes spatialement distinctes, avec des secteurs et des vitesses différents. Les boss lâchent une arme mythique et une carte d'accès qui ouvre le coffre-fort de leur POI (ligne bleue guide sur la carte). Les cabines téléphoniques rouges donnent un déguisement d'Ombre ; tirer ou être touché le casse.
 
+## Nature (pack 3D)
+
+- Arbres, sapins (enneigés en toundra), arbres morts, arbres tortueux rouges, rochers, buissons, fougères, fleurs, champignons, hautes herbes et cailloux viennent du pack « Stylized Nature MegaKit ».
+- `tools/nature2js.py` convertit les `.glb` (86 Mo) en `js/nature.js` et `img/nature/` (0,9 Mo) : troncs simplifiés, feuillage éclairci, version lointaine de chaque arbre.
+- `js/flora.js` les dessine par instances : arbres détaillés près de la caméra, simplifiés au loin ; petites plantes autour de la caméra seulement. Le feuillage collé à la caméra se dissout pour ne pas boucher la vue.
+- Les tirs et la récolte utilisent des volumes simples invisibles ; les buissons et plantes n'ont pas de collision.
+
 ## Feel de la pioche
 
 - **Sons d'impact différenciés** : l'audio reste 100 % synthétisé, mais chaque matériau (bois, pierre, métal) a sa signature — pitch, filtration, résonance — et les crits montent le tout d'un cran. Chaque coup est légèrement détuné au hasard pour ne jamais sonner deux fois pareil.

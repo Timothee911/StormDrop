@@ -388,4 +388,4 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     check('aucune nouvelle erreur JavaScript', errors.length === 0, errors);
     console.log(`\n${count} contrôles mobiles réussis.`);
   } finally { await browser.close(); }
-})().catch(e => { console.error(e); process.exit(1); });
+})().catch((e) => { console.error(e); if (process.env.GITHUB_ACTIONS) console.log('::error title=qa-mobile::' + String((e && e.message) || e).split(String.fromCharCode(10))[0].slice(0, 600)); process.exit(1); });
