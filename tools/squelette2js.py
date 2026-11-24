@@ -35,7 +35,111 @@ def load(path):
     t = (P[:, 1] > 1.2) & (P[:, 1] < 1.45) & (np.abs(P[:, 0]) < 0.15)  # centre du buste en Z
     P[:, 2] -= (P[t, 2].max() + P[t, 2].min()) / 2
     # soupe de triangles : (T, 3, 6) = position + normale par coin
-    return np.concatenate([P[idx], N[idx]], axis=2)
+    return smooth(orient(np.concatenate([P[idx], N[idx]], axis=2)))
+
+
+def smooth(T, crease=50):
+    """Une passe de subdivision de Loop sur le corps (pas sur les petites pièces des mains),
+    puis normales lissées : silhouette organique au lieu des grosses facettes du modèle."""
+    V = T[:, :, :3]
+    u, w = np.unique(np.round(V.reshape(-1, 3) / 1e-4).astype(int), axis=0, return_inverse=True)
+    F = w.reshape(-1, 3); X = np.zeros((len(u), 3)); X[w] = V.reshape(-1, 3)
+    par = list(range(len(X)))
+
+    def fd(x):
+        while par[x] != x: par[x] = par[par[x]]; x = par[x]
+        return x
+    for a, b, c in F: par[fd(a)] = fd(b); par[fd(b)] = fd(c)
+    root = np.array([fd(a) for a in F[:, 0]])
+    ids, cnt = np.unique(root, return_counts=True); main = ids[cnt.argmax()]
+    body, rest = F[root == main], F[root != main]
+    E, nb = {}, {}
+    for f in body:
+        for k in range(3):
+            a, b, c = f[k], f[(k + 1) % 3], f[(k + 2) % 3]
+            E.setdefault((min(a, b), max(a, b)), []).append(c)
+            nb.setdefault(a, set()).update((b, c))
+    hard = {}
+    for (a, b), o in E.items():
+        if len(o) != 2: hard.setdefault(a, []).append(b); hard.setdefault(b, []).append(a)
+    Y = X.copy()
+    for v, ns in nb.items():
+        if v in hard:
+            if len(hard[v]) == 2: Y[v] = X[v] * 0.75 + X[hard[v]].sum(0) * 0.125
+            continue
+        n = len(ns); beta = (0.625 - (0.375 + 0.25 * math.cos(2 * math.pi / n)) ** 2) / n
+        Y[v] = X[v] * (1 - n * beta) + X[list(ns)].sum(0) * beta
+    Y = list(Y); mid = {}
+    for (a, b), o in E.items():
+        mid[(a, b)] = len(Y)
+        Y.append((X[a] + X[b]) * 0.375 + (X[o[0]] + X[o[1]]) * 0.125 if len(o) == 2 else (X[a] + X[b]) / 2)
+    m = lambda a, b: mid[(min(a, b), max(a, b))]
+    out = [list(f) for f in rest]
+    for a, b, c in body:
+        ab, bc, ca = m(a, b), m(b, c), m(c, a)
+        out += [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]
+    Y, F = np.array(Y), np.array(out)
+    G = np.cross(Y[F[:, 1]] - Y[F[:, 0]], Y[F[:, 2]] - Y[F[:, 0]])
+    U = G / np.maximum(1e-12, np.linalg.norm(G, axis=1, keepdims=True))
+    at = {}
+    for i, f in enumerate(F):
+        for v in f: at.setdefault(v, []).append(i)
+    cc = math.cos(math.radians(crease)); R = np.zeros((len(F), 3, 6))
+    for i, f in enumerate(F):
+        for k, v in enumerate(f):
+            js = at[v]; n = G[[j for j in js if U[j] @ U[i] > cc or j == i]].sum(0)
+            R[i, k, :3] = Y[v]; R[i, k, 3:] = n / max(1e-12, np.linalg.norm(n))
+    return R
+
+
+def orient(T):
+    """Tourne toutes les faces vers l'extérieur : le modèle source en a beaucoup d'inversées
+    (invisibles en jeu, où les faces arrière ne sont pas dessinées)."""
+    V = T[:, :, :3]
+    _, w = np.unique(np.round(V.reshape(-1, 3) / 1e-4).astype(int), axis=0, return_inverse=True)
+    F = w.reshape(-1, 3)
+    E = {}
+    for i, f in enumerate(F):
+        for k in range(3):
+            a, b = f[k], f[(k + 1) % 3]
+            E.setdefault((min(a, b), max(a, b)), []).append((i, a < b))
+    adj = [[] for _ in F]
+    for v in E.values():
+        if len(v) == 2:
+            (i, a), (j, b) = v
+            adj[i].append((j, a == b)); adj[j].append((i, a == b))  # True : sens opposés
+    flip = np.full(len(F), -1); patches = []
+    for r in range(len(F)):
+        if flip[r] >= 0: continue
+        flip[r] = 0; todo = [r]; comp = []
+        while todo:
+            i = todo.pop(); comp.append(i)
+            for j, opp in adj[i]:
+                if flip[j] < 0: flip[j] = flip[i] ^ int(opp); todo.append(j)
+        patches.append(comp)
+    G = np.cross(V[:, 1] - V[:, 0], V[:, 2] - V[:, 0])
+    A, e1, e2 = V[:, 0], V[:, 1] - V[:, 0], V[:, 2] - V[:, 0]
+    rng = np.random.default_rng(1)
+
+    def hits(o, d):  # nombre de faces traversées par le rayon
+        h = np.cross(d, e2); det = (e1 * h).sum(1)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            q_ = o - A; u = (q_ * h).sum(1) / det; qq = np.cross(q_, e1); v = (qq @ d) / det; t = (e2 * qq).sum(1) / det
+            return int(((np.abs(det) > 1e-14) & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-9)).sum())
+
+    for comp in patches:
+        comp = np.array(comp); score = 0.0
+        area = np.linalg.norm(G[comp], axis=1)
+        for i in comp[np.argsort(-area)[:40]]:
+            n = G[i] / np.linalg.norm(G[i]) * (-1 if flip[i] else 1)
+            for _ in range(3):
+                d = n + rng.normal(size=3) * 0.35; d /= np.linalg.norm(d)
+                score += 1 if hits(V[i].mean(0) + n * 1e-4, d) % 2 == 0 else -1
+        if score < 0: flip[comp] ^= 1
+        if len(comp) > 20 or abs(score) < 30: print('morceau', len(comp), 'faces, confiance', score, '-> retournées', int(flip[comp].sum()))
+    m = flip == 1
+    T[m] = T[m][:, ::-1]; T[m, :, 3:] *= -1
+    return T
 
 
 def clip(tris, f):
@@ -61,7 +165,7 @@ def clip(tris, f):
 T = load(SRC)
 
 # --- repères anatomiques (mesurés sur le modèle, en mètres) ---
-HIP_Y, KNEE_Y, NECK_Y, CHIN_Y, BELT_Y, SHOE_Y, COLLAR_Y = 1.0, 0.53, 1.76, 1.795, 1.07, 0.13, 1.735
+HIP_Y, KNEE_Y, NECK_Y, CHIN_Y, BELT_Y, SHOE_Y, COLLAR_Y = 1.0, 0.53, 1.76, 1.795, 1.07, 0.13, 1.765
 HIP_X, SH_Z = 0.105, -0.02
 
 
@@ -214,8 +318,8 @@ def ball(c, r, nu=10, nv=7):
 BALLS = []
 for sfx in ('L', 'R'):
     e, k, h, sh = RAD['el' + sfx], RAD['knee' + sfx], RAD['hip' + sfx], RAD['sh' + sfx]
-    re = max(0.04, min(e[2], math.hypot(e[0], e[1]))); rs = max(0.07, sh[2] * 0.95)
-    for g, bn, z, r in (('sh', 'arm_', 'shirt', [rs] * 3), ('el', 'fore_', 'shirt', [re] * 3),
+    re = max(0.04, min(e[2], math.hypot(e[0], e[1]))); rs = [0.06, 0.06, sh[2]]
+    for g, bn, z, r in (('sh', 'arm_', 'shirt', rs), ('el', 'fore_', 'shirt', [re * 0.95] * 3),
                         ('knee', 'knee_', 'pants', [k[0] * 0.97, min(k[0], k[2]), k[2] * 0.97]),
                         ('hip', 'hip_', 'pants', [h[0] * 0.95, min(h[0], h[2]), h[2] * 0.95])):
         b_ = ball(piv[g + sfx], np.array(r)); BALLS.append(len(b_))

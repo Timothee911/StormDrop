@@ -119,16 +119,16 @@ async function gameTests() {
     const grips = [];
     p.parts.glider.traverse((o) => { if (o.userData && o.userData.grip) grips.push(o); });
     const hp = new V(), gp = new V(), tmp = new V();
-    // distance main (bout du bras, à 0,74 m de l'épaule) <-> poignée, sur tout le balancement
+    // distance main réelle (point de prise au bout de l'avant-bras) <-> poignée, sur tout le balancement
     const dists = [];
     for (let f = 0; f < 8; f++) {
       window.advanceTime(250); // un peu moins qu'une demi-période de balancement
       const d = [];
       for (const sgn of [1, -1]) {
         const g = grips.find((x) => x.userData.grip === sgn);
-        const sh = sgn > 0 ? p.parts.shR : p.parts.shL;
+        const el = sgn > 0 ? p.parts.elR : p.parts.elL, hp0 = p.parts.hand.position;
         if (!g) { d.push(-1); continue; }
-        sh.localToWorld(tmp.set(0, -0.74, 0)); // centre de la main
+        el.localToWorld(tmp.set(sgn * hp0.x, hp0.y, hp0.z)); // centre de la main
         g.getWorldPosition(gp);
         d.push(+tmp.distanceTo(gp).toFixed(3)); // main <-> poignée
       }

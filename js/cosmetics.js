@@ -189,8 +189,6 @@ function loftGeo(key, rings, n = 2.5, seg = 24, steps = 4) {
 }
 const SPHERE = new THREE.SphereGeometry(1, 16, 12);
 const DOME = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-// Bande courbe autour du visage (lunettes, visière, masque) : arc de cylindre ouvert face à -z.
-function arcGeo(r, h, ang) { return geo(`arc${r3(r)},${r3(h)},${r3(ang)}`, () => new THREE.CylinderGeometry(r, r, h, 16, 1, true, Math.PI - ang / 2, ang)); }
 function part(g, geometry, m, x, y, z, sx = 1, sy = 1, sz = 1) {
   const o = new THREE.Mesh(geometry, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.castShadow = true; g.add(o); return o;
 }
@@ -209,27 +207,12 @@ const HEAD_RINGS = [
   [0.26, 0.196, 0.205, 0.215], [0.34, 0.2, 0.198, 0.222], [0.42, 0.18, 0.168, 0.2], [0.475, 0.12, 0.11, 0.14], [0.5, 0.03, 0.03, 0.04],
 ];
 const HEAD_N = 2.25;
-// Coque de cheveux : le crâne gonflé d'une épaisseur au-dessus d'une ligne inclinée
-// (yFront au front, yBack à la nuque) ; en dessous, la coque rentre en douceur sous la
-// peau, ce qui donne une lisière nette sans marches d'escalier.
-function hairGeo(yFront, yBack, th = 0.016) {
-  return geo(`hair${yFront},${yBack},${th}`, () => {
-    const out = loftGeo(`hairshell${th}`, HEAD_RINGS.map(([y, rx, f, b]) => [y * 1.04 + th * 0.6, rx + th, f + th, b + th * 1.4]), HEAD_N, 32, 6);
-    const inn = loftGeo('hairinner', HEAD_RINGS.map(([y, rx, f, b]) => [y * 0.99, rx - 0.008, f - 0.008, b - 0.008]), HEAD_N, 32, 6);
-    const g = out.clone(), p = g.attributes.position, q = inn.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const d = p.getY(i) - (yFront + (p.getZ(i) + 0.22) / 0.46 * (yBack - yFront));
-      const t = Math.min(1, Math.max(0, (d + 0.012) / 0.024)), w = t * t * (3 - 2 * t);
-      p.setXYZ(i, q.getX(i) + (p.getX(i) - q.getX(i)) * w, q.getY(i) + (p.getY(i) - q.getY(i)) * w, q.getZ(i) + (p.getZ(i) - q.getZ(i)) * w);
-    }
-    g.computeVertexNormals();
-    return g;
-  });
-}
-function buildHead(head, s) {
+// head : repère des coiffes (0,4 × 0,5 × 0,42 m) ; bare : tête du mannequin (visage, cheveux)
+function buildHead(head, s, bare) {
   const hat = mat(s.hat), dark = mat(0x14141c);
   const acc = s.accent !== undefined ? mat(s.accent, { emissive: s.accent, emissiveIntensity: 0.6 }) : hat;
   const st = s.style;
+  if (st !== 'knight' && st !== 'balaclava') buildFace(bare, s);
   if (st === 'astro') {
     const glass = new THREE.Mesh(new THREE.SphereGeometry(0.4, 18, 14), new THREE.MeshStandardMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.3 }));
     glass.position.y = 0.24; glass.castShadow = true; head.add(glass);
@@ -246,16 +229,17 @@ function buildHead(head, s) {
     for (let i = 0; i < 3; i++) rbox(head, 0.3, 0.02, 0.02, 0, 0.06 + i * 0.05, -0.228, dark, 0.008); // grille
     rbox(head, 0.1, 0.34, 0.4, 0, 0.66, 0.04, hat, 0.05); // panache
   }
-  // cheveux : calotte inclinée qui dégage le front et descend sur la nuque, mèches en volume
-  const scalp = (m, y = 0.3) => { const d = dome(head, 0.226, 0, y, 0.012, m, 1.03, 1.0, 1.1); d.rotation.x = 0.35; return d; };
+  // cheveux : coque ajustée au crâne qui dégage le front et descend sur la nuque, mèches en volume
+  const scalp = (m, front = 0.262, back = 0.1) => part(bare, sqHeadShell(`h${front},${back}`, hairline(front, back), 0.013), m, 0, 0, 0);
   const hairC = s.hair || 0x2f2318;
   if (st === 'none' || st === 'cap' || st === 'capback' || st === 'ears' || st === 'crown' || st === 'mohawk' || s.hair) {
     const hairM = mat(hairC, { roughness: 0.9 });
-    scalp(hairM, st === 'mohawk' ? 0.36 : 0.3);
+    st === 'mohawk' ? scalp(hairM, 0.285, 0.24) : scalp(hairM);
     if (st === 'none') for (const [x, rz] of [[-0.09, 0.5], [0.0, 0.2], [0.09, -0.35]]) { // mèches sur le front
       const m = sph(head, 0.075, x, 0.5, -0.1, hairM, 1, 0.55, 1.5); m.rotation.set(-0.5, 0, rz);
     }
   }
+  else if (['fedora', 'peaked', 'tricorn', 'straw', 'beanie', 'helmet'].includes(st)) scalp(mat(hairC, { roughness: 0.9 }), 0.28, 0.125);
   if (s.hair) sph(head, 0.2, 0, 0.2, 0.1, mat(s.hair, { roughness: 0.9 }), 1.1, 1.25, 0.8); // chevelure longue
   if (st === 'cap' || st === 'capback') {
     dome(head, 0.252, 0, 0.34, 0.01, hat, 1, 0.9, 1.08).rotation.x = 0.12;
@@ -317,8 +301,8 @@ function buildHead(head, s) {
   }
   if (st === 'balaclava') { // cagoule tactique + lunettes de vision nocturne relevées
     const fab = mat(s.hat, { roughness: 1 });
-    part(head, hairGeo(0.0, -0.02, 0.014), fab, 0, 0, 0);
-    part(head, arcGeo(0.228, 0.075, 2.0), mat(0x0d1a14, { metalness: 0.4, roughness: 0.15, emissive: 0x0b3a1c, emissiveIntensity: 0.5, side: THREE.DoubleSide }), 0, 0.28, 0, 1, 1, 1.05);
+    part(bare, sqHeadShell('cagoule', () => 0.06, 0.007), fab, 0, 0, 0);
+    part(bare, sqFacePatch(0.172, 0.216, 1.3, 0.014), mat(0x0d1a14, { metalness: 0.4, roughness: 0.15, emissive: 0x0b3a1c, emissiveIntensity: 0.5, side: THREE.DoubleSide }), 0, 0, 0);
     rbox(head, 0.2, 0.06, 0.07, 0, 0.47, -0.2, mat(0x22252b, { metalness: 0.5, roughness: 0.4 }), 0.02).rotation.x = -0.5; // support de casque
     for (const sx of [-1, 1]) cyl(head, 0.032, 0.036, 0.09, sx * 0.05, 0.53, -0.23, mat(0x1a1d22, { metalness: 0.5, roughness: 0.35 }), 10).rotation.x = -1.1; // tubes relevés
     for (const sx of [-1, 1]) cyl(head, 0.07, 0.07, 0.05, sx * 0.22, 0.25, 0.02, mat(0x202329, { roughness: 0.6 }), 12).rotation.z = Math.PI / 2; // casque radio
@@ -329,9 +313,9 @@ function buildHead(head, s) {
     cyl(head, 0.18, 0.21, 0.2, 0, 0.58, 0.01, hat, 16).scale.z = 1.1;
     cyl(head, 0.212, 0.212, 0.045, 0, 0.51, 0.01, mat(0x2c313c), 16).scale.z = 1.1;
   }
-  if (s.extra === 'visor') part(head, arcGeo(0.222, 0.09, 2.2), mat(s.accent || s.hat, { emissive: s.accent || s.hat, emissiveIntensity: 1.2, side: THREE.DoubleSide }), 0, 0.28, 0, 1, 1, 1.06);
-  if (s.extra === 'shades') part(head, arcGeo(0.22, 0.07, 1.9), mat(0x050505, { metalness: 0.8, roughness: 0.1, side: THREE.DoubleSide }), 0, 0.28, 0, 1, 1, 1.05);
-  if (s.extra === 'mask') part(head, arcGeo(0.178, 0.16, 2.6), mat(s.shirt, { side: THREE.DoubleSide }), 0, 0.11, -0.03);
+  if (s.extra === 'visor') part(bare, sqFacePatch(0.168, 0.224, 1.45, 0.02), mat(s.accent || s.hat, { emissive: s.accent || s.hat, emissiveIntensity: 1.2, side: THREE.DoubleSide }), 0, 0, 0);
+  if (s.extra === 'shades') part(bare, sqFacePatch(0.174, 0.214, 1.35, 0.017), mat(0x050505, { metalness: 0.8, roughness: 0.1, side: THREE.DoubleSide }), 0, 0, 0);
+  if (s.extra === 'mask') part(bare, sqFacePatch(0.058, 0.162, 1.75, 0.013), mat(s.shirt, { side: THREE.DoubleSide }), 0, 0, 0);
 }
 // Bretelles partagées : deux sangles visibles dans le dos, plaquées sur la face
 // arrière du sac (comme un vrai sac à dos porté).
@@ -764,6 +748,14 @@ export function makeGlider(id = 'default') {
 }
 // Parachute de descente : toile en demi-sphère à rayures + suspentes vers
 // les épaules. Utilise les couleurs du planeur choisi (cosmétique conservée).
+// Géométrie du bras du mannequin (côté droit, repère du perso) : épaule, main au repos
+// depuis l'épaule, et poignée du parachute à portée exacte de la main, bras tendu.
+export const ARM = (() => {
+  const { shR, elR, hand } = SQUELETTE.pivots;
+  const sh = [shR[0], SQUELETTE.torsoY + shR[1], shR[2]], reach = [elR[0] + hand[0], elR[1] + hand[1]];
+  const L = Math.hypot(reach[0], reach[1]);
+  return { sh, reach, grip: [sh[0] + L * 0.8, sh[1] + L * 0.6, sh[2]] };
+})();
 export function makeParachute(id = 'default') {
   const G = GLIDERS[id] || GLIDERS.default;
   const g = new THREE.Group();
@@ -788,15 +780,13 @@ export function makeParachute(id = 'default') {
     line(Math.cos(a) * 2.25, 5.25, Math.sin(a) * 2.25, 0, 2.05, 0);
   }
   // deux sangles vers les épaules
-  line(0, 2.05, 0, 0.385, 1.55, 0);
-  line(0, 2.05, 0, -0.385, 1.55, 0);
+  for (const sgn of [1, -1]) line(0, 2.05, 0, sgn * 0.17, ARM.sh[1] + 0.1, ARM.sh[2]);
   // poignées de commande : deux risers qui partent du harnais vers l'extérieur,
-  // exactement là où les mains du personnage viennent s'accrocher (±1 m, à
-  // hauteur des épaules levées) — voir animateChar, mode 'glide'.
+  // exactement là où les mains du personnage viennent s'accrocher (ARM.grip) — voir animateChar, mode 'glide'.
   for (const sgn of [1, -1]) {
-    line(0, 2.05, 0, sgn * 1.0, 2.0, 0);
+    line(0, 2.05, 0, sgn * ARM.grip[0], ARM.grip[1], ARM.grip[2]);
     const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.34, 8), mat(0x2a303c));
-    grip.rotation.z = Math.PI / 2; grip.position.set(sgn * 1.0, 2.0, 0); grip.castShadow = true; grip.userData.grip = sgn; g.add(grip);
+    grip.rotation.z = Math.PI / 2; grip.position.set(sgn * ARM.grip[0], ARM.grip[1], ARM.grip[2]); grip.castShadow = true; grip.userData.grip = sgn; g.add(grip);
   }
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
@@ -826,16 +816,218 @@ function sqGeo(bone, i) {
 function sqFill(group, bone, M) {
   (SQUELETTE.parts[bone] || []).forEach((p, i) => { const m = new THREE.Mesh(sqGeo(bone, i), M[p.m]); m.castShadow = true; group.add(m); });
 }
+// --- Surface du mannequin : lancer de rayon sur les pièces, pour poser visage, cheveux
+// et vêtements exactement dessus (calculé une seule fois, puis gardé en cache).
+const SQ_TRI = new Map();
+function sqTris(bone) {
+  let T = SQ_TRI.get(bone);
+  if (!T) {
+    T = [];
+    (SQUELETTE.parts[bone] || []).forEach((p, i) => { const g = sqGeo(bone, i), a = g.attributes.position, x = g.index; for (let k = 0; k < x.count; k += 3) T.push([0, 1, 2].map((c) => new THREE.Vector3().fromBufferAttribute(a, x.getX(k + c)))); });
+    SQ_TRI.set(bone, T);
+  }
+  return T;
+}
+const _ray = new THREE.Ray(), _hit = new THREE.Vector3();
+// dernière face touchée en partant de o vers d (la peau extérieure), ou null
+function sqCast(bone, o, d) {
+  _ray.origin.copy(o); _ray.direction.copy(d).normalize();
+  let best = null, bd = -1;
+  for (const t of sqTris(bone)) if (_ray.intersectTriangle(t[0], t[1], t[2], false, _hit)) { const l = _hit.distanceTo(o); if (l > bd) { bd = l; best = _hit.clone(); } }
+  return best;
+}
+const SQ_Z = new Map();
+// z de la surface avant (dir = -1) ou arrière (dir = 1) d'une pièce en (x, y)
+function sqZ(bone, x, y, dir = -1) {
+  const k = `${bone},${r3(x)},${r3(y)},${dir}`; let z = SQ_Z.get(k);
+  if (z === undefined) { const h = sqCast(bone, new THREE.Vector3(x, y, dir * 0.015), new THREE.Vector3(0, 0, dir)); z = h ? h.z : dir * 0.1; SQ_Z.set(k, z); }
+  return z;
+}
+// Détail plaqué sur une surface : posé dessus et incliné selon sa courbure
+function sqOn(group, bone, w, h, d, x, y, m, r, dir = -1) {
+  const e = 0.015, zx = sqZ(bone, x + e, y, dir) - sqZ(bone, x - e, y, dir), zy = sqZ(bone, x, y + e, dir) - sqZ(bone, x, y - e, dir);
+  const b = rbox(group, w, h, d, x, y, sqZ(bone, x, y, dir), m, r);
+  b.rotation.y = -Math.atan(zx / (2 * e)); b.rotation.x = Math.atan(zy / (2 * e));
+  return b;
+}
+// Bande qui épouse une pièce entre y0 et y1 (ceinture, col, manchette, semelle…)
+function sqBand(bone, y0, y1, off, n = 3, seg = 28) {
+  return geo(`sqb${bone},${y0},${y1},${off}`, () => {
+    const pos = [], idx = [];
+    const ring = (y, o) => {
+      let x0 = 9, x1 = -9, z0 = 9, z1 = -9;
+      for (const t of sqTris(bone)) for (let k = 0; k < 3; k++) {
+        const a = t[k], b = t[(k + 1) % 3]; if ((a.y >= y) === (b.y >= y)) continue;
+        const u = (y - a.y) / (b.y - a.y), x = a.x + (b.x - a.x) * u, z = a.z + (b.z - a.z) * u;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+      }
+      const c = new THREE.Vector3((x0 + x1) / 2, y, (z0 + z1) / 2);
+      for (let j = 0; j <= seg; j++) {
+        const a = j / seg * Math.PI * 2, d = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), h = sqCast(bone, c, d);
+        const l = (h ? h.distanceTo(c) : Math.hypot((x1 - x0) / 2 * d.x, (z1 - z0) / 2 * d.z)) + o;
+        pos.push(c.x + d.x * l, y, c.z + d.z * l);
+      }
+    };
+    ring(y0, -0.004); for (let i = 0; i <= n; i++) ring(y0 + (y1 - y0) * i / n, off); ring(y1, -0.004);
+    for (let i = 0; i < n + 2; i++) for (let j = 0; j < seg; j++) { const a = i * (seg + 1) + j, b = a + seg + 1; idx.push(a, b, b + 1, a, b + 1, a + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  });
+}
+// Coque autour de la tête (cheveux, cagoule) : du sommet jusqu'à la lisière low(a),
+// hauteur du bord selon le cap a (0 = visage, π = nuque)
+const SQ_HC = new THREE.Vector3(0, 0.2, -0.025);
+function sqHeadShell(key, low, off, seg = 36, n = 12) {
+  return geo('sqh' + key, () => {
+    const pos = [], idx = [];
+    for (let j = 0; j <= seg; j++) {
+      const a = j / seg * Math.PI * 2, end = Math.PI / 2 + Math.atan((SQ_HC.y - low(Math.min(a, Math.PI * 2 - a))) / 0.1);
+      for (let i = 0; i <= n + 1; i++) {
+        const th = Math.max(0.001, end * Math.min(1, i / n)), d = new THREE.Vector3(Math.sin(th) * Math.sin(a), Math.cos(th), -Math.sin(th) * Math.cos(a));
+        const h = sqCast('head', SQ_HC, d), l = (h ? h.distanceTo(SQ_HC) : 0.1) + (i > n ? -0.006 : off * (0.55 + 0.45 * Math.min(1, (n - i) / 2)));
+        pos.push(SQ_HC.x + d.x * l, SQ_HC.y + d.y * l, SQ_HC.z + d.z * l);
+      }
+    }
+    const w = n + 2;
+    for (let j = 0; j < seg; j++) for (let i = 0; i < n + 1; i++) { const a = j * w + i, b = a + w; idx.push(a, b + 1, a + 1, a, b, b + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  });
+}
+function sqGrid(key, nu, nv, f) { // surface (u, v) dans [0, 1]², avec un bord rentrant d'un cran
+  return geo('sqg' + key, () => {
+    const pos = [], idx = [], w = nu + 3;
+    for (let j = -1; j <= nv + 1; j++) for (let i = -1; i <= nu + 1; i++) {
+      const rim = i < 0 || j < 0 || i > nu || j > nv;
+      pos.push(...f(Math.min(1, Math.max(0, i / nu)), Math.min(1, Math.max(0, j / nv)), rim));
+    }
+    for (let j = 0; j < nv + 2; j++) for (let i = 0; i < w - 1; i++) { const a = j * w + i, b = a + w; idx.push(a, b, b + 1, a, b + 1, a + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  });
+}
+// bande courbe sur le visage entre y0 et y1, de -amax à +amax autour de la tête
+function sqFacePatch(y0, y1, amax, off) {
+  return sqGrid(`f${y0},${y1},${amax},${off}`, 22, 4, (u, v, rim) => {
+    const y = y0 + (y1 - y0) * v, a = (u * 2 - 1) * amax, o = new THREE.Vector3(0, Math.max(y, 0.08), SQ_HC.z), d = new THREE.Vector3(Math.sin(a), 0, -Math.cos(a)); // sous le menton : tombe droit
+    const h = sqCast('head', o, d), l = (h ? h.distanceTo(o) : 0.09) + (rim ? -0.004 : off);
+    return [d.x * l, y, SQ_HC.z + d.z * l];
+  });
+}
+// plaque sur le torse : centre cx(v), demi-largeur w(v), face avant (dir = -1) ou dos (1)
+function sqTorsoPatch(key, y0, y1, cx, w, off, dir = -1, nu = 4, nv = 12) {
+  return sqGrid(`t${key}${dir}`, nu, nv, (u, v, rim) => {
+    const y = y0 + (y1 - y0) * v, x = cx(v) - dir * (u * 2 - 1) * w(v);
+    return [x, y, sqZ('torso', x, y, dir) + dir * (rim ? -0.004 : off)];
+  });
+}
+// Lisière des cheveux : front dégagé, pattes devant les oreilles, nuque couverte
+const hairline = (front, back) => (a) => { const t = Math.min(1, Math.max(0, (a - 0.75) / 0.75)); return front + (back - front) * t * t * (3 - 2 * t); };
+
+const sqNeckZ = () => { let z0 = 9, z1 = -9; for (const t of sqTris('head')) for (const v of t) if (v.y < 0.045) { z0 = Math.min(z0, v.z); z1 = Math.max(z1, v.z); } return SQUELETTE.pivots.head[2] + (z0 + z1) / 2; };
+
+// --- Visage : yeux, paupières, sourcils, nez, bouche, oreilles, posés sur la tête du mannequin
+function buildFace(head, s) {
+  const skin = mat(s.skin, { roughness: 0.55 }), base = new THREE.Color(s.skin);
+  const tone = (c, k, o) => mat(base.clone().lerp(new THREE.Color(c), k).getHex(), o || { roughness: 0.55 });
+  const fz = (x, y) => sqZ('head', x, y);
+  for (const sx of [-1, 1]) { // oreilles
+    const ear = sph(head, 0.026, sx * 0.095, 0.185, -0.012, skin, 0.42, 1.25, 0.8); ear.rotation.set(-0.15, sx * 0.35, 0);
+    sph(head, 0.015, sx * 0.103, 0.186, -0.016, tone(0x8a3a2a, 0.28), 0.3, 1.2, 0.75);
+  }
+  if (s.extra !== 'mask') { // nez : un seul volume sculpté (base, bout, arête), narines esquissées
+    const y0 = 0.134, zt = fz(0, 0.192), zb = fz(0, y0);
+    const nose = part(head, loftGeo('nez', [[0, 0.007, 0.006, 0.01], [0.006, 0.0165, 0.0135, 0.012], [0.014, 0.0165, 0.0165, 0.012], [0.026, 0.0105, 0.0125, 0.012], [0.042, 0.0085, 0.0075, 0.012], [0.06, 0.0095, 0.001, 0.012]], 2.1, 16, 4), skin, 0, y0, zb + 0.001);
+    nose.rotation.x = Math.atan((zt - zb) / (0.192 - y0));
+    for (const sx of [-1, 1]) sph(head, 0.0032, sx * 0.0065, y0 + 0.0018, zb - 0.0075, tone(0x3a1010, 0.5), 1.1, 0.6, 1);
+  }
+  if (s.extra !== 'mask') { // bouche : lèvres et commissure
+    const y = 0.099, lip = tone(0xa83a3a, 0.42, { roughness: 0.4 });
+    sph(head, 0.021, 0, y + 0.0045, fz(0, y + 0.005) + 0.001, lip, 1, 0.27, 0.42);
+    sph(head, 0.0185, 0, y - 0.0055, fz(0, y - 0.006) + 0.001, lip, 1, 0.36, 0.48);
+    rbox(head, 0.037, 0.0028, 0.008, 0, y, fz(0, y) - 0.005, tone(0x2a0a0a, 0.75), 0.001);
+  }
+  if (s.extra === 'shades' || s.extra === 'visor') return; // yeux cachés
+  const white = mat(0xf7f8ff, { roughness: 0.25 }), iris = mat(s.eyes || 0x3f6f8f, { roughness: 0.15 });
+  const pupil = mat(0x07070a, { roughness: 0.1 }), shine = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.6 });
+  const lash = mat(0x1a1210, { roughness: 0.8 }), brow = mat(s.brows || s.hair || 0x2f2318, { roughness: 0.9 });
+  for (const sx of [-1, 1]) {
+    const x = sx * 0.037, y = 0.192, ry = sx * 0.3;
+    const e = new THREE.Group(); e.position.set(x, y, fz(x, y) + 0.004); e.rotation.y = -ry; head.add(e);
+    sph(e, 0.0245, 0, 0.0005, 0.005, skin, 1.12, 0.92, 0.36); // orbite et paupières
+    sph(e, 0.0215, 0, 0, 0.0035, white, 1, 0.72, 0.42);
+    sph(e, 0.0132, -sx * 0.0025, 0, -0.0018, iris, 1, 1, 0.36);
+    sph(e, 0.0068, -sx * 0.0025, 0, -0.0046, pupil, 1, 1, 0.36);
+    sph(e, 0.0034, -sx * 0.0025 + 0.0045, 0.0055, -0.006, shine, 1, 1, 0.4);
+    const l = sph(e, 0.0225, 0, 0.0145, -0.0005, lash, 1.04, 0.17, 0.42); l.rotation.z = -sx * 0.1; // ligne de cils
+    sph(e, 0.0215, 0, -0.0145, 0.001, tone(0x6a3020, 0.25), 0.8, 0.08, 0.4); // paupière inférieure
+    const by = y + 0.036;
+    for (const [dx, dy, w, rz] of [[-0.011, 0, 0.026, 0.1], [0.011, 0.0005, 0.026, -0.22]]) { // sourcil en deux segments
+      const b = rbox(head, w, 0.0095, 0.011, x + sx * dx, by + dy, fz(x + sx * dx, by) + 0.001, brow, 0.0045); b.rotation.set(0, -ry - sx * dx * 8, sx * rz);
+    }
+  }
+}
+
+// --- Vêtements communs : ceinture, col, fermeture, poches, manchettes, genouillères, baskets
+function buildOutfit(s, P) {
+  const { torso, hipL, hipR, kneeL, kneeR, elL, elR } = P;
+  const shade = (c, k) => new THREE.Color(c).lerp(new THREE.Color(k < 0 ? 0x05050a : 0xffffff), Math.abs(k)).getHex();
+  const trim = mat(shade(s.shirt, new THREE.Color(s.shirt).getHSL({}).l < 0.16 ? 0.025 : -0.42), { roughness: 0.8 }), seam = mat(shade(s.pants, new THREE.Color(s.pants).getHSL({}).l < 0.16 ? 0.025 : -0.35), { roughness: 0.9 });
+  const belt = mat(s.accent !== undefined && s.accent !== s.shirt ? s.accent : 0x1a1a22, { roughness: 0.6 }), metal = mat(0xc0c8d0, { metalness: 0.7, roughness: 0.35 });
+  const sole = mat(s.shoes !== undefined ? s.shoes : 0xd8d4c8, { roughness: 0.7 }), shoeTop = mat(s.shoes !== undefined ? s.shoes : 0x3a3a4a, { roughness: 0.5 });
+  part(torso, sqBand('torso', 0.052, 0.1, 0.009), belt, 0, 0, 0);
+  sqOn(torso, 'torso', 0.06, 0.052, 0.034, 0, 0.076, metal, 0.01); // boucle
+  part(torso, sqBand('torso', 0.752, 0.79, 0.009), trim, 0, 0, 0); // col
+  if (s.outfit) buildShadowOutfit(s, torso);
+  else if (s.extra === 'tiger') { // rayures de tigre
+    const st = mat(0x241009, { roughness: 0.7 });
+    [[-0.1, 0.22, 0.14], [0.1, 0.22, 0.14], [-0.045, 0.34, 0.18], [0.05, 0.4, 0.17], [-0.14, 0.46, 0.14], [0.14, 0.5, 0.14]].forEach(([x, y, h], i) => { for (const d of [-1, 1]) part(torso, sqTorsoPatch('tig' + i, y - h / 2, y + h / 2, (v) => x + Math.sin(v * 5) * 0.01, (v) => 0.004 + Math.sin(v * Math.PI) * 0.016, 0.005, d), st, 0, 0, 0); });
+  } else {
+    part(torso, sqTorsoPatch('zip', 0.1, 0.74, () => 0, () => 0.008, 0.005, -1, 2, 18), trim, 0, 0, 0); // fermeture
+    for (const sx of [-1, 1]) { sqOn(torso, 'torso', 0.085, 0.085, 0.022, sx * 0.105, 0.5, trim, 0.01); sqOn(torso, 'torso', 0.09, 0.024, 0.032, sx * 0.105, 0.535, mat(s.shirt, { roughness: 0.85 }), 0.008); } // poches
+  }
+  for (const [el, b] of [[elL, 'fore_L'], [elR, 'fore_R']]) part(el, sqBand(b, -0.272, -0.235, 0.008), trim, 0, 0, 0); // manchettes
+  for (const [hip, b, sx] of [[hipL, 'hip_L', -1], [hipR, 'hip_R', 1]]) { // poches cargo
+    const h = sqCast(b, new THREE.Vector3(0, -0.2, 0), new THREE.Vector3(sx, 0, 0)), x = h ? h.x : sx * 0.08;
+    rbox(hip, 0.034, 0.13, 0.1, x, -0.2, 0, seam, 0.014); rbox(hip, 0.042, 0.032, 0.106, x, -0.15, 0, seam, 0.012);
+  }
+  for (const [kn, b, sx] of [[kneeL, 'knee_L', -1], [kneeR, 'knee_R', 1]]) {
+    sqOn(kn, b, 0.085, 0.1, 0.03, 0, -0.035, seam, 0.014); // genouillère
+    part(kn, sqBand(b, -0.524, -0.498, 0.007), sole, 0, 0, 0); // semelle
+    part(kn, sqBand(b, -0.41, -0.375, 0.011), shoeTop, 0, 0, 0); // tige
+    for (const z of [-0.075, -0.1, -0.125]) { const h = sqCast(b, new THREE.Vector3(sx * 0.02, -0.5, z), new THREE.Vector3(0, 1, 0)); if (h && h.y < -0.36) rbox(kn, 0.046, 0.009, 0.013, sx * 0.02, h.y, z, sole, 0.004); } // lacets
+  }
+}
+// Tenues de l'Ombre : costume, gilet tactique ou uniforme d'officier sur le mannequin
+function buildShadowOutfit(s, torso) {
+  const black = mat(0x08080b, { roughness: 0.5 }), white = mat(0xeef0f4, { roughness: 0.6 }), gold = mat(0xc9a227, { metalness: 0.65, roughness: 0.3 });
+  const red = mat(0xc0141e, { roughness: 0.4, emissive: 0x5a0008, emissiveIntensity: 0.35 }), vest = mat(0x2b2f36, { roughness: 0.8 });
+  if (s.outfit === 'suit') {
+    part(torso, sqTorsoPatch('plastron', 0.47, 0.75, () => 0, (v) => 0.006 + v * 0.055, 0.004), white, 0, 0, 0);
+    part(torso, sqTorsoPatch('cravate', 0.46, 0.75, () => 0, (v) => (v < 0.12 ? 0.004 + v * 0.14 : v > 0.9 ? 0.022 : 0.02 - v * 0.008), 0.01), black, 0, 0, 0);
+    for (const y of [0.28, 0.38]) sqOn(torso, 'torso', 0.018, 0.018, 0.016, 0, y, black, 0.008);
+  } else if (s.outfit === 'tactical') {
+    part(torso, sqBand('torso', 0.22, 0.44, 0.024, 5), vest, 0, 0, 0); // gilet
+    for (const d of [-1, 1]) part(torso, sqTorsoPatch('plaque', 0.42, 0.68, () => 0, (v) => 0.15 - v * 0.03, 0.026, d, 10), vest, 0, 0, 0);
+    for (const x of [-0.09, 0, 0.09]) sqOn(torso, 'torso', 0.065, 0.1, 0.085, x, 0.3, black, 0.014); // chargeurs
+  } else {
+    for (const sx of [-1, 1]) for (const y of [0.28, 0.38, 0.48, 0.58]) sqOn(torso, 'torso', 0.02, 0.02, 0.016, sx * 0.055, y, gold, 0.009); // boutons
+    part(torso, sqTorsoPatch('echarpe', 0.11, 0.72, (v) => -0.1 + v * 0.22, () => 0.026, 0.007, -1, 4, 20), red, 0, 0, 0); // écharpe
+  }
+  sqOn(torso, 'torso', 0.045, 0.045, 0.016, 0.1, s.outfit === 'officer' ? 0.6 : 0.56, red, 0.02); // insigne
+}
 export function makeCharMesh(cos) {
   const s = cos.skinDef || SKINS[cos.skin] || SKINS.recrue;
   const pv = SQUELETTE.pivots, at = (grp, v) => { grp.position.set(v[0], v[1], v[2]); return grp; };
   const armored = s.style === 'astro' || s.style === 'knight';
+  // double face : l'intérieur d'un membre reste plein là où une articulation s'ouvre en se pliant
+  const body = (c, roughness) => mat(c, { roughness, side: THREE.DoubleSide });
   const M = {
-    shirt: mat(s.shirt, { roughness: 0.85 }),
-    pants: mat(s.pants, { roughness: 0.9 }),
-    skin: mat(s.skin, { roughness: 0.55 }),
-    hand: s.gloves !== undefined ? mat(s.gloves, { roughness: 0.45 }) : armored ? mat(0xdfe4ee, { roughness: 0.5 }) : mat(s.skin, { roughness: 0.55 }),
-    shoe: mat(s.shoes !== undefined ? s.shoes : 0x23232f, { roughness: 0.4 }),
+    shirt: body(s.shirt, 0.85),
+    pants: body(s.pants, 0.9),
+    skin: body(s.skin, 0.55),
+    hand: s.gloves !== undefined ? body(s.gloves, 0.45) : armored ? body(0xdfe4ee, 0.5) : body(s.skin, 0.55),
+    shoe: body(s.shoes !== undefined ? s.shoes : 0x23232f, 0.4),
   };
   const g = new THREE.Group();
   const hipL = at(new THREE.Group(), pv.hipL), hipR = at(new THREE.Group(), pv.hipR);
@@ -853,7 +1045,11 @@ export function makeCharMesh(cos) {
   // ramenés à la boîte de la tête du mannequin
   const H = SQUELETTE.head, wear = new THREE.Group();
   wear.position.set(0, H.chin, H.z); wear.scale.set(H.w / 0.4, (H.top - H.chin) / 0.5, H.d / 0.42);
-  head.add(wear); buildHead(wear, s);
+  head.add(wear); buildHead(wear, s, head);
+  head.position.y -= 0.007;
+  part(torso, loftGeo('cou', [[0, 0.062, 0.05, 0.06], [0.07, 0.052, 0.04, 0.05], [0.11, 0.04, 0.03, 0.03]], 2, 16, 2), M.skin, 0, 0.745, sqNeckZ());
+  head.scale.setScalar(1.12); // tête un peu plus présente, centrée sur sa zone de touche
+  buildOutfit(s, { torso, hipL, hipR, kneeL, kneeR, elL, elR });
   if (s.extra === 'scarf') { // écharpe autour du cou + pan sur la poitrine
     const sc = mat(s.accent || 0xd94848);
     cyl(torso, 0.085, 0.105, 0.08, 0, 0.72, 0.01, sc, 16).scale.z = 1.1;

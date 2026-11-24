@@ -5,7 +5,7 @@ import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.j
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
-import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints, SHADOW_OUTFITS, SHADOW_OUTFIT_IDS } from './cosmetics.js';
+import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints, ARM, SHADOW_OUTFITS, SHADOW_OUTFIT_IDS } from './cosmetics.js';
 
 // =====================================================================
 // Constants & data
@@ -7872,7 +7872,7 @@ function animateChar(ch, dt) {
   if (ch.mode === 'glide') {
     // PARACHUTE : suspendu sous la toile, jambes ballantes, léger balancement.
     // Les mains sont accrochées aux poignées des sangles : les bras suivent les
-    // poignées (fixées à ±1 m du centre) même quand la toile balance.
+    // poignées (ARM.grip) même quand la toile balance.
     P.hand.visible = false;
     m.rotation.x = 0;
     const swing = Math.sin(gameT * 1.3) * 0.07;
@@ -7884,12 +7884,8 @@ function animateChar(ch, dt) {
     P.head.rotation.set(-0.25, 0, 0);
     // la toile ne pivote PAS indépendamment du corps : les poignées restent
     // exactement sous les mains pendant le balancement (le corps entier oscille)
-    const phi = 0;
-    for (const sgn of [1, -1]) {
-      const hx = sgn * Math.cos(phi) - 2.0 * Math.sin(phi);
-      const hy = sgn * Math.sin(phi) + 2.0 * Math.cos(phi);
-      (sgn > 0 ? P.shR : P.shL).rotation.set(0, 0, Math.atan2(hx - sgn * 0.385, -(hy - 1.54)));
-    }
+    const up = Math.atan2(ARM.grip[0] - ARM.sh[0], ARM.sh[1] - ARM.grip[1]) - Math.atan2(ARM.reach[0], -ARM.reach[1]);
+    P.shR.rotation.set(0, 0, up); P.shL.rotation.set(0, 0, -up);
     return;
   }
   // RÉCEPTION : genoux pliés et bras en équilibre juste après l'atterrissage.
