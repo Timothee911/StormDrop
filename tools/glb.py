@@ -49,7 +49,8 @@ def load(path):
                 m = j['materials'][q['material']] if 'material' in q else {}
                 tx = m.get('pbrMetallicRoughness', {}).get('baseColorTexture'); im = None
                 if tx is not None:
-                    i = j['images'][j['textures'][tx['index']]['source']]; v = j['bufferViews'][i['bufferView']]; im = b[o + v.get('byteOffset', 0):][:v['byteLength']]
+                    i = j['images'][j['textures'][tx['index']]['source']]
+                    if 'bufferView' in i: v = j['bufferViews'][i['bufferView']]; im = b[o + v.get('byteOffset', 0):][:v['byteLength']]
                 out.append(dict(P=P, N=N, F=F, uv=acc(A['TEXCOORD_0']) if 'TEXCOORD_0' in A else np.zeros((len(P), 2)), col=acc(A['COLOR_0'])[:, :3] if 'COLOR_0' in A else np.ones((len(P), 3)), mat=m, img=im))
         for c in nd.get('children', []): walk(c, M)
     for k in j['scenes'][j.get('scene', 0)]['nodes']: walk(k, np.eye(4))

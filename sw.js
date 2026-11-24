@@ -1,5 +1,5 @@
 // STORMDROP service worker: the game works offline once it has been opened one time.
-const VERSION = 'stormdrop-v81';
+const VERSION = 'stormdrop-v82';
 const CORE = [
   './',
   './game.html',
@@ -26,6 +26,7 @@ const CORE = [
   './js/squelette.js',
   './js/flora.js',
   './js/nature.js',
+  './js/meubles.js',
   './js/lobby.js',
   './js/landscape.js',
   './js/lock.js',

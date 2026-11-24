@@ -4,7 +4,7 @@ import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createFlora, scatterPlants, TREE_INFO } from './flora.js';
+import { createFlora, scatterPlants, TREE_INFO, MEUBLE_IDS } from './flora.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints, ARM, SHADOW_OUTFITS, SHADOW_OUTFIT_IDS } from './cosmetics.js';
 
@@ -1656,55 +1656,54 @@ function gableRoof(cx, cz, topY, w, d, roofH, bodyHex, roofHex, opts = {}) {
     hbox(0x3a3a3a, x, topY + roofH + 1.1, z, 1.0, 0.18, 1.0, opts.parent);
   }
 }
-function furniture(cx, cz, y, w, d, skipCorner, accent, avoid) {
-  // Intérieurs meublés : mobilier varié posé dans les quadrants libres.
+// Meubles du pack 3D : instanciés par flora, visibles seulement autour de la caméra.
+{ const FD = LOWQ ? 26 : HIGHQ ? 62 : 46; for (const id of MEUBLE_IDS) flora.kind(id, { R: FD, fade: FD }); }
+const HOME_SETS = ['table', 'bed', 'sofa', 'shelf', 'rug', 'tv', 'desk', 'wardrobe', 'plant', 'armchair', 'boxes', 'bath'];
+const OFFICE_SETS = ['desk', 'files', 'cooler', 'desk', 'lounge', 'vending', 'shelf', 'desk', 'plant', 'boxes', 'printer', 'sofa'];
+const _fc = new THREE.Color();
+function furniture(cx, cz, y, w, d, skipCorner, accent, avoid, office) {
+  // Intérieurs meublés : un ensemble par quadrant libre, dos au mur le plus proche.
   // avoid = [{x, z}] : emplacements à laisser libres (coffres, caisses de munitions)
   const spots = [[-1, -1], [1, -1], [1, 1], [-1, 1]].filter((q) => !(skipCorner && q[0] === -1 && q[1] === -1));
-  const kinds = ['table', 'bed', 'sofa', 'shelf', 'rug', 'tv', 'desk', 'wardrobe', 'plant'];
+  const kinds = office ? OFFICE_SETS : HOME_SETS, used = new Set();
   let placed = 0;
   const maxPieces = Math.min(spots.length, w >= 10 ? 5 : 4); // grandes maisons mieux meublées
   for (let i = 0; i < spots.length && placed < maxPieces; i++) {
-    const [qx, qz] = spots[i], x = cx + qx * w / 4, z = cz + qz * d / 4;
+    const [qx, qz] = spots[i], x = cx + qx * w / 4, z = cz + qz * d / 4, s = qz > 0 ? -1 : 1; // s = -1 : demi-tour
     if (avoid && avoid.some((a) => Math.hypot(a.x - x, a.z - z) < 2)) continue;
-    const k = kinds[(i + randi(0, kinds.length - 1)) % kinds.length];
+    let k = pick(kinds); for (let n = 0; n < 6 && used.has(k); n++) k = pick(kinds);
+    used.add(k);
+    const put = (id, dx = 0, dy = 0, dz = 0, ry = 0, col = null) => flora.add(id, x + s * dx, y + dy, z + s * dz, ry + (s < 0 ? Math.PI : 0), 1, 1, 1, col === null ? null : _fc.setHex(col));
+    const solid = (dx, dz, hx, hz, h) => propBox(x + s * dx, y, z + s * dz, hx, hz, h);
+    const small = (h, list, dx, dz) => put(pick(list), dx, h, dz, rand(6.28));
     if (k === 'table') {
-      hbox(0x9a6a40, x, y + 0.72, z, 1.5, 0.1, 0.95); for (const [a, b] of [[-0.62, -0.38], [0.62, -0.38], [-0.62, 0.38], [0.62, 0.38]]) hbox(0x6e4a2c, x + a, y, z + b, 0.1, 0.72, 0.1); hbox(0xc0392b, x - 1.05, y, z, 0.5, 0.45, 0.5); hbox(0xc0392b, x - 1.05, y + 0.45, z - 0.22, 0.5, 0.55, 0.08);
-      propBox(x, y, z, 0.8, 0.55, 0.85); propBox(x - 1.05, y, z, 0.3, 0.3, 1.0); // table + chaise
-    }
-    else if (k === 'bed') { hbox(0x6e4a2c, x, y, z, 1.4, 0.4, 2.1); hbox(accent, x, y + 0.4, z + 0.15, 1.35, 0.16, 1.7); hbox(0xffffff, x, y + 0.4, z - 0.75, 1.0, 0.2, 0.45); hbox(0x6e4a2c, x, y, z - 1.05, 1.5, 1.0, 0.12); propBox(x, y, z - 0.03, 0.75, 1.08, 1.0); }
-    else if (k === 'sofa') { hbox(accent, x, y, z, 2.0, 0.45, 0.85); hbox(accent, x, y + 0.45, z - 0.35, 2.0, 0.5, 0.18); hbox(accent, x - 0.95, y + 0.45, z, 0.16, 0.3, 0.85); hbox(accent, x + 0.95, y + 0.45, z, 0.16, 0.3, 0.85); propBox(x, y, z, 1.05, 0.48, 0.95); }
-    else if (k === 'shelf') { hbox(0x7a5232, x, y, z, 1.4, 1.8, 0.4); for (let j = 0; j < 3; j++) hbox(pick([0x3b6fd1, 0xe08a2e, 0x2f9e7a, 0xd2483a]), x + rand(-0.4, 0.4), y + 0.35 + j * 0.55, z + 0.05, 0.5, 0.28, 0.3); propBox(x, y, z, 0.72, 0.22, 1.8); }
-    else if (k === 'tv') { // coin télé : meuble + écran + dalle allumée
-      hbox(0x6e4a2c, x, y, z, 1.6, 0.5, 0.5);
-      hbox(0x14161a, x, y + 0.5, z, 1.35, 0.8, 0.08);
-      hbox(0x3b6fd1, x, y + 0.56, z + 0.05, 1.05, 0.6, 0.02);
-      propBox(x, y, z, 0.85, 0.28, 1.32);
-    }
-    else if (k === 'desk') { // bureau + chaise + écran posé
-      hbox(0x8a5a30, x, y + 0.72, z, 1.5, 0.08, 0.7); for (const [a, b] of [[-0.65, -0.28], [0.65, -0.28], [-0.65, 0.28], [0.65, 0.28]]) hbox(0x6e4a2c, x + a, y, z + b, 0.08, 0.72, 0.08);
-      hbox(0xc0392b, x + 0.95, y, z, 0.45, 0.45, 0.45);
-      hbox(0x2b2f36, x - 0.25, y + 0.8, z, 0.3, 0.24, 0.2);
-      propBox(x, y, z, 0.8, 0.4, 0.8);
-    }
-    else if (k === 'wardrobe') { // armoire deux portes
-      hbox(0x7a5232, x, y, z, 1.3, 2.1, 0.6);
-      hbox(0x9a9690, x - 0.12, y + 1.05, z + 0.31, 0.06, 0.06, 0.04);
-      hbox(0x9a9690, x + 0.12, y + 1.05, z + 0.31, 0.06, 0.06, 0.04);
-      propBox(x, y, z, 0.68, 0.32, 2.1);
-    }
-    else if (k === 'plant') { // plante verte en pot
-      hbox(0xb3592a, x, y, z, 0.42, 0.4, 0.42);
-      for (let j = 0; j < 4; j++) hbox(0x2f9e4a, x + rand(-0.15, 0.15), y + 0.4 + j * 0.26, z + rand(-0.15, 0.15), 0.52 - j * 0.09, 0.28, 0.52 - j * 0.09);
-      propBox(x, y, z, 0.24, 0.24, 0.66);
-    }
-    else hbox(accent, x, y + 0.01, z, 2.4, 0.03, 1.6); // tapis : décor plat, sans collision
+      put('table'); put('chaise', 0.1, 0, 0.66, Math.PI + rand(-0.4, 0.4)); small(0.83, ['mug', 'cafe', 'soda'], -0.45, 0.05); small(0.83, ['papiers', 'bloc', 'livres'], 0.3, -0.08);
+      solid(0, 0, 0.8, 0.34, 0.83); solid(0.1, 0.68, 0.3, 0.3, 1.0);
+    } else if (k === 'bed') { // pas de lit dans le pack : le lit d'origine, avec chevet et lampe
+      hbox(0x6e4a2c, x, y, z, 1.4, 0.4, 2.1); hbox(accent, x, y + 0.4, z + s * 0.15, 1.35, 0.16, 1.7); hbox(0xffffff, x, y + 0.4, z - s * 0.75, 1.0, 0.2, 0.45); hbox(0x6e4a2c, x, y, z - s * 1.05, 1.5, 1.0, 0.12);
+      put('chevet', 1.04, 0, -0.72); put('lampebur', 1.04, 0.55, -0.74); solid(0, -0.03, 0.75, 1.08, 0.6); solid(1.04, -0.72, 0.28, 0.28, 0.55);
+    } else if (k === 'sofa') { put('tapisrond', 0, 0.01, 0.75); put('canape', 0, 0, 0, 0, accent); put('coussin', 0, 0.42, 0.12); solid(0, 0, 1.05, 0.48, 0.84); }
+    else if (k === 'armchair') { put('fauteuil', -0.25, 0, 0, rand(-0.3, 0.3), accent); put(pick(['lampe', 'lampe2']), 0.75, 0, -0.25); solid(-0.25, 0, 0.62, 0.48, 0.79); solid(0.75, -0.25, 0.16, 0.16, 1.5); }
+    else if (k === 'lounge') { put('tablerond'); put('pouf', -1.0, 0, 0.25, rand(6.28), accent); put('pouf', 0.95, 0, 0.35, rand(6.28), 0x3b6fd1); small(0.46, ['cafe', 'mug', 'soda'], 0.2, 0.1); put('bloc', -0.25, 0.46, 0); solid(0, 0, 0.55, 0.55, 0.46); }
+    else if (k === 'shelf') { put('biblio'); put('livres', -0.4, 1.75, 0, 0.5); small(1.75, ['cactus', 'trophee'], 0.45, 0); solid(0, 0, 0.75, 0.2, 1.8); }
+    else if (k === 'rug') { put('tapis', 0, 0.01, 0); put('pouf', 0.5, 0.02, -0.1, rand(6.28), accent); put('skate', -0.55, 0.03, 0.3, rand(-0.5, 0.5)); } // décor, sans collision
+    else if (k === 'tv') { put('meubletv'); put('ecran', 0, 0.56, -0.05); put('corbeille', 1.0, 0, 0); solid(0, 0, 0.76, 0.4, 1.4); }
+    else if (k === 'desk') {
+      const [id, h] = pick([['bureau', 0.81], ['bureau2', 0.78], ['bureau3', 0.86]]);
+      put(id); put('ordi', 0.1, h, -0.02); put('lampebur', -0.6, h, -0.12, 0.5); small(h, ['mug', 'cafe', 'soda'], -0.42, 0.18); put('chaise', 0, 0, 0.78, Math.PI + rand(-0.5, 0.5)); put('corbeille', 1.05, 0, 0.1);
+      solid(0, 0, 0.8, 0.42, 0.85); solid(0, 0.78, 0.3, 0.3, 1.0);
+    } else if (k === 'wardrobe') { put('armoire'); small(1.29, ['trophee', 'cactus', 'livres'], -0.3, 0); put('porteman', 1.0, 0, 0); solid(0, 0, 0.66, 0.4, 1.3); solid(1.0, 0, 0.14, 0.14, 1.7); }
+    else if (k === 'plant') { put(pick(['plante1', 'plante2', 'plante3', 'plante4']), 0, 0, 0, rand(6.28)); solid(0, 0, 0.26, 0.26, 0.7); }
+    else if (k === 'boxes') { put('cartons', 0, 0, 0, pick([0, Math.PI])); put('carton', 0.95, 0, 0.15, rand(-0.2, 0.2)); solid(0, 0, 0.6, 0.43, 1.4); solid(0.95, 0.15, 0.3, 0.3, 0.6); }
+    else if (k === 'bath') { put('toilettes', -0.55); put('rouleaux', -1.05, 0, -0.2); put('lavabo', 0.55); solid(-0.55, 0, 0.32, 0.44, 0.95); solid(0.55, 0, 0.46, 0.28, 0.95); }
+    else if (k === 'files') { for (let j = 0; j < 3; j++) put('classeur', (j - 1) * 0.6); put('papiers', -0.55, 1.35, 0); put('cactus', 0.6, 1.35, 0); solid(0, 0, 0.9, 0.34, 1.35); }
+    else if (k === 'cooler') { put('fontaine', -0.3); put('poubelle', 0.35); put('plante4', 0.95, 0, 0, rand(6.28)); solid(-0.3, 0, 0.18, 0.2, 1.35); solid(0.35, 0, 0.22, 0.22, 0.6); }
+    else if (k === 'vending') { put('distrib', -0.3); put('poubelle', 0.6, 0, 0.1); put('extinct', 1.0, 0, -0.2); solid(-0.3, 0, 0.52, 0.54, 1.95); solid(0.6, 0.1, 0.22, 0.22, 0.6); }
+    else { put('bureau2'); put('imprim', -0.35, 0.78, 0); put('papiers', 0.4, 0.78, 0, 0.3); put('carton', 1.15, 0, 0.05); solid(0, 0, 0.8, 0.42, 0.85); solid(1.15, 0.05, 0.28, 0.28, 0.6); } // printer
     placed++;
   }
-  // suspension au plafond : fil + abat-jour chaud, décalée à l'écart de l'escalier
-  // et assez haute pour ne masquer ni la porte ni la fenêtre (2,6 m)
-  const lx = cx + w / 8, lz = cz + d / 8;
-  hbox(0x2b2f36, lx, y + 3.3, lz, 0.05, 0.35, 0.05, null);
-  hbox(0xffe8b0, lx, y + 2.98, lz, 0.55, 0.3, 0.55, null);
+  // suspension au plafond, décalée à l'écart de l'escalier et au-dessus des têtes
+  flora.add(office ? 'plafond2' : 'plafond', cx + w / 8, y + 2.62, cz + d / 8, 0, 1);
 }
 // collider de décor indestructible (mobilier, coffres, caisses, pads…)
 const propCols = [];
@@ -1869,7 +1868,7 @@ function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
     // buissons taillés de chaque côté de la porte
     for (const sgn of [-1, 1]) {
       const bx = sgn * (DW * 0.5 + 1.1);
-      hbox(0x2f7a3a, ds.x + (ds.ax === 'x' ? bx : ds.out * (T / 2 + 1.2)), baseY + 0.5, ds.z + (ds.ax === 'x' ? ds.out * (T / 2 + 1.2) : bx), 1.1, 1.0, 1.1);
+      { const gx = ds.x + (ds.ax === 'x' ? bx : ds.out * (T / 2 + 1.2)), gz = ds.z + (ds.ax === 'x' ? ds.out * (T / 2 + 1.2) : bx); flora.add('bush', gx, terrainH(gx, gz) + 0.1, gz, rand(6.28), 0.72, 0.78, 0.72, _fc.setHSL(0.31, 0.6, 0.28)); }
     }
     // banc / table de pique-nique devant, parfois
     if (R() < 0.5) {
@@ -1950,7 +1949,7 @@ function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
     // coffre posé avant le mobilier de l'étage
     const tAvoid = [];
     if (R() < 0.5) { const c = spawnChest(cx + w / 4 + rand(-1, 1), fy - 0.02, cz + rand(-d / 4, d / 4)); tAvoid.push({ x: c.x, z: c.z }); }
-    furniture(cx + w / 8, cz + d / 8, fy, w * 0.7, d * 0.7, true, PAL.accent, tAvoid);
+    furniture(cx + w / 8, cz + d / 8, fy, w * 0.7, d * 0.7, true, PAL.accent, tAvoid, R() < 0.6);
     lootSpots.push({ x: cx + rand(0, w / 3), y: fy + 0.05, z: cz + rand(0, d / 3) });
   }
   // rooftop: parapet, water tank, AC units, antenna

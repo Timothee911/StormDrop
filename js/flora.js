@@ -1,8 +1,9 @@
-// Nature : arbres, rochers, buissons, fleurs et herbes du pack (données dans nature.js).
+// Nature (nature.js) et meubles (meubles.js) des packs 3D.
 // Tout est instancié. Les arbres ont deux niveaux de détail (proche / lointain) ; les petites
 // plantes ne sont dessinées qu'autour de la caméra et rapetissent au loin (pas d'apparition brusque).
 import * as THREE from 'three';
 import { NATURE } from './nature.js';
+import { MEUBLES } from './meubles.js';
 import { terrainH, ISLAND_R, OVAL_X, OVAL_Z, mulberry32, fbm, inPOI, biomeW, GROTTO } from './world.js';
 
 const buf = (s) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; };
@@ -14,13 +15,15 @@ function partGeo(p) {
     g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(new Int16Array(buf(p.p)), (v) => v / p.q), 3));
     g.setAttribute('normal', new THREE.BufferAttribute(Float32Array.from(N, (v) => v / 127), 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(new Int16Array(buf(p.u)), (v) => v / 1024), 2));
+    if (p.u) g.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from(new Int16Array(buf(p.u)), (v) => v / 1024), 2));
     g.setAttribute('color', new THREE.BufferAttribute(Float32Array.from(C, (v) => v / 200), 3));
     g.setIndex(new THREE.BufferAttribute(new Uint16Array(buf(p.i)), 1));
     GEO.set(p, g);
   }
   return g;
 }
+const DATA = { ...NATURE, ...MEUBLES };
+export const MEUBLE_IDS = Object.keys(MEUBLES);
 const LEAFY = { leaf: 1, leafr: 1, pine: 1 }, CUT = { leaf: 1, leafr: 1, pine: 1, leaves: 1, flowers: 1 };
 export const TREE_INFO = Object.fromEntries(Object.entries(NATURE).filter(([, o]) => o.far).map(([k, o]) => [k, { can: o.can, top: o.top }]));
 
@@ -39,8 +42,8 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
   function material(n, o) {
     const key = [n, o.sway || 0, o.fade || 0, o.snow ? 1 : 0].join('|');
     if (matCache.has(key)) return matCache.get(key);
-    const leafy = LEAFY[n], plant = CUT[n] || n === '';
-    const m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, map: n ? tex(n) : null, side: plant ? THREE.DoubleSide : THREE.FrontSide, alphaTest: CUT[n] ? 0.35 : 0 });
+    const leafy = LEAFY[n], plant = CUT[n] || n === '', plain = n === '' || n[0] === 'f' && n.length < 3; // f, ft : meubles
+    const m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, map: plain ? null : tex(n), side: plant || plain ? THREE.DoubleSide : THREE.FrontSide, alphaTest: CUT[n] ? 0.35 : 0 });
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uWind = wind; sh.uniforms.uCamP = uCam;
       let head = '\nuniform float uWind; uniform vec3 uCamP;', body = '\nvec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);';
@@ -73,7 +76,7 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
   const kinds = new Map(), dirtyKinds = new Set();
   // jeu de meshes instanciés d'un niveau de détail
   function lod(id, level, parts, o, cast) {
-    return { id, level, ims: null, cap: 0, parts: parts.map((p) => ({ p, geo: partGeo(p), o: { ...o, sway: LEAFY[p.t] || CUT[p.t] || p.t === '' ? o.sway : 0, snow: p.t === 'pine' && o.snow }, tinted: !!(LEAFY[p.t] || p.t === '') })), cast };
+    return { id, level, ims: null, cap: 0, parts: parts.map((p) => ({ p, geo: partGeo(p), o: { ...o, sway: LEAFY[p.t] || CUT[p.t] || p.t === '' ? o.sway : 0, snow: p.t === 'pine' && o.snow }, tinted: !!(LEAFY[p.t] || p.t === '' || p.t === 'ft') })), cast };
   }
   function ensure(L, n) {
     if (L.ims && L.cap >= n) return;
@@ -108,7 +111,7 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
   const CELLS = 24;
   // id : modèle ; o : { R (distance du détail), sway, fade, snow, cast }
   function kind(id, o) {
-    const d = NATURE[id];
+    const d = DATA[id];
     const K = { id, R: o.R || 0, all: [], cells: null, near: lod(id, 'near', d.near, o, !!o.cast), far: d.far ? lod(id, 'far', d.far, o, false) : null, whole: !!o.whole };
     if (!d.far && !o.whole) K.cells = new Map();
     kinds.set(id, K); return K;

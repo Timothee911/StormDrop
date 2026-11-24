@@ -13,6 +13,12 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 - `js/flora.js` les dessine par instances : arbres détaillés près de la caméra, simplifiés au loin ; petites plantes autour de la caméra seulement. Le feuillage collé à la caméra se dissout pour ne pas boucher la vue.
 - Les tirs et la récolte utilisent des volumes simples invisibles ; les buissons et plantes n'ont pas de collision.
 
+## Meubles (pack 3D)
+
+- Maisons et immeubles sont meublés avec l'« Office Pack » : bureaux équipés, canapés, fauteuils, bibliothèques, armoires, salles d'eau, cartons, plantes, distributeurs, fontaines, imprimantes, lampes. Les immeubles mélangent étages de bureaux et logements.
+- `tools/meubles2js.py` remet chaque modèle à l'échelle, le simplifie et met ses couleurs dans les sommets (`js/meubles.js`, 0,5 Mo, aucune image).
+- Les gros meubles sont solides, les petits objets sont décoratifs. Un meuble n'est dessiné qu'à proximité de la caméra.
+
 ## Feel de la pioche
 
 - **Sons d'impact différenciés** : l'audio reste 100 % synthétisé, mais chaque matériau (bois, pierre, métal) a sa signature — pitch, filtration, résonance — et les crits montent le tout d'un cran. Chaque coup est légèrement détuné au hasard pour ne jamais sonner deux fois pareil.
