@@ -942,7 +942,7 @@ const sqNeckZ = () => { let z0 = 9, z1 = -9; for (const t of sqTris('head')) for
 // --- Visage : une seule surface sculptée sur l'avant de la tête (arcades, orbites, nez,
 // pommettes, lèvres, menton, mâchoire), teintée par sommet (lèvres, joues, ombres des yeux),
 // plus des yeux sphériques sous paupières, des sourcils et des oreilles.
-const EYE = { x: 0.0365, y: 0.193, r: 0.0222 };
+const EYE = { x: 0.0385, y: 0.1945 };
 const gau = (v, s) => Math.exp(-v * v / (2 * s * s));
 const sst = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 // relief du visage : poussée vers l'avant (z) et vers l'extérieur (r) au point (x, y)
@@ -956,8 +956,8 @@ function faceRelief(x, y) {
   z -= 0.005 * gau(X - 0.0068, 0.0028) * gau(y - 0.1335, 0.0026); // narines
   // arcades, orbites, coin interne de l'œil
   z += 0.0065 * gau(X - 0.034, 0.024) * gau(y - 0.2235, 0.0085) - 0.002 * gau(X, 0.006) * gau(y - 0.22, 0.008);
-  z -= 0.0125 * Math.exp(-Math.pow((X - EYE.x) / 0.0225, 4) - Math.pow((y - EYE.y) / 0.0165, 4));
-  z -= 0.004 * gau(X - 0.0145, 0.005) * gau(y - 0.193, 0.011);
+  z -= 0.0048 * Math.exp(-Math.pow((X - EYE.x) / 0.027, 4) - Math.pow((y - EYE.y - 0.002) / 0.021, 4));
+  z -= 0.0022 * gau(X - 0.0135, 0.004) * gau(y - 0.193, 0.011);
   // pommettes, creux des joues, sillon
   r += 0.0055 * gau(X - 0.064, 0.018) * gau(y - 0.166, 0.013);
   r -= 0.0008 * gau(X - 0.058, 0.018) * gau(y - 0.126, 0.014);
@@ -980,7 +980,7 @@ function faceTint(x, y) {
   const X = Math.abs(x), c = [1, 1, 1], mix = (k, r, g, b) => { c[0] *= 1 + (r - 1) * k; c[1] *= 1 + (g - 1) * k; c[2] *= 1 + (b - 1) * k; };
   mix(gau(X - 0.052, 0.015) * gau(y - 0.148, 0.013) * 0.8, 1, 0.8, 0.76); // joues
   mix(gau(X, 0.012) * gau(y - 0.143, 0.008) * 0.55, 1, 0.84, 0.8); // bout du nez
-  mix(Math.exp(-Math.pow((X - EYE.x) / 0.024, 4) - Math.pow((y - EYE.y) / 0.017, 4)), 0.9, 0.78, 0.74); // orbites
+  mix(Math.exp(-Math.pow((X - EYE.x) / 0.024, 4) - Math.pow((y - EYE.y) / 0.017, 4)), 0.94, 0.84, 0.81); // orbites
   const m = y - 5 * X * X;
   const up = 0.1125 - 0.0028 * gau(X, 0.003) - 5 * X * X, lo = 0.0905 + 8 * X * X;
   mix(sst(up + 0.0016, up - 0.0006, m) * sst(lo - 0.0016, lo + 0.0006, m) * sst(0.0255, 0.022, X), 0.84, 0.53, 0.5); // lèvres
@@ -1028,11 +1028,88 @@ function faceGeo() {
   });
 }
 // z du visage sculpté (repli : la tête) et distance de la peau dans la direction a
+const FZ = { w: 168, h: 196, x0: -0.105, y0: 0.055, d: 0.00125, a: null };
 function faceZ(x, y) {
-  if (!SQ_TRI.has('face')) { const g = faceGeo(), a = g.attributes.position, x2 = g.index, T = []; for (let k = 0; k < x2.count; k += 3) T.push([0, 1, 2].map((c) => new THREE.Vector3().fromBufferAttribute(a, x2.getX(k + c)))); SQ_TRI.set('face', T); }
-  return Math.min(sqZ('face', x, y), sqZ('head', x, y));
+  if (!FZ.a) {
+    const g = faceGeo(), A = g.attributes.position, X = g.index, T = [], Z = FZ.a = new Float32Array(FZ.w * FZ.h).fill(NaN);
+    for (let k = 0; k < X.count; k += 3) {
+      const t = [0, 1, 2].map((c) => new THREE.Vector3().fromBufferAttribute(A, X.getX(k + c))); T.push(t);
+      const gx = t.map((v) => (v.x - FZ.x0) / FZ.d), gy = t.map((v) => (v.y - FZ.y0) / FZ.d), D = (gy[1] - gy[2]) * (gx[0] - gx[2]) + (gx[2] - gx[1]) * (gy[0] - gy[2]);
+      if (Math.abs(D) < 1e-9) continue;
+      for (let j = Math.max(0, Math.ceil(Math.min(...gy))); j <= Math.min(FZ.h - 1, Math.max(...gy)); j++) for (let i = Math.max(0, Math.ceil(Math.min(...gx))); i <= Math.min(FZ.w - 1, Math.max(...gx)); i++) {
+        const u = ((gy[1] - gy[2]) * (i - gx[2]) + (gx[2] - gx[1]) * (j - gy[2])) / D, v = ((gy[2] - gy[0]) * (i - gx[2]) + (gx[0] - gx[2]) * (j - gy[2])) / D, w = 1 - u - v;
+        if (u < -1e-6 || v < -1e-6 || w < -1e-6) continue;
+        const z = u * t[0].z + v * t[1].z + w * t[2].z, q = j * FZ.w + i; if (!(Z[q] <= z)) Z[q] = z;
+      }
+    }
+    SQ_TRI.set('face', T);
+  }
+  const i = Math.min(FZ.w - 2, Math.max(0, (x - FZ.x0) / FZ.d)), j = Math.min(FZ.h - 2, Math.max(0, (y - FZ.y0) / FZ.d)), I = Math.floor(i), J = Math.floor(j), q = J * FZ.w + I, Z = FZ.a;
+  const z = (Z[q] * (1 - i + I) + Z[q + 1] * (i - I)) * (1 - j + J) + (Z[q + FZ.w] * (1 - i + I) + Z[q + FZ.w + 1] * (i - I)) * (j - J);
+  return Number.isNaN(z) ? sqZ('head', x, y) : z;
 }
-const IRIS = [0x3f7fb8, 0x6b4a2a, 0x4d8a55, 0x7a8a96, 0x8a6a2c];
+const IRIS = [0x2f8fe0, 0x8a4f24, 0x35a867, 0x5f7fd0, 0xc07a1e];
+// --- Yeux en amande, plaqués sur le visage : blanc ombré sous la paupière, iris dégradé,
+// pupille, reflets, trait de cils en virgule. Tout est découpé dans la forme de l'œil,
+// donc rien ne dépasse et le regard reste lisible de loin.
+const EYE_W = 0.0245, EYE_U = 0.0168, EYE_L = 0.0112;
+// bords de l'œil à l'abscisse q (-1 = coin interne, 1 = coin externe)
+const eyeTilt = (q) => EYE.y + 0.0022 * q;
+const eyeTop = (q) => eyeTilt(q) + EYE_U * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(q + 0.06) / (q > -0.06 ? 1.06 : 0.94), 2.3)), 0.8);
+const eyeLow = (q) => eyeTilt(q) - EYE_L * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(q - 0.1) / (q > 0.1 ? 0.9 : 1.1), 2.2)), 0.85);
+// point de l'œil posé sur le visage, légèrement bombé
+function eyePt(sx, q, y, off) {
+  const x = EYE.x + q * EYE_W, d = Math.min(1, q * q * 0.8 + ((y - EYE.y) / 0.02) ** 2 * 0.5);
+  return [sx * x, y, faceZ(sx * x, y) - off - 0.0026 * (1 - d)];
+}
+// surface (u, v) ∈ [0, 1]² avec teinte éventuelle ; sx retourne les faces pour l'œil gauche
+function eyeSheet(key, sx, nu, nv, f, tint) {
+  return geo(`eye${key}${sx}`, () => {
+    const pos = [], col = [], idx = [], w = nu + 1;
+    for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) { const u = i / nu, v = j / nv; pos.push(...f(u, v)); if (tint) { const t = tint(u, v); col.push(t[0], t[1], t[2]); } }
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * w + i, b = a + w; if (sx > 0) idx.push(a, b, b + 1, a, b + 1, a + 1); else idx.push(a, b + 1, b, a, a + 1, b + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    if (tint) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx); g.computeVertexNormals(); return g;
+  });
+}
+// disque (iris, pupille, reflet) rogné par les paupières
+function eyeDisc(key, sx, cx, cy, r, off, tint, clipTop = 0.0012) {
+  return eyeSheet(key, sx, 28, 6, (u, v) => {
+    const a = u * Math.PI * 2, x = cx + Math.cos(a) * r * v * -1, q = Math.max(-0.98, Math.min(0.98, x / EYE_W));
+    const y = Math.max(eyeLow(q) + 0.0004, Math.min(eyeTop(q) - clipTop, cy + Math.sin(a) * r * v));
+    return eyePt(sx, q, y, off);
+  }, tint);
+}
+function buildEyes(head, s, skinTone) {
+  const id = [...(s.name || '')].reduce((n, c) => n + c.charCodeAt(0), 0), ec = new THREE.Color(s.eyes || IRIS[id % IRIS.length]);
+  const DS = THREE.DoubleSide, white = mat(0xffffff, { roughness: 0.35, vertexColors: true, emissive: 0x8a8f98, emissiveIntensity: 0.35, side: DS });
+  const iris = mat(ec.getHex(), { roughness: 0.2, vertexColors: true, emissive: ec.getHex(), emissiveIntensity: 0.3, side: DS });
+  const pupil = mat(0x06060a, { roughness: 0.2, side: DS }), shine = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.9, side: DS });
+  const lash = mat(0x140d0b, { roughness: 0.9, side: DS }), soft = mat(skinTone(0x4a1a12, 0.5), { roughness: 0.7, side: DS });
+  const brow = mat(s.brows || s.hair || 0x2f2318, { roughness: 0.95, side: DS });
+  const IX = -0.0012, IY = EYE.y + 0.0026, IR = 0.0136;
+  for (const sx of [-1, 1]) {
+    part(head, eyeSheet('white', sx, 24, 8, (u, v) => { const q = u * 2 - 1; return eyePt(sx, q, eyeLow(q) + (eyeTop(q) - eyeLow(q)) * v, 0.0012); },
+      (u, v) => { const k = 1 - 0.36 * sst(0.62, 1, v) - 0.12 * Math.abs(u * 2 - 1) ** 3; return [k, k * 0.985, k * 1.0]; }), white, 0, 0, 0);
+    part(head, eyeDisc('iris', sx, IX, IY, IR, 0.0019, (u, v) => { const down = -Math.sin(u * Math.PI * 2), k = v > 0.86 ? 0.22 : (0.72 + 0.5 * v * Math.max(0, down) - 0.28 * Math.max(0, -down)) * (0.8 + 0.3 * v); return [k, k, k]; }), iris, 0, 0, 0);
+    part(head, eyeDisc('pupil', sx, IX, IY, 0.0062, 0.0024), pupil, 0, 0, 0);
+    part(head, eyeDisc('shine' + sx, sx, IX - sx * 0.0048, IY + 0.0046, 0.0034, 0.0029, null, 0.002), shine, 0, 0, 0);
+    part(head, eyeDisc('shineb' + sx, sx, IX + sx * 0.0046, IY - 0.0052, 0.0016, 0.0029), shine, 0, 0, 0);
+    // trait de cils : fin au coin interne, épais et relevé en virgule au coin externe
+    part(head, eyeSheet('lash', sx, 24, 2, (u, v) => {
+      const q = -1.02 + u * 2.2, e = Math.max(0, q - 1), qq = Math.min(q, 1), th = (0.0012 + 0.0032 * sst(-1, 0.5, q)) * (1 - sst(1, 1.18, q) * 0.9);
+      return eyePt(sx, q, eyeTop(Math.max(-1, qq)) + e * 0.02 - 0.0012 + th * v, 0.0034);
+    }), lash, 0, 0, 0);
+    part(head, eyeSheet('lashlow', sx, 18, 1, (u, v) => { const q = -0.75 + u * 1.75; return eyePt(sx, q, eyeLow(q) - 0.0009 + 0.0013 * v, 0.0024); }), soft, 0, 0, 0);
+    part(head, eyeSheet('fold', sx, 20, 1, (u, v) => { const q = -0.85 + u * 1.9; return eyePt(sx, q, eyeTop(Math.max(-1, Math.min(1, q * 0.94))) + 0.0052 + 0.0011 * Math.sin(u * Math.PI) * v, 0.0008); }), soft, 0, 0, 0); // pli de la paupière
+    part(head, sqGrid('brow' + sx, 18, 3, (u, v, rim) => { // sourcil : plein près du nez, effilé vers la tempe
+      const q = sx > 0 ? u : 1 - u, x = sx * (0.0135 + q * 0.0535), th = 0.0068 * (1 - 0.72 * Math.pow(q, 2)) * Math.sqrt(sst(-0.15, 0.16, q));
+      const y = 0.2305 + 0.0078 * Math.sin(Math.min(1, q * 1.15) * Math.PI * 0.66) - 0.0075 * sst(0.55, 1, q) + (v * 2 - 1) * th;
+      return [x, y, faceZ(x, y) + (rim ? 0.003 : -0.0036)];
+    }), brow, 0, 0, 0);
+  }
+}
 function buildFace(head, s) {
   const skin = mat(s.skin, { roughness: 0.55 }), base = new THREE.Color(s.skin);
   const tone = (c, k) => mat(base.clone().lerp(new THREE.Color(c), k).getHex(), { roughness: 0.55 });
@@ -1045,36 +1122,9 @@ function buildFace(head, s) {
     part(e, SPHERE_LO, skin, 0, -0.021, -0.004, 0.008, 0.011, 0.0105);
   }
   if (s.extra === 'shades' || s.extra === 'visor') return; // yeux cachés
-  const id = [...(s.name || '')].reduce((n, c) => n + c.charCodeAt(0), 0), ec = new THREE.Color(s.eyes || IRIS[id % IRIS.length]);
-  const white = mat(0xf4f5f8, { roughness: 0.2 }), iris = mat(ec.getHex(), { roughness: 0.12 }), ring = mat(ec.clone().lerp(new THREE.Color(0x05060a), 0.65).getHex(), { roughness: 0.2 });
-  const pupil = mat(0x050507, { roughness: 0.08 }), shine = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.7 });
-  const lash = mat(0x17100d, { roughness: 0.8 }), brow = mat(s.brows || s.hair || 0x2f2318, { roughness: 0.95 }), lid = tone(0x7a3a2c, 0.12);
-  const R = EYE.r;
-  for (const sx of [-1, 1]) {
-    const e = new THREE.Group(); e.position.set(sx * EYE.x, EYE.y, faceZ(sx * EYE.x, EYE.y) + 0.0105); head.add(e);
-    part(e, EYE_GEO.ball(), white, 0, 0, 0, R, R, R);
-    const g = new THREE.Group(); g.rotation.set(-0.02, -sx * 0.06, 0); e.add(g); // regard droit devant
-    part(g, EYE_GEO.cap(0.74), ring, 0, 0, 0, R * 1.008, R * 1.008, R * 1.008);
-    part(g, EYE_GEO.cap(0.64), iris, 0, 0, 0, R * 1.02, R * 1.02, R * 1.02);
-    part(g, EYE_GEO.cap(0.33), pupil, 0, 0, 0, R * 1.032, R * 1.032, R * 1.032);
-    part(g, SPHERE_LO, shine, 0.0052, 0.0058, -R * 0.965, 0.0028, 0.0028, 0.0016);
-    const k = R * 1.09, tilt = sx * 0.05; // paupières : coques autour de l'œil, coin externe un peu relevé
-    part(e, EYE_GEO.shell(0, 1.04), lid, 0, 0, 0, k, k, k).rotation.z = tilt;
-    part(e, EYE_GEO.shell(0.99, 0.13), lash, 0, 0, 0, k * 1.035, k * 1.035, k * 1.035).rotation.z = tilt;
-    part(e, EYE_GEO.shell(Math.PI - 1.08, 1.08), lid, 0, 0, 0, k * 0.99, k * 0.99, k * 0.99).rotation.z = tilt * 0.6;
-    part(head, sqGrid('brow' + sx, 14, 3, (u, v, rim) => { // sourcil : arc effilé collé à l'arcade
-      const q = sx > 0 ? u : 1 - u, x = sx * (0.0155 + q * 0.046), th = 0.0062 * (1 - 0.62 * Math.pow(q, 2.2)) * Math.sqrt(sst(-0.12, 0.2, q));
-      const y = 0.2275 + 0.0052 * Math.sin(Math.min(1, q * 1.1) * Math.PI * 0.72) - 0.0055 * sst(0.6, 1, q) + (v * 2 - 1) * th;
-      return [x, y, faceZ(x, y) + (rim ? 0.003 : -0.0032)];
-    }), brow, 0, 0, 0);
-  }
+  buildEyes(head, s, (c, k) => base.clone().lerp(new THREE.Color(c), k).getHex());
 }
 const SPHERE_LO = new THREE.SphereGeometry(1, 12, 8);
-const EYE_GEO = {
-  ball: () => geo('eyeball', () => new THREE.SphereGeometry(1, 18, 12)),
-  cap: (t) => geo('eyecap' + t, () => new THREE.SphereGeometry(1, 20, 4, 0, Math.PI * 2, 0, t).rotateX(-Math.PI / 2)),
-  shell: (a, l) => geo(`eyelid${r3(a)},${r3(l)}`, () => new THREE.SphereGeometry(1, 20, 6, 0, Math.PI * 2, a, l)),
-};
 
 // --- Vêtements communs : ceinture, col, fermeture, poches, manchettes, genouillères, baskets
 function buildOutfit(s, P) {

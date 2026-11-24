@@ -7,7 +7,8 @@ const puppeteer = require(path.resolve(process.cwd(), 'node_modules', 'puppeteer
 const BASE = 'http://localhost:8090';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
-const check = (ok, label) => { console.log((ok ? 'PASS' : 'FAIL') + ': ' + label); if (!ok) fails++; };
+// en CI, chaque échec est aussi publié en annotation (lisible sans ouvrir le journal)
+const check = (ok, label) => { console.log((ok ? 'PASS' : 'FAIL') + ': ' + label); if (!ok) { fails++; if (process.env.GITHUB_ACTIONS) console.log('::error title=qa-loot-trail::' + label); } };
 (async () => {
   const browser = await puppeteer.launch({ headless: true, protocolTimeout: 600000, args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
@@ -26,14 +27,21 @@ const check = (ok, label) => { console.log((ok ? 'PASS' : 'FAIL') + ': ' + label
   await frame.waitForFunction(() => window.__game && window.__game.player, { timeout: 60000 }).catch(() => {});
   await sleep(1500);
   await frame.evaluate(() => { try { window.__game.jumpFromBus(); } catch (e) {} });
-  await frame.evaluate(() => window.advanceTime(30000));
+  // le joueur est maintenu en vie : un bot croisé à l'atterrissage fausserait tout l'essai
+  await frame.evaluate(() => {
+    const G = window.__game;
+    window.__adv = (ms) => { for (let t = 0; t < ms; t += 100) { if (G.player.alive) { G.player.hp = 100; G.player.shield = 100; } window.advanceTime(Math.min(100, ms - t)); } };
+    window.__adv(30000);
+  });
   await frame.evaluate(() => {
     const G = window.__game, p = G.player;
     const x = 20, z = 20;
     p.pos.set(x, G.terrainH(x, z) + 0.1, z); p.vel.y = 0;
     G.player.cool = 0; G.player.swing = 0;
   });
-  await frame.evaluate(() => window.advanceTime(1500));
+  await frame.evaluate(() => window.__adv(1500));
+  const st = await frame.evaluate(() => { const p = window.__game.player; return { alive: p.alive, mode: p.mode, water: !!p.inWater, item: p.item && p.item.id, over: window.__game.matchOver }; });
+  check(st.alive && st.mode === 'ground' && !st.water && st.item === 'pickaxe' && !st.over, 'joueur au sol, pioche en main ' + JSON.stringify(st));
 
   // --- 1. traînée de frappe : ruban visible en pleine frappe, éteint après ---
   const trail = await frame.evaluate(() => {
@@ -44,13 +52,18 @@ const check = (ok, label) => { console.log((ok ? 'PASS' : 'FAIL') + ': ' + label
     window.advanceTime(160); // pleine frappe
     const active = G.pickTrailPool.filter((t) => t.ch);
     const mid = active.map((t) => ({ visible: t.m.visible, count: t.m.geometry.drawRange.count, samples: t.samples.length }));
-    window.advanceTime(1500); // le coup est retombé
-    const end = G.pickTrailPool.map((t) => ({ ch: !!t.ch, visible: t.m.visible }));
+    window.__adv(1500); // le coup est retombé
+    // un bot peut frapper au même moment : on exige que la traînée du joueur soit éteinte et
+    // qu'aucune ne reste accrochée à un perso qui ne frappe plus (trois relevés de suite)
+    const mine = G.pickTrailPool.filter((t) => t.ch === p).length;
+    let stuck = G.pickTrailPool.slice();
+    for (let k = 0; k < 3; k++) { window.__adv(300); stuck = stuck.filter((t) => (t.ch ? !(t.ch.swing > 0) : t.m.visible)); }
+    const end = { mine, stuck: stuck.length, pool: G.pickTrailPool.length };
     return { mid, end };
   });
   check(trail.mid.length > 0 && trail.mid.some((t) => t.visible && t.count > 6 && t.samples >= 2),
-    'traînée visible en pleine frappe (éventail > 1 segment)');
-  check(trail.end.every((t) => !t.ch && !t.visible), 'traînée relâchée et éteinte après le coup');
+    'traînée visible en pleine frappe (éventail > 1 segment) ' + JSON.stringify(trail.mid));
+  check(trail.end.mine === 0 && trail.end.stuck === 0, 'traînée relâchée et éteinte après le coup ' + JSON.stringify(trail.end));
 
   // --- 2. aspiration du loot : icônes en vol, compteur retardé puis rattrapé ---
   const fly = await frame.evaluate(() => {

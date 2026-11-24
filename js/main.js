@@ -9209,6 +9209,7 @@ function updatePickTrail(ch, dt) {
     tr.ch = ch; tr.samples.length = 0; tr.fade = 1;
   }
   if (!tr || tr.ch !== ch) return;
+  tr.seenF = frameN;
   if (on) {
     if (tr.fade < 1) tr.samples.length = 0; // nouveau coup : on repart de zéro
     tr.fade = 1;
@@ -9260,6 +9261,15 @@ function updatePickTrail(ch, dt) {
   tr.g.attributes.position.needsUpdate = true;
   tr.g.attributes.color.needsUpdate = true;
   tr.m.visible = true;
+}
+
+// Un perso qui meurt, nage, s'éloigne ou monte en voiture en plein coup n'est plus animé
+// jusqu'à updatePickTrail : sa traînée s'éteint ici au lieu de rester figée à l'écran
+// (bots lointains : animés une image sur quatre, d'où la marge de 5 images).
+function sweepPickTrails(dt) {
+  for (const tr of pickTrailPool) {
+    if (tr.ch && frameN - tr.seenF > 5) { tr.fade -= dt * 7; tr.m.visible = false; if (tr.fade <= 0) { tr.ch = null; tr.samples.length = 0; } }
+  }
 }
 
 // ---- oiseaux : posés au sol, ils s'envolent quand un personnage approche,
@@ -9643,6 +9653,7 @@ function step(dt) {
     updateMarker(dt); updatePing(dt);
     frameN++;
     for (const c of chars) if (c.isPlayer) updateChar(c, dt);
+    sweepPickTrails(dt);
     return;
   }
   waterT.value += dt; windT.value += dt; SKY_T.value += dt;
@@ -9664,6 +9675,7 @@ function step(dt) {
     c.lodAcc = 0;
     updateChar(c, dt);
   }
+  sweepPickTrails(dt);
   updateImpostors();
   if (frameN % 180 === 0 && loot.length > 150) { let j = 0; for (let i = 0; i < loot.length; i++) if (loot[i].alive) loot[j++] = loot[i]; loot.length = j; }
   updatePadsVents(dt);
