@@ -166,7 +166,7 @@ export function scatterPlants(flora, dirtW, { lowq, highq }) {
   K('bush', 190, { sway: 0.02, cast: true }); K('bushf', 180, { sway: 0.02, cast: true });
   K('fern', 100, { sway: 0.05 }); K('plant', 95, { sway: 0.03 }); K('plant2', 80, { sway: 0.03 }); K('clover', 45, { sway: 0.03 });
   K('flowA', 80, { sway: 0.05 }); K('flowB', 80, { sway: 0.05 }); K('mush', 60); K('shelf', 60);
-  K('wispy', 80, { sway: 0.06 }); K('tall', 85, { sway: 0.07 });
+  K('wispy', 80, { sway: 0.06 });
   for (let i = 0; i < 3; i++) K('peb' + i, 70);
   const col = new THREE.Color();
   // pose n plantes là où ok(contexte) l'accepte ; grp = taille d'un petit groupe autour du point
@@ -194,7 +194,6 @@ export function scatterPlants(flora, dirtW, { lowq, highq }) {
   scatter(['flowA', 'flowB'], 900, (c) => meadow(c) && c.b.forest < 0.5 && c.f > 0.42, [0.8, 1.3], { grp: 5 });
   scatter(['mush'], 420, (c) => meadow(c) && c.b.forest > 0.2, [0.5, 1.05], { grp: 4 });
   scatter(['shelf'], 90, (c) => meadow(c) && c.b.forest > 0.2, [0.7, 1.1]);
-  scatter(['tall', 'tall', 'tall', 'tall', 'wispy'], 2600, (c) => meadow(c) && c.f > 0.3, [0.8, 1.35], { hue: [0.24, 0.3, 0.82], grp: 5 });
   scatter(['wispy'], 260, (c) => c.b.desert > 0.4 && c.h > 2.2, [0.7, 1.1], { hue: [0.12, 0.5, 0.8], grp: 2 });
   scatter(['peb0', 'peb1', 'peb2'], 1500, (c) => c.b.snow < 0.5 && (c.dirt > 0.45 || c.b.desert > 0.4 || c.h < 2.6), [0.6, 1.9], { grp: 4, sl: 2.2, sink: 0.04 });
 }

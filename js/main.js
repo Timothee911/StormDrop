@@ -4,6 +4,8 @@ import { initAudio, sfx, setVolumes, playMusic, stopMusic } from './audio.js';
 import { loadSettings, saveSettings, settingsForm, keyLabel } from './settings.js';
 import { createOutline } from './outline.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createGrass, GRASS_GLSL } from './grass.js';
+import { M, S, houseMaterial, glassMaterial, prism, tileRows, gableParts, archPoly, awningGeo } from './housemat.js';
 import { createFlora, scatterPlants, TREE_INFO, MEUBLE_SIZE } from './flora.js';
 import { buildGun, SHARED_WEAPON_GEOS } from './weapons.js';
 import { SKINS, BACKPACKS, PICKAXES, GLIDERS, EMOTES, DEFAULT_LOADOUT, makeCharMesh as makeCharMeshCos, makePickaxe, poseEmote, relaxJoints, ARM, SHADOW_OUTFITS, SHADOW_OUTFIT_IDS } from './cosmetics.js';
@@ -295,6 +297,8 @@ function groundDirtW(x, z, sl) {
 }
 const TERRAIN_SIZE = WORLD_R * 2 + 120;
 let terrainMeshRef = null; // exposé à la QA : le maillage rendu doit épouser terrainH
+let grassT = null; // relief, couleurs et densité d'herbe par sommet (voir grass.js)
+const grassU = { uGrassCam: { value: new THREE.Vector3() }, uGrassR: { value: 1 } };
 let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel en temps réel
 {
   const SEG = 320; // maillage fin : la physique (terrainH) et le rendu restent collés à ~1,5 m près autour des creux de la Grotte (sinon : sol invisible)
@@ -303,10 +307,10 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   const pos = geo.attributes.position;
   const cols = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
-  const soilG = new Float32Array(pos.count), soilD = new Float32Array(pos.count), snowW = new Float32Array(pos.count);
+  const soilG = new Float32Array(pos.count), soilD = new Float32Array(pos.count), snowW = new Float32Array(pos.count), gDens = new Float32Array(pos.count), gLen = new Float32Array(pos.count);
   // herbe : trois verts (prairie claire, vert franc, vert profond) mélangés par deux bruits ;
   // terre : brun chaud, plus sombre et plus humide en bas des pentes
-  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x6cc444), g2 = new THREE.Color(0x3f9c35), g3 = new THREE.Color(0x9ad25a), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0x9a7149), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x2d7f35), snowDirt = new THREE.Color(0xc9d3dc), alpine = new THREE.Color(0x56704a);
+  const sand = new THREE.Color(0xf0dc9c), g1 = new THREE.Color(0x86b83a), g2 = new THREE.Color(0x5f9c34), g3 = new THREE.Color(0xa9c64a), rock = new THREE.Color(0x8e9196), snow = new THREE.Color(0xf4f8ff), deep = new THREE.Color(0xd9c58a), dirt = new THREE.Color(0x9a7149), dsand = new THREE.Color(0xe8c27a), fgreen = new THREE.Color(0x4a7f34), snowDirt = new THREE.Color(0xc9d3dc), alpine = new THREE.Color(0x56704a);
   const gRock = new THREE.Color(0x857a6c), gRock2 = new THREE.Color(0x6c6660), gMoss = new THREE.Color(0x5f7a45), gcol = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
@@ -322,7 +326,7 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
     // (aSnow) avec un bord irrégulier, des congères, des reflets et des plaques de glace.
     // Dessous, une herbe d'altitude rase et sombre qui perce en bordure.
     if (h >= 1.4) { c.lerp(dsand, bw.desert * (0.85 + 0.15 * n)); c.lerp(fgreen, bw.forest * 0.6); c.lerp(alpine, bw.snow * 0.8); }
-    if (inPOI(x, z, -4) && h >= 1.4) c.lerp(bw.snow > 0.5 ? snowDirt : dirt, 0.18 + 0.2 * n);
+    if (inPOI(x, z, -4) && h >= 1.4) c.lerp(bw.snow > 0.5 ? snowDirt : dirt, (inPOI(x, z, -4).spy ? 0.18 : 0.05) + 0.2 * n * (inPOI(x, z, -4).spy ? 1 : 0.3));
     const rk = (sl > 1.6 || h > 26) ? clamp(Math.max((sl - 1.6) * 0.8, (h - 26) / 6), 0, 1) : 0;
     if (rk > 0) c.lerp(rock, rk);
     // montagne de la Grotte : roche brun-gris nue (pas de neige), mousse sur
@@ -343,52 +347,51 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
     snowW[i] = h < 1.6 ? 0 : clamp(Math.max(bw.snow * (0.8 + 0.4 * n), (h - 40) / 4), 0, 1) * (1 - gk) * (1 - 0.55 * clamp((sl - 2.2) / 1.5, 0, 1));
     soilG[i] = green;
     soilD[i] = green * groundDirtW(x, z, sl);
+    { // herbe : dense dans les prairies, rase dans les villages, absente des pavés, de la terre et de la roche
+      const poi = inPOI(x, z, 1), bare = (poi && (poi.spy || poi.style === 'city')) || Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < 60;
+      gDens[i] = bare ? 0 : clamp((green - 0.55) / 0.35, 0, 1) * clamp(1 - soilD[i] * 1.9, 0, 1) * clamp((h - 2.3) / 0.7, 0, 1);
+      gLen[i] = inPOI(x, z, -3) ? 0.5 : 1;
+    }
     cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
   }
   geo.setAttribute('aSoilG', new THREE.BufferAttribute(soilG, 1));
   geo.setAttribute('aSoilD', new THREE.BufferAttribute(soilD, 1));
   geo.setAttribute('aSnow', new THREE.BufferAttribute(snowW, 1));
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  grassT = { SEG, SIZE: TERRAIN_SIZE, pos: pos.array, cols, dens: gDens, len: gLen };
+  geo.setAttribute('aGrass', new THREE.BufferAttribute(gDens, 1));
   geo.computeVertexNormals();
   const tmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
   // per-pixel detail on top of the vertex colours (one vertex every ~3 m): grass patches, fine grain,
   // darker steep slopes and an animated foam line where the island meets the sea
   tmat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterT;
-    sh.uniforms.uNight = WSKY.night;
+    sh.uniforms.uNight = WSKY.night; sh.uniforms.uWind = windT; Object.assign(sh.uniforms, grassU);
     sh.uniforms.uDirtA = { value: new THREE.Color(0x8c7556) };
     sh.uniforms.uDirtB = { value: new THREE.Color(0x5f4d3a) };
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; attribute float aSoilG; attribute float aSoilD; attribute float aSnow; varying float vSoilG; varying float vSoilD; varying float vSnow;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vSoilG = aSoilG; vSoilD = aSoilD; vSnow = aSnow;');
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; attribute float aSoilG; attribute float aSoilD; attribute float aSnow; attribute float aGrass; varying float vGrass; varying float vSoilG; varying float vSoilD; varying float vSnow;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vSoilG = aSoilG; vSoilD = aSoilD; vSnow = aSnow; vGrass = aGrass;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vWP; uniform float uT; uniform float uNight; varying float vSoilG; varying float vSoilD; varying float vSnow; uniform vec3 uDirtA; uniform vec3 uDirtB;
+      varying vec3 vWP; uniform float uT; uniform float uNight; varying float vSoilG; varying float vSoilD; varying float vSnow; uniform vec3 uDirtA; uniform vec3 uDirtB; uniform float uWind; uniform vec3 uGrassCam; uniform float uGrassR; varying float vGrass; float noLine = 0.0;
+      ${GRASS_GLSL}
       float th(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float tn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(th(i), th(i + vec2(1.0, 0.0)), f.x), mix(th(i + vec2(0.0, 1.0)), th(i + vec2(1.0, 1.0)), f.x), f.y); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+        // HERBE : même teinte que les brins (grassTone). Sous les brins le sol est à l'ombre ; au loin,
+        // là où ils s'arrêtent, il prend leur couleur, leurs touffes douces et les rafales qui passent.
         float patches = tn(vWP.xz * 0.16) * 0.65 + tn(vWP.xz * 0.43 + 17.0) * 0.35;
-        float grain = tn(vWP.xz * 2.1 + 3.0);
-        diffuseColor.rgb *= 0.84 + patches * 0.27 + (grain - 0.5) * 0.08;
-        // drier, yellower grass in large patches (only where the ground is green)
-        float dry = smoothstep(0.55, 0.85, tn(vWP.xz * 0.045 + 40.0)) * vSoilG;
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.16, 1.03, 0.66), dry * 0.45);
-        // HERBE : brins dessinés au sol — stries fines orientées par zone, creux sombres
-        // entre les touffes, pointes claires, trèfle plus foncé et petites fleurs des champs
+        vec3 plain = diffuseColor.rgb * (0.84 + patches * 0.27 + (tn(vWP.xz * 2.1 + 3.0) - 0.5) * 0.08);
         if (vSoilG > 0.01) {
-          // deux nappes de stries croisées (pas de rotation continue : pas de tourbillons)
-          vec2 gp = vWP.xz;
-          float bx = tn(vec2(gp.x * 9.0, gp.y * 2.2)), bz = tn(vec2(gp.x * 2.2 + 13.0, gp.y * 9.0));
-          float blades = mix(bx, bz, smoothstep(0.35, 0.65, tn(gp * 0.7 + 5.0)));
-          float clump = tn(gp * 1.15 + 21.0);
-          float gk = (blades - 0.5) * 0.16 + (clump - 0.5) * 0.18;
-          vec3 gcol = diffuseColor.rgb * (1.0 + gk);
-          gcol = mix(gcol, gcol * vec3(1.12, 1.18, 0.78), smoothstep(0.78, 0.95, blades) * 0.5); // pointes au soleil
-          float clover = smoothstep(0.62, 0.74, tn(vWP.xz * 0.6 + 77.0)) * smoothstep(0.35, 0.7, tn(vWP.xz * 3.2 + 4.0));
-          gcol = mix(gcol, gcol * vec3(0.72, 0.9, 0.7), clover * 0.55);
-          float fl = step(0.985, th(floor(vWP.xz * 4.0))) * smoothstep(0.55, 0.75, tn(vWP.xz * 0.07 + 63.0));
-          vec3 flc = mix(vec3(1.0, 0.95, 0.75), vec3(1.0, 0.82, 0.25), step(0.5, th(floor(vWP.xz * 4.0) + 3.0)));
-          gcol = mix(gcol, flc, fl * 0.85);
-          diffuseColor.rgb = mix(diffuseColor.rgb, gcol, vSoilG);
-        }
+          vec3 gt = grassTone(diffuseColor.rgb, vWP.xz);
+          float gd = distance(vWP.xz, uGrassCam.xz), nearG = (1.0 - smoothstep(uGrassR * 0.45, uGrassR * 0.95, gd)) * vGrass;
+          float tuft = tn(vWP.xz * 1.5 + 21.0) * 0.6 + tn(vWP.xz * 3.6 + 5.0) * 0.4;
+          float px = fwidth(vWP.x) + fwidth(vWP.z);
+          vec3 farC = gt * (1.02 + (tuft - 0.5) * 0.34 * (1.0 - smoothstep(0.15, 0.9, px)));
+          farC += gt * vec3(0.5, 0.5, 0.32) * smoothstep(0.5, 0.82, grassGust(vWP.xz, uWind)) * 0.28 * vGrass;
+          vec3 under = gt * (0.6 + 0.22 * tuft);
+          diffuseColor.rgb = mix(plain, mix(farC, under, nearG * 0.85), vSoilG);
+          noLine = smoothstep(0.0, 0.25, max(vGrass, vSoilG)) * (1.0 - smoothstep(uGrassR * 0.9, uGrassR * 1.05, gd));
+        } else diffuseColor.rgb = plain;
         // TERRE : bord déchiqueté avec l'herbe, terre battue brune, mottes, cailloux clairs,
         // fissures sombres et touffes d'herbe rase qui repoussent
         if (vSoilD > 0.01) {
@@ -446,6 +449,7 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
           diffuseColor.rgb += vec3(0.8, 0.93, 1.0) * ca * 0.42 * uwF * (1.0 - uNight);
         }`);
   };
+  { const f0 = tmat.onBeforeCompile; tmat.onBeforeCompile = (sh) => { f0(sh); sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - noLine;'); }; }
   const terrain = new THREE.Mesh(geo, tmat);
   terrain.receiveShadow = true;
   terrainMeshRef = terrain;
@@ -1082,7 +1086,7 @@ function makeStructBox(x, y, z, w, h, d, mat, o = {}) {
   m.castShadow = o.shadow !== false; m.receiveShadow = true;
   if (curHouse) { m.updateMatrixWorld(true); } else scene.add(m);
   const col = addCollider({ type: 'box', minX: x - w / 2, maxX: x + w / 2, minY: y, maxY: y + h, minZ: z - d / 2, maxZ: z + d / 2 });
-  col.mesh = m; col.hp = col.maxHp = o.hp || 200; col.mat = o.mat || 'wood'; col.indestructible = !!o.indestructible; col.kind = 'house';
+  col.mesh = m; col.hp = col.maxHp = o.hp || 200; col.mat = o.mat || 'wood'; col.indestructible = !!o.indestructible; col.kind = 'house'; col.sm = o.sm || 0; col.faces = o.faces || null;
   m.userData.struct = col;
   addTarget(m); structs.push(col);
   if (curHouse) { col.house = curHouse; col.chunk = chunkOfY(y + h / 2); curHouse.boxes.push(col); }
@@ -1091,100 +1095,17 @@ function makeStructBox(x, y, z, w, h, d, mat, o = {}) {
 // Static batching: every building is drawn as ONE merged mesh with vertex colours
 // (walls + decorations). Destroying a wall rebuilds that building's mesh only.
 let curHouse = null;
-const HOUSE_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.06 });
-// Rendu réaliste style Fortnite Chapitre 2 : bardage bois en lattes (siding), joints de brique,
-// tuiles d'ardoise sur les toits, reflets bleutés sur vitres, et dorures étincelantes des agents.
-HOUSE_MAT.onBeforeCompile = (sh) => {
-  sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nvarying vec3 vNorm;')
-    .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvNorm = normalize((modelMatrix * vec4(normal, 0.0)).xyz);');
-
-  sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>
-      varying vec3 vWP;
-      varying vec3 vNorm;
-      float bHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float bNoise(vec2 p) {
-        vec2 i = floor(p), f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(bHash(i), bHash(i + vec2(1.0, 0.0)), f.x), mix(bHash(i + vec2(0.0, 1.0)), bHash(i + vec2(1.0, 1.0)), f.x), f.y);
-      }`)
-    .replace('#include <color_fragment>', `#include <color_fragment>
-      vec3 fn = normalize(cross(dFdx(vWP), dFdy(vWP)));
-      float isVert = smoothstep(0.35, 0.12, abs(fn.y));
-      float isRoof = smoothstep(0.18, 0.45, fn.y) * smoothstep(0.96, 0.82, fn.y);
-
-      // Détection des types de surfaces d'après leur teinte
-      float isGlass = step(0.1, diffuseColor.b - diffuseColor.r) * step(0.4, diffuseColor.b + diffuseColor.g);
-      float isDarkGlass = step(0.05, diffuseColor.b - diffuseColor.r) * step(length(diffuseColor.rgb), 0.35);
-      float isGold = step(0.65, diffuseColor.r) * step(0.48, diffuseColor.g) * step(diffuseColor.b, 0.28);
-      float isLightGray = step(0.45, diffuseColor.r) * step(0.03, diffuseColor.b - diffuseColor.r) * step(diffuseColor.b - diffuseColor.r, 0.09) * (1.0 - isGlass);
-      float isWhiteMarble = max(step(0.82, diffuseColor.r) * step(0.82, diffuseColor.g) * step(0.78, diffuseColor.b), isLightGray);
-      float isBrickOrStone = step(0.3, diffuseColor.r) * step(abs(diffuseColor.r - diffuseColor.g), 0.25) * (1.0 - isGold);
-
-      // 1. MURS VERTICAUX : BARDAGE BOIS & BRIQUES FORTNITE
-      if (isVert > 0.1 && (isGlass + isDarkGlass) < 0.5) {
-        // Bardage en lattes horizontales réaliste (siding Fortnite ~0.38 m par planche)
-        float plankY = mod(vWP.y, 0.38);
-        float groove = smoothstep(0.0, 0.035, plankY) * (1.0 - smoothstep(0.345, 0.38, plankY));
-        float siding = 0.92 + groove * 0.14 + smoothstep(0.035, 0.12, plankY) * 0.05;
-
-        // Briques et pierres appareillées pour les façades de ville / brique
-        if (isBrickOrStone > 0.5 && isWhiteMarble < 0.5) {
-          float coordX = abs(fn.x) > 0.5 ? vWP.z : vWP.x;
-          // pierre de taille rosée de l'Agence : grands blocs appareillés (0,55 x 1,4 m)
-          float isAshlar = step(0.05, diffuseColor.r - diffuseColor.g) * step(diffuseColor.r - diffuseColor.g, 0.12) * step(diffuseColor.g, diffuseColor.b);
-          float rowH = mix(0.28, 0.55, isAshlar), colW = mix(0.88, 1.4, isAshlar);
-          float bRow = floor(vWP.y / rowH);
-          float bCol = mod(coordX + bRow * colW * 0.5, colW);
-          float mortar = smoothstep(0.0, 0.035, mod(vWP.y, rowH)) * smoothstep(0.0, 0.045, bCol);
-          float blockTone = 0.96 + 0.08 * bHash(vec2(floor((coordX + bRow * colW * 0.5) / colW), bRow)) * isAshlar;
-          diffuseColor.rgb *= (0.86 + 0.18 * mortar) * blockTone;
-        } else if (isWhiteMarble > 0.5) {
-          // Marbre blanc lisse de l'Agence avec joints subtils de blocs impériaux (1.5 m)
-          float pY = smoothstep(0.0, 0.03, mod(vWP.y, 1.5)) * (1.0 - smoothstep(1.47, 1.5, mod(vWP.y, 1.5)));
-          float pX = smoothstep(0.0, 0.03, mod(vWP.x + vWP.z, 2.0)) * (1.0 - smoothstep(1.97, 2.0, mod(vWP.x + vWP.z, 2.0)));
-          diffuseColor.rgb *= 0.94 + 0.06 * (pY * pX);
-        } else {
-          // Bois peint style Pleasant Park
-          float grain = (bNoise(vWP.xz * 1.8 + vWP.y * 0.5) - 0.5) * 0.06;
-          diffuseColor.rgb *= (siding + grain);
-        }
-
-        // Occlusion ambiante de contact au bas des murs (base ancrée dans le terrain)
-        float contactAO = smoothstep(0.0, 1.1, mod(vWP.y + 0.1, 4.0));
-        diffuseColor.rgb *= 0.87 + 0.13 * contactAO;
-      }
-
-      // 2. VITRES & BAIES VITRÉES : REFLETS DYNA-CYAN STYLE FORTNITE
-      if (isGlass > 0.5 || isDarkGlass > 0.5) {
-        float glGleam = pow(max(0.0, sin((vWP.x + vWP.z) * 0.65 + vWP.y * 1.1)), 10.0) * 0.4;
-        vec3 tint = isDarkGlass > 0.5 ? vec3(0.35, 0.5, 0.65) : vec3(0.82, 0.93, 1.0);
-        diffuseColor.rgb = mix(diffuseColor.rgb, tint, glGleam * 0.8);
-      }
-
-      // 3. TOITURES : STRATES DE TUILES ET BARDEAUX D'ARDOISE
-      if (isRoof > 0.2) {
-        float shingleY = mod(vWP.y, 0.26);
-        float shStep = 0.88 + smoothstep(0.0, 0.03, shingleY) * 0.22;
-        float shRow = floor(vWP.y / 0.26);
-        float tone = 0.95 + 0.1 * fract(sin(shRow * 91.13) * 43758.5453);
-        diffuseColor.rgb *= shStep * tone;
-      }
-
-      // 4. DORURES & MÉTAL PRÉCIEUX DES AGENTS (Midas, coffre, yacht, agence)
-      if (isGold > 0.5) {
-        float shine = pow(max(0.0, sin((vWP.x + vWP.y + vWP.z) * 1.8)), 8.0) * 0.45;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.96, 0.7), shine);
-      }
-    `);
-};
+const HOUSE_MAT = houseMaterial(LOWQ), GLASS_MAT = glassMaterial();
 const _hcCache = new Map();
 function hcol(hex) { let c = _hcCache.get(hex); if (!c) { c = new THREE.Color(hex); _hcCache.set(hex, c); } return c; }
-function colorize(g, c) {
-  const n = g.attributes.position.count, a = new Float32Array(n * 3);
+function colorize(g, c, m = 0, faces = null) {
+  const n = g.attributes.position.count, a = new Float32Array(n * 3), s = new Float32Array(n).fill(m), N = g.attributes.normal;
   for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
-  g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g;
+  if (faces) for (const f of faces) { // faces peintes à part (mur intérieur, plafond)
+    const k = hcol(f.hex), fm = f.hex >>> 24;
+    for (let i = 0; i < n; i++) if (N.getX(i) * f.n[0] + N.getY(i) * f.n[1] + N.getZ(i) * f.n[2] > 0.9) { a[i * 3] = k.r; a[i * 3 + 1] = k.g; a[i * 3 + 2] = k.b; s[i] = fm; }
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(a, 3)); g.setAttribute('aM', new THREE.BufferAttribute(s, 1)); return g;
 }
 const chunkOfY = (y) => Math.floor((y + 1) / 4);
 function rebuildHouse(H, only) {
@@ -1193,22 +1114,28 @@ function rebuildHouse(H, only) {
   const keys = only !== undefined ? [only] : [...new Set([...H.boxes.map((c) => c.chunk), ...H.deco.map((e) => e.chunk)])];
   for (const k of keys) {
     const old = H.chunks.get(k); if (old) { scene.remove(old); old.geometry.dispose(); H.chunks.delete(k); }
-    const geos = [];
-    for (const c of H.boxes) if (c.chunk === k && c.alive) geos.push(colorize(BOX.clone().applyMatrix4(c.mesh.matrixWorld), c.mesh.material.color));
-    for (const e of H.deco) if (e.chunk === k && (!e.parent || e.parent.alive)) geos.push(colorize(e.geo.clone().applyMatrix4(e.m), e.color));
+    const oldG = H.glass && H.glass.get(k); if (oldG) { scene.remove(oldG); oldG.geometry.dispose(); H.glass.delete(k); }
+    const geos = [], panes = [];
+    for (const c of H.boxes) if (c.chunk === k && c.alive) geos.push(colorize(BOX.clone().applyMatrix4(c.mesh.matrixWorld), c.mesh.material.color, c.sm, c.faces));
+    for (const e of H.deco) if (e.chunk === k && (!e.parent || e.parent.alive)) (e.sm === GLASS_ID ? panes : geos).push(colorize(e.geo.clone().applyMatrix4(e.m), e.color, e.sm));
+    if (panes.length) { // vitres transparentes de l'étage
+      const g = mergeGeometries(panes); panes.forEach((x) => x.dispose()); const m = new THREE.Mesh(g, GLASS_MAT); m.renderOrder = 2; m.userData.houseGlass = true; scene.add(m); (H.glass = H.glass || new Map()).set(k, m);
+    }
     if (!geos.length) continue;
     const g = mergeGeometries(geos); geos.forEach((x) => x.dispose());
     const m = new THREE.Mesh(g, HOUSE_MAT); m.castShadow = true; m.receiveShadow = true; scene.add(m); H.chunks.set(k, m);
   }
 }
 function rebuildHouseBatch(H) { rebuildHouse(H); }
-function finishHouse(H) { rebuildHouse(H); }
+function finishHouse(H) { grassHouses.push(H); rebuildHouse(H); }
 // decoration helpers (no collider). parent = wall collider it is attached to (disappears with it)
 const _dm = new THREE.Matrix4(), _dq = new THREE.Quaternion(), _de = new THREE.Euler(), _dp = new THREE.Vector3(), _ds = new THREE.Vector3();
-function hdeco(geo, hex, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, parent = null, order = 'XYZ') {
+// hex : couleur, ou S(surface, couleur) ; yo : hauteur imposée (quand x, z viennent de spos)
+function hdeco(geo, hex, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, parent = null, order = 'XYZ', yo) {
+  if (yo !== undefined) y = yo;
   if (AGX) { x = AGX.X(x); z = AGX.Z(z); if (!rx && !rz) { sx *= AGX.k; sz *= AGX.k; } }
   _de.set(rx, ry, rz, order); _dq.setFromEuler(_de); _dm.compose(_dp.set(x, y, z), _dq, _ds.set(sx, sy, sz));
-  curHouse.deco.push({ geo, color: hcol(hex), m: _dm.clone(), parent, chunk: parent ? parent.chunk : chunkOfY(y) });
+  curHouse.deco.push({ geo, color: hcol(hex), sm: hex >>> 24, m: _dm.clone(), parent, chunk: parent ? parent.chunk : chunkOfY(y) });
 }
 // box whose bottom is at y
 function hbox(hex, x, y, z, w, h, d, parent = null, ry = 0) { hdeco(BOX, hex, x, y + h / 2, z, w, h, d, 0, ry, 0, parent); }
@@ -1231,87 +1158,39 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
 
 // =====================================================================
 const flora = createFlora(scene, windT, { lowq: LOWQ, highq: HIGHQ });
-// Grass : touffes de fines lames courbes (dégradé sombre -> clair), très nombreuses, qui ondulent au vent
-{
-  const N = LOWQ ? 9000 : HIGHQ ? 54000 : 36000;
-  const gr = mulberry32(90210); // générateur local : ne modifie pas la génération du reste du monde
-  const rr = (a, b) => a + (b - a) * gr();
-  // une touffe = 12 lames : chacune a un pied large, un segment médian et une pointe, penchée vers l'extérieur
-  const tuft = (() => {
-    const pos = [], col = [], nor = [], idx = [];
-    const NB = 12;
-    for (let i = 0; i < NB; i++) {
-      const ang = gr() * 6.283, rad = Math.sqrt(gr()) * 0.26, bx = Math.cos(ang) * rad, bz = Math.sin(ang) * rad;
-      const yaw = ang + rr(-0.9, 0.9), lean = rr(0.12, 0.55) * (0.6 + rad * 2.5);
-      const h = rr(0.42, 0.85) * (i < 4 ? 1.0 : 0.82), w = rr(0.035, 0.055);
-      const dx = Math.sin(yaw), dz = Math.cos(yaw); // direction de la penche
-      const wx = Math.cos(yaw), wz = -Math.sin(yaw); // largeur de la lame
-      const rows = [[0, w, 0.0, 0.28], [0.52, w * 0.72, lean * 0.45, 0.7], [1.0, 0.0, lean * 1.15, 1.08]]; // pied sombre, pointe éclairée
-      const base = pos.length / 3;
-      for (const [t, ww, off, br] of rows) {
-        const y = t * h, cx = bx + dx * off * h, cz = bz + dz * off * h, yy = y - off * off * h * 0.25;
-        if (ww > 0) {
-          pos.push(cx - wx * ww, yy, cz - wz * ww, cx + wx * ww, yy, cz + wz * ww); col.push(br, br, br, br, br, br); nor.push(0, 1, 0, 0, 1, 0);
-        } else { pos.push(cx, yy, cz); col.push(br, br, br); nor.push(0, 1, 0); }
-      }
-      idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2, base + 2, base + 3, base + 4);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setIndex(idx);
-    return g;
-  })();
-  const flower = (() => {
-    const st = new THREE.CylinderGeometry(0.016, 0.022, 0.5, 3, 1, true); st.translate(0, 0.25, 0); st.deleteAttribute('uv');
-    // tige verte ; la corolle est un modèle du pack (flora), posée au sommet
-    const mk = (g, v) => { const gg = g.index ? g.toNonIndexed() : g; gg.setAttribute('head', new THREE.BufferAttribute(new Float32Array(gg.attributes.position.count).fill(v), 1)); return gg; };
-    return mk(st, 0);
-  })();
-  const sway = (sh, isFlower) => {
-    sh.uniforms.uWind = windT;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uWind;' + (isFlower ? '\nattribute float head; varying float vHead;' : ''))
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-        vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
-        float sw = sin(uWind * 1.6 + ip.x * 0.13 + ip.z * 0.09) * 0.5 + sin(uWind * 2.9 + ip.x * 0.37 + ip.z * 0.21) * 0.22 + sin(uWind * 0.6 + ip.x * 0.03) * 0.3;
-        float fl = sin(uWind * 5.0 + position.x * 18.0 + position.z * 14.0 + ip.x) * 0.025;
-        transformed.x += (sw * 0.34 + fl) * position.y * position.y * 1.4; transformed.z += (sw * 0.2 + fl) * position.y * position.y * 1.4;` + (isFlower ? '\nvHead = head;' : ''));
-    if (isFlower) sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vHead;').replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(vec3(0.2, 0.5, 0.18), diffuseColor.rgb, step(0.5, vHead)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.82, 0.2), step(1.5, vHead));');
-    else sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal *= faceDirection; // éclairage identique sur les deux faces des lames');
-  };
-  const gm = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, vertexColors: true }); gm.onBeforeCompile = (sh) => sway(sh, false);
-  const fm = new THREE.MeshLambertMaterial({ flatShading: true }); fm.onBeforeCompile = (sh) => sway(sh, true);
-  const NF = Math.floor(N / 5);
-  const grass = new THREE.InstancedMesh(tuft, gm, N), flowers = new THREE.InstancedMesh(flower, fm, NF);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color(), col2 = new THREE.Color();
-  const GR = [0x4fbf3a, 0x63cf45, 0x3fa634, 0x86d653, 0x58c040, 0x74c94a], DRY = new THREE.Color(0xc2bd5c), DARK = new THREE.Color(0x2b7d33);
-  const FR = LOWQ ? 60 : HIGHQ ? 130 : 95; // corolles : dessinées jusqu'à FR mètres
-  for (let i = 0; i < 5; i++) flora.kind('petal' + i, { R: FR, fade: FR, sway: 0.02 });
-  let ng = 0, nf = 0, guard = 0;
-  while ((ng < N || nf < NF) && guard++ < N * 14) {
-    const a = gr() * 6.283, r = Math.sqrt(gr()) * ISLAND_R * 0.95, x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z, h = terrainH(x, z);
-    if (h < 2.3 || h > 26) continue;
-    const bw = biomeW(x, z); if (bw.snow > 0.35 || bw.desert > 0.35) continue;
-    if (Math.abs(terrainH(x + 1.2, z) - h) + Math.abs(terrainH(x, z + 1.2) - h) > 1.7) continue;
-    if (inPOI(x, z, -2)) continue;
-    if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < 60) continue;
-    if (groundDirtW(x, z, Math.abs(terrainH(x + 1.5, z) - h) + Math.abs(terrainH(x, z + 1.5) - h)) > 0.45) continue; // pas de touffes sur la terre
-    const patch = fbm(x * 0.045 + 7, z * 0.045 - 3); // zones denses / clairsemées
-    const isF = nf < NF && gr() < 0.2 && bw.forest < 0.5 && patch > 0.4;
-    if (!isF && ng >= N) continue;
-    if (!isF && patch < 0.3 && gr() < 0.5) continue;
-    q.setFromAxisAngle(up, gr() * 6.283);
-    if (isF) { const k = 0.8 + gr() * 0.6; sc.set(k, k, k); m4.compose(ps.set(x, h - 0.05, z), q, sc); flowers.setMatrixAt(nf, m4); nf++; flora.add('petal' + ((gr() * 5) | 0), x, h - 0.05 + 0.48 * k, z, gr() * 6.283, k * 1.25, k * 1.25, k * 1.25, null, 0, rr(-0.35, 0.35), rr(-0.35, 0.35)); }
-    else {
-      const tall = gr() < 0.1 ? 1.4 : 1, k = (0.75 + gr() * 0.5) * tall;
-      sc.set(k, k * (0.85 + gr() * 0.5), k); m4.compose(ps.set(x, h - 0.04, z), q, sc);
-      grass.setMatrixAt(ng, m4);
-      col.setHex(GR[(gr() * GR.length) | 0]).lerp(DARK, bw.forest * 0.55);
-      col.lerp(DRY, Math.max(0, 0.5 - patch) * 0.5 * (1 - bw.forest)); // quelques zones d'herbe sèche (plus discrètes)
-      grass.setColorAt(ng, col); ng++;
-    }
+// Herbe : prairie continue autour de la caméra (grass.js)
+const grass = createGrass(scene, grassT, { lowq: LOWQ, highq: HIGHQ, wind: windT, heightAt: terrainH });
+grassU.uGrassR.value = grass.R; grassU.uGrassCam.value = grass.uniforms.uCam.value;
+const grassHouses = []; // bâtiments : leurs éléments posés au sol sont retirés de l'herbe
+function cutGrass() {
+  const seen = new Set();
+  for (const a of cgrid.values()) for (const c of a) {
+    if (seen.has(c) || c.vehicle || c.door) continue; seen.add(c);
+    const x = (c.minX + c.maxX) / 2, z = (c.minZ + c.maxZ) / 2, g = terrainH(x, z);
+    if (c.minY > g + 0.7 || c.maxY < g - 0.1 || (c.maxX - c.minX) * (c.maxZ - c.minZ) > 2500) continue;
+    const k = c.rock ? 0.3 : -0.12; grass.cut(c.minX + k, c.maxX - k, c.minZ + k, c.maxZ - k);
   }
-  grass.count = ng; flowers.count = nf;
-  for (const im of [grass, flowers]) { im.frustumCulled = false; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; scene.add(im); }
+  const bb = new THREE.Box3();
+  for (const H of grassHouses) for (const e of H.deco) {
+    if (!e.geo.boundingBox) e.geo.computeBoundingBox();
+    bb.copy(e.geo.boundingBox).applyMatrix4(e.m);
+    const x = (bb.min.x + bb.max.x) / 2, z = (bb.min.z + bb.max.z) / 2, g = terrainH(x, z);
+    if (bb.min.y > g + 0.6 || bb.max.y < g - 0.05 || (bb.max.x - bb.min.x) * (bb.max.z - bb.min.z) > 900) continue;
+    grass.cut(bb.min.x - 0.1, bb.max.x + 0.1, bb.min.z - 0.1, bb.max.z + 0.1);
+  }
+  grass.done();
+}
+// corps qui couchent l'herbe : le joueur (ou sa voiture) et les personnages les plus proches
+const _bend = [];
+function bendGrass() {
+  _bend.length = 0;
+  const c = camera.position;
+  for (const ch of chars) {
+    if (!ch.alive || ch.mode === 'bus' || ch.mode === 'glide' || ch.mode === 'fall') continue;
+    const d = (ch.pos.x - c.x) ** 2 + (ch.pos.z - c.z) ** 2; if (d > 1600) continue;
+    _bend.push({ x: ch.pos.x, y: ch.pos.y, z: ch.pos.z, r: ch.mode === 'drive' ? 2.6 : 0.85, d: ch.isPlayer ? -1 : d });
+  }
+  _bend.sort((a, b) => a.d - b.d); grass.bend(_bend);
 }
 // Trees, rocks, houses, cars
 // =====================================================================
@@ -1434,22 +1313,24 @@ scatterPlants(flora, groundDirtW, { lowq: LOWQ, highq: HIGHQ });
 // Houses
 const chests = [], ammoBoxes = [], lootSpots = [];
 let chestHumT = 0;
-const WALL_COLS = [0xf3e3c3, 0xbfe0f5, 0xf7c9c9, 0xd7f0c6, 0xffe9a8, 0xe0d3f7];
-const ROOF_COLS = [0xd2483a, 0x3b6fd1, 0x6a4a3a, 0x2f9e7a, 0xe08a2e];
-const STYLE_COLS = {
-  adobe: { walls: [0xe9cfa0, 0xdcb27a, 0xf0d9b5, 0xd99c6a], roofs: [0xc8794a], mat: 'stone', hp: 260 },
-  chalet: { walls: [0x9a6238, 0x8a5530, 0xb07848], roofs: [0xf4f8ff], mat: 'wood', hp: 190 },
-  beach: { walls: [0x9fe0e8, 0xffd1dc, 0xfff0a8, 0xc8f0c0], roofs: [0xd9b45a], mat: 'wood', hp: 150 },
-  brick: { walls: [0xc9705a, 0xb85f4a, 0xd8d0c8, 0xbfe0f5], roofs: ROOF_COLS, mat: 'stone', hp: 260 },
-  wood: { walls: WALL_COLS, roofs: ROOF_COLS, mat: 'wood', hp: 170 },
-  city: { walls: [0xe8e1d0, 0x9fb4c7, 0xc98b6b], roofs: [0x4a4f5a], mat: 'stone', hp: 280, frame: 0x2f3540 },
-  agency: { walls: [0xe8e6de, 0xdedcd4, 0xd2cfc6], roofs: [0x3a4a5c], mat: 'metal', hp: 340, frame: 0xffc400, trim: 0xffc400 },
-  bunker: { walls: [0x707684, 0x5d6370, 0x6a7180], roofs: [0x454b56], mat: 'stone', hp: 360, frame: 0x3a4150, trim: 0x8a929e },
+// ---- STYLES DE MAISONS : chaque style a ses matières, son toit et ses détails.
+const HOUSE_KIT = {
+  // pavillon en bardage, toit pentu en bardeaux, porche à fronton
+  wood: { walls: [0xe6dcc6, 0x8fb4c9, 0xcf8672, 0x9db48e, 0xe0bd6c, 0xb9a6cc, 0xd9d4cc], wall: M.SIDING, roofs: [0x6a4436, 0x44546a, 0x7a3a32, 0x4b5a45, 0x57504c], roof: M.SHINGLE, trim: S(M.TRIM, 0xf3eee2), frame: S(M.TRIM, 0xf6f2ea), base: S(M.STONE, 0x9a9186), door: [0xb8402f, 0x2f5f8f, 0x2f7a5c, 0xd08a2a, 0x5a3f7a], shut: [0x2f4f6b, 0x7a3030, 0x35593f, 0x3a3f47, 0x6b4a7a], mat: 'wood', hp: 170, rise: 0.44, over: 0.5, rake: 0.45, rows: 9 },
+  // maison de ville en brique, pignons à redents, ardoise
+  brick: { walls: [0xa8503c, 0x8f4436, 0xb8664a, 0x9a6a58], wall: M.BRICK, roofs: [0x46505c, 0x3c444e, 0x5a4a46], roof: M.SHINGLE, trim: S(M.TRIM, 0xe4d9c3), frame: S(M.TRIM, 0xefe9dc), base: S(M.STONE, 0xb0a594), door: [0x1f4a3c, 0x7a1f24, 0x24406b, 0x2b2b30], shut: null, mat: 'stone', hp: 260, rise: 0.4, over: 0.28, rake: 0, rows: 9 },
+  // chalet en rondins, grand débord, manteau de neige
+  chalet: { walls: [0x9a6238, 0x87522e, 0xa97444], wall: M.LOGS, roofs: [0x5c4030], roof: M.SHINGLE, trim: S(M.WOOD, 0x5e3d24), frame: S(M.WOOD, 0x6b4628), base: S(M.STONE, 0x8b8880), door: [0x7a2f26, 0x2f5a3a, 0x3f2a1a], shut: [0x2f5a3a, 0x8a2f2a, 0x2f4f7a], mat: 'wood', hp: 190, rise: 0.32, over: 1.0, rake: 0.95, rows: 7 },
+  // cabane de plage : planches pastel, toit de palme
+  beach: { walls: [0x7cc8cf, 0xf0b6a8, 0xf2d98a, 0xa9d6b0, 0xf4efe2], wall: M.BOARDS, roofs: [0xc9a25a, 0xb8925a, 0xd4b070], roof: M.THATCH, trim: S(M.TRIM, 0xfbf7ee), frame: S(M.TRIM, 0xffffff), base: S(M.WOOD, 0xa87f55), door: [0xff7a5c, 0x2fa8b8, 0xf2b23a], shut: [0x2f8fa8, 0xe8705a, 0x2fa88a], mat: 'wood', hp: 150, rise: 0.4, over: 0.8, rake: 0.7, rows: 5 },
+  // maison du désert : crépi épais, poutres, auvents de tuiles, terrasse
+  adobe: { walls: [0xe6c28e, 0xd99a68, 0xf0dcb8, 0xd8835c, 0xf3ece0], wall: M.STUCCO, roofs: [0xc0623a], roof: M.TILE, trim: S(M.STUCCO, 0xf4e6cc), frame: S(M.WOOD, 0x6e4526), base: S(M.STUCCO, 0xb98a5e), door: [0x2f7f96, 0x8a3f26, 0x2f6b5a], shut: [0x2f8f9a, 0x3a6fa0], mat: 'stone', hp: 260 },
+  bunker: { walls: [0x707684, 0x5d6370], wall: M.CONCRETE, roofs: [0x454b56], roof: M.SEAM, trim: S(M.CONCRETE, 0x8a929e), frame: S(M.IRON, 0x3a4150), base: S(M.CONCRETE, 0x565c66), door: [0x3a4150], shut: null, mat: 'stone', hp: 360, rise: 0.25, over: 0.3, rake: 0.3, rows: 2 },
 };
-STYLE_COLS.adobe.frame = 0x6e4a2c; STYLE_COLS.adobe.trim = 0xf0d9b5;
-STYLE_COLS.chalet.frame = 0x4a2e1a; STYLE_COLS.chalet.trim = 0x5a3a24;
-STYLE_COLS.beach.frame = 0xffffff; STYLE_COLS.beach.trim = 0xffffff;
-STYLE_COLS.brick.frame = 0xf4efe4; STYLE_COLS.brick.trim = 0xe8e0d0;
+const INNER_WALLS = [S(M.PLASTER, 0xf0e6d4), S(M.WALLPAPER, 0xdfe6d2), S(M.WALLPAPER, 0xe8d6c8), S(M.PLASTER, 0xd6e0e6), S(M.WALLPAPER, 0xe9dfc0), S(M.PLASTER, 0xe6dfea)];
+const GLASS_ID = 30, GLASS = S(GLASS_ID, 0xbfe2f5);
+const CEIL = S(M.PLASTER, 0xf1f4ff);
+const CYL8 = new THREE.CylinderGeometry(0.5, 0.5, 1, 8), CONE6 = new THREE.ConeGeometry(0.5, 1, 6);
 const rampDecoGeo = new THREE.BoxGeometry(4, 0.22, 4 * Math.SQRT2 + 0.1);
 function buildHouse(cx, cz, baseY, w, d, rot, style) {
   curHouse = { boxes: [], deco: [], mesh: null };
@@ -1481,10 +1362,11 @@ function wallWithOpenings(s, ly, H, T, ops, hex, o) {
   const ext = s.ax === 'x' ? T : -T; // x walls cover the corners
   const L = s.len + ext, a0 = -L / 2, a1 = L / 2;
   ops.sort((p, q) => p.u - q.u);
+  const wo = { ...o, sm: hex >>> 24, faces: o.inner === undefined ? null : [{ n: s.ax === 'x' ? [0, 0, -s.out] : [-s.out, 0, 0], hex: o.inner }] };
   const mk = (a, b, y0, y1) => {
     if (b - a < 0.05 || y1 - y0 < 0.05) return null;
-    const mid = (a + b) / 2, len = b - a;
-    return s.ax === 'x' ? makeStructBox(s.x + mid, ly + y0, s.z, len, y1 - y0, T, matC(hex), o) : makeStructBox(s.x, ly + y0, s.z + mid, T, y1 - y0, len, matC(hex), o);
+    const mid = (a + b) / 2, len = b - a, wm = matC(hex & 0xffffff);
+    return s.ax === 'x' ? makeStructBox(s.x + mid, ly + y0, s.z, len, y1 - y0, T, wm, wo) : makeStructBox(s.x, ly + y0, s.z + mid, T, y1 - y0, len, wm, wo);
   };
   let cur = a0; s.segs = []; // pans pleins (sans ouverture) : on y accroche les objets muraux
   const seg = (a, b) => { const col = mk(a, b, 0, H); if (col) s.segs.push({ a, b, col }); };
@@ -1639,62 +1521,91 @@ function updateDoors(dt) {
     d.group.rotation.y = d.angle;
   }
 }
-function windowFrame(s, ly, op, T, frame, parent) {
-  const fw = 0.14, y0 = ly + op.y0, h = op.y1 - op.y0, dn = T + 0.12;
-  sbox(s, frame, op.u, y0 - 0.12, 0, op.w + 0.36, 0.16, dn + 0.1, parent); // sill
-  sbox(s, frame, op.u, ly + op.y1, 0, op.w + 0.28, fw, dn, parent);        // head
-  sbox(s, frame, op.u - op.w / 2 - fw / 2, y0, 0, fw, h, dn, parent);
-  sbox(s, frame, op.u + op.w / 2 + fw / 2, y0, 0, fw, h, dn, parent);
-  // mullion cross: reads as a window even though it stays open (you can still jump / shoot through)
-  sbox(s, frame, op.u, y0 + h / 2 - 0.03, 0, op.w, 0.06, 0.06, parent);
-  sbox(s, frame, op.u, y0, 0, 0.06, h * 0.999, 0.06, parent);
-  // vitre semi-transparente : vraie fenêtre visuellement (légère réflexion bleutée)
-  sbox(s, 0x9fc8e8, op.u, y0 + h / 2, 0, op.w - 0.06, h - 0.06, 0.02, parent);
+// géométrie libre posée sur une face du bâtiment : +x le long du mur, +z vers l'extérieur
+function sgeo(s, geo, hex, u, y, n, parent = null, sx = 1, sy = 1, sz = 1) {
+  const ry = s.ax === 'x' ? (s.out > 0 ? 0 : Math.PI) : (s.out > 0 ? Math.PI / 2 : -Math.PI / 2);
+  if (s.ax === 'x') hdeco(geo, hex, s.x + u, y, s.z + n * s.out, sx, sy, sz, 0, ry, 0, parent);
+  else hdeco(geo, hex, s.x + n * s.out, y, s.z + u, sx, sy, sz, 0, ry, 0, parent);
 }
-function gableRoof(cx, cz, topY, w, d, roofH, bodyHex, roofHex, opts = {}) {
-  const alongZ = w <= d; // ridge direction follows the long side
-  const span = (alongZ ? w : d) + 0.5, len = (alongZ ? d : w) + 0.5, hs = span / 2;
-  // UN SEUL TOIT : le prisme lui-même, peint en tuiles. Plus de pentes ni de
-  // bardeaux superposés qui se mettaient à flotter au-dessus de la maison.
-  hdeco(PRISM_GEO, roofHex, cx, topY, cz, alongZ ? span : len, roofH, alongZ ? len : span, 0, alongZ ? 0 : Math.PI / 2, 0, opts.parent);
-  const th = Math.atan2(roofH, hs), pl = Math.hypot(hs, roofH) + 0.55, nx = Math.sin(th) * 0.1, ny = Math.cos(th) * 0.1;
-  // Physique du toit : deux pentes marchables, chacune bornée à sa moitié de toit
-  // (sinon slopeH se clampe à la hauteur du faîte et le joueur flotte au-dessus de la pente).
-  if (opts.parent && opts.parent.alive) {
-    const axis = alongZ ? 'x' : 'z';
-    const y0 = topY + 0.05, y1 = topY + roofH - 0.1;
-    const mk = (e0, e1, b) => addCollider(Object.assign({ type: 'slope', axis, e0, e1, y0, y1, minY: topY, maxY: topY + roofH }, b));
-    let s1, s2;
-    if (alongZ) {
-      const zB = { minZ: cz - len / 2 - 0.3, maxZ: cz + len / 2 + 0.3 };
-      s1 = mk(cx - hs, cx, Object.assign({ minX: cx - hs - 0.3, maxX: cx + 0.3 }, zB));
-      s2 = mk(cx + hs, cx, Object.assign({ minX: cx - 0.3, maxX: cx + hs + 0.3 }, zB));
-    } else {
-      const xB = { minX: cx - len / 2 - 0.3, maxX: cx + len / 2 + 0.3 };
-      s1 = mk(cz - hs, cz, Object.assign({ minZ: cz - hs - 0.3, maxZ: cz + 0.3 }, xB));
-      s2 = mk(cz + hs, cz, Object.assign({ minZ: cz - 0.3, maxZ: cz + hs + 0.3 }, xB));
+// Fenêtre ouverte (on peut sauter et tirer au travers) : encadrement, appui, petits bois fins, vitre transparente.
+// k : { frame, style, cols, rows }
+function windowFrame(s, ly, op, T, k, parent) {
+  const fw = 0.15, y0 = ly + op.y0, h = op.y1 - op.y0, dn = T + 0.14, fr = k.frame, st = k.style;
+  sbox(s, fr, op.u - op.w / 2 - fw / 2 + 0.02, y0, 0, fw, h, dn, parent);
+  sbox(s, fr, op.u + op.w / 2 + fw / 2 - 0.02, y0, 0, fw, h, dn, parent);
+  sbox(s, fr, op.u, ly + op.y1 - 0.02, 0, op.w + fw * 2, st === 'adobe' || st === 'chalet' ? 0.26 : 0.17, dn, parent); // linteau
+  sbox(s, k.sill ?? fr, op.u, y0 - 0.13, 0.05, op.w + fw * 2 + 0.16, 0.14, dn + 0.16, parent); // appui
+  if (st === 'wood' || st === 'beach') { sbox(s, fr, op.u, ly + op.y1 + 0.15, 0, op.w + fw * 2 + 0.22, 0.08, dn + 0.14, parent); } // corniche
+  else if (st === 'brick') { // linteau de pierre et clef
+    sbox(s, k.trim, op.u, ly + op.y1 + 0.13, 0, op.w + 0.7, 0.2, T + 0.1, parent); sbox(s, k.trim, op.u, ly + op.y1 + 0.08, T / 2 + 0.06, 0.26, 0.34, 0.12, parent);
+  }
+  // petits bois (côté extérieur) et vitre au milieu du mur
+  const cols = k.cols ?? (op.w > 1.8 ? 3 : 2), rows = k.rows ?? 2;
+  for (let i = 1; i < cols; i++) sbox(s, fr, op.u - op.w / 2 + op.w * i / cols, y0, 0.02, 0.05, h, 0.07, parent);
+  for (let i = 1; i < rows; i++) sbox(s, fr, op.u, y0 + h * i / rows - 0.025, 0.02, op.w, 0.05, 0.07, parent);
+  sbox(s, GLASS, op.u, y0 + 0.01, 0.02, op.w - 0.02, h - 0.02, 0.012, parent);
+}
+// Toit à deux pans. k : style ; opts : { parent, stepped, snow, chimney, wall }
+function gableRoof(cx, cz, topY, w, d, rise, K, wallS, roofS, opts) {
+  const alongZ = w <= d, span = (alongZ ? w : d) + 0.5, hs = span / 2, half = (alongZ ? d : w) / 2, T = 0.35, ry = alongZ ? 0 : Math.PI / 2;
+  const L = half + (opts.stepped ? -0.1 : T / 2 + K.rake), P = opts.parent;
+  const put = (geo, hex, y = topY) => hdeco(geo, hex, cx, y, cz, 1, 1, 1, 0, ry, 0, P);
+  const G = gableParts({ hs, y0: 0.05, rise, over: K.over, L, rows: K.rows, lift: K.roof === M.THATCH ? 0.17 : 0.075, th: K.roof === M.THATCH ? 0.3 : 0.18, board: K.roof === M.THATCH ? 0.36 : 0.3 });
+  for (const g of G.body) put(g, S(M.WOOD, 0x7a5a40));
+  if (!opts.stepped) for (const g of G.boards) put(g, K.roof === M.THATCH ? S(M.THATCH, 0x8f6f3c) : K.trim);
+  for (const g of G.tiles) put(g, roofS);
+  // faîtage
+  const cap = K.roof === M.THATCH ? 0.5 : 0.3;
+  put(prism([[-cap / 2, G.yr - cap / 2 * G.k + 0.02], [cap / 2, G.yr - cap / 2 * G.k + 0.02], [cap * 0.3, G.yr + 0.1], [-cap * 0.3, G.yr + 0.1]], -L - 0.03, L + 0.03), K.roof === M.THATCH ? S(M.THATCH, 0x9a7a44) : K.snow ? S(M.SNOW, 0xf2f6fb) : S(M.TRIM, 0x4a3a34));
+  // physique : deux pentes marchables jusqu'au bout du débord
+  const axis = alongZ ? 'x' : 'z', c0 = alongZ ? cx : cz, l0 = alongZ ? cz : cx;
+  P.subs = P.subs || [];
+  const top = K.snow ? 0.24 : 0.03;
+  for (const sd of [-1, 1]) {
+    const e0 = c0 + sd * G.xe, lo = Math.min(e0, c0), hi = Math.max(e0, c0);
+    const b = alongZ ? { minX: lo, maxX: hi, minZ: l0 - L, maxZ: l0 + L } : { minZ: lo, maxZ: hi, minX: l0 - L, maxX: l0 + L };
+    P.subs.push(addCollider(Object.assign({ type: 'slope', axis, e0, e1: c0, y0: topY + G.ye + top, y1: topY + G.yr + top, minY: topY + G.ye, maxY: topY + G.yr + top }, b)));
+  }
+  // pignons
+  for (const e of [-1, 1]) {
+    const zc = e * half;
+    if (opts.stepped) { // redents de brique coiffés de pierre
+      const n = 4, mk = (wd, y0, y1) => put(prism([[-wd / 2, y0], [wd / 2, y0], [wd / 2, y1], [-wd / 2, y1]], zc - T / 2, zc + T / 2), wallS), cp = (wd, y, x) => put(prism([[x - wd / 2, y], [x + wd / 2, y], [x + wd / 2, y + 0.14], [x - wd / 2, y + 0.14]], zc - T / 2 - 0.07, zc + T / 2 + 0.07), K.trim);
+      for (let i = 0; i < n; i++) { const wd = span * (1 - i / n) + 0.2, y1 = (i + 1) * rise / n + 0.22; mk(wd, i === 0 ? -0.35 : i * rise / n + 0.2, y1); const nw = i < n - 1 ? span * (1 - (i + 1) / n) + 0.2 : 0; if (nw) for (const sx of [-1, 1]) cp((wd - nw) / 2 + 0.1, y1, sx * (wd + nw) / 4); else cp(wd + 0.14, y1, 0); }
+    } else put(prism([[-hs + 0.1, -0.35], [hs - 0.1, -0.35], [hs - 0.1, 0], [0, rise - 0.12], [-hs + 0.1, 0]], zc - T / 2, zc + T / 2), wallS);
+    // lucarne des combles : œil rond, demi-lune ou petite fenêtre
+    const zo = zc + e * (T / 2), y = rise * 0.3, sg = (geo, hex) => hdeco(geo, hex, cx + (alongZ ? 0 : zo), topY + y, cz + (alongZ ? zo : 0), 1, 1, 1, 0, alongZ ? 0 : Math.PI / 2, 0, P);
+    if (rise > 1.6) {
+      const wW = Math.min(1.1, span * 0.13);
+      if (K.wall === M.LOGS || K.wall === M.BOARDS) { sg(prism([[-wW / 2 - 0.12, -0.12], [wW / 2 + 0.12, -0.12], [wW / 2 + 0.12, 0.95], [-wW / 2 - 0.12, 0.95]], -0.05, 0.05), K.frame); sg(prism([[-wW / 2, 0], [wW / 2, 0], [wW / 2, 0.83], [-wW / 2, 0.83]], -0.07, 0.07), S(M.PANE, 0x3f5a70)); sg(prism([[-0.03, 0], [0.03, 0], [0.03, 0.83], [-0.03, 0.83]], -0.09, 0.09), K.frame); }
+      else { sg(archPoly3(wW + 0.34, 0.75 + 0.17, 0.05), K.frame); sg(archPoly3(wW, 0.75, 0.07), S(M.PANE, 0x3f5a70)); sg(prism([[-0.03, 0], [0.03, 0], [0.03, 0.75], [-0.03, 0.75]], -0.09, 0.09), K.frame); sg(prism([[-wW / 2 - 0.25, -0.12], [wW / 2 + 0.25, -0.12], [wW / 2 + 0.25, 0.02], [-wW / 2 - 0.25, 0.02]], -0.12, 0.12), K.frame); }
     }
-    opts.parent.subs = opts.parent.subs || [];
-    opts.parent.subs.push(s1, s2);
   }
-  // faîte du toit + gouttières + descentes
-  hbox(opts.trim ?? 0x5a3a24, cx, topY + roofH - 0.05, cz, alongZ ? 0.35 : len + 0.8, 0.28, alongZ ? len + 0.8 : 0.35, opts.parent);
-  const gutC = 0x9aa2ab;
-  if (alongZ) {
-    hbox(gutC, cx, topY + 0.15, cz - len / 2 - 0.05, span + 0.4, 0.24, 0.3, opts.parent);
-    hbox(gutC, cx, topY + 0.15, cz + len / 2 + 0.05, span + 0.4, 0.24, 0.3, opts.parent);
-    if (opts.drain) { hbox(gutC, cx - span / 2 - 0.05, topY - 0.4, cz - len / 2, 0.14, 1.3, 0.14, opts.parent); hbox(gutC, cx + span / 2 + 0.05, topY - 0.4, cz + len / 2, 0.14, 1.3, 0.14, opts.parent); }
-  } else {
-    hbox(gutC, cx - len / 2 - 0.05, topY + 0.15, cz, 0.3, 0.24, span + 0.4, opts.parent);
-    hbox(gutC, cx + len / 2 + 0.05, topY + 0.15, cz, 0.3, 0.24, span + 0.4, opts.parent);
-    if (opts.drain) { hbox(gutC, cx - len / 2, topY - 0.4, cz - span / 2 - 0.05, 0.14, 1.3, 0.14, opts.parent); hbox(gutC, cx + len / 2, topY - 0.4, cz + span / 2 + 0.05, 0.14, 1.3, 0.14, opts.parent); }
+  // gouttières le long des deux égouts
+  if (K.roof === M.SHINGLE && !K.snow) for (const sd of [-1, 1]) {
+    const x = sd * (G.xe + 0.05), y = topY + G.ye - 0.12;
+    if (alongZ) hbox(S(M.IRON, 0x8b929a), cx + x, y, cz, 0.14, 0.13, L * 2, P); else hbox(S(M.IRON, 0x8b929a), cx, y, cz + x, L * 2, 0.13, 0.14, P);
   }
-  if (opts.chimney) {
-    const off = (alongZ ? d : w) * 0.22, lat = hs * 0.45;
-    const x = cx + (alongZ ? lat : off), z = cz + (alongZ ? off : lat);
-    hbox(opts.chimney, x, topY, z, 0.8, roofH + 1.1, 0.8, opts.parent);
-    hbox(0x3a3a3a, x, topY + roofH + 1.1, z, 1.0, 0.18, 1.0, opts.parent);
-  }
+  return { ...G, alongZ, hs, half, L, span };
+}
+const _arch = new Map();
+function archPoly3(w, h, t) { const k = w.toFixed(3) + h.toFixed(3) + t; if (!_arch.has(k)) _arch.set(k, prism(archPoly(w, h), -t, t)); return _arch.get(k); }
+// petite lucarne à fronton sur un pan (sd = -1 / 1), à la distance t du faîte
+function dormer(cx, cz, topY, R_, K, wallS, roofS, sd, t, along, parent) {
+  const k = R_.k, xf = R_.hs * t, yb = R_.yr - xf * k, w = 1.5, hw = 1.15, rise = 0.75, back = Math.min(xf - 0.1, (hw + 0.1) / k);
+  const yTop = topY + yb + hw, A = R_.alongZ;
+  const at = (n, u) => A ? [cx + sd * n, cz + u] : [cx + u, cz + sd * n];
+  const ry = A ? (sd > 0 ? Math.PI / 2 : -Math.PI / 2) : (sd > 0 ? 0 : Math.PI); // +z local = vers l'extérieur
+  const put = (geo, hex, n, y) => { const [x, z] = at(n, along); hdeco(geo, hex, x, y, z, 1, 1, 1, 0, ry, 0, parent); };
+  const q = (a, b, c, e) => [[a, b], [c, b], [c, e], [a, e]];
+  put(prism([[-w / 2, -0.2], [w / 2, -0.2], [w / 2, hw], [0, hw + rise - 0.08], [-w / 2, hw]], -back - 0.2, 0), wallS, xf, topY + yb);
+  put(prism(q(-0.46, 0.12, 0.46, 1.06), 0, 0.06), K.frame, xf, topY + yb); put(prism(q(-0.36, 0.22, 0.36, 0.96), 0, 0.08), S(M.PANE, 0x3f5a70), xf, topY + yb);
+  put(prism(q(-0.025, 0.22, 0.025, 0.96), 0, 0.1), K.frame, xf, topY + yb); put(prism(q(-0.36, 0.57, 0.36, 0.62), 0, 0.1), K.frame, xf, topY + yb);
+  const g = gableParts({ hs: w / 2, y0: 0, rise, over: 0.22, L: 1, rows: 3, lift: 0.05, th: 0.1, board: 0.16 }), len = back + 1.0;
+  const shift = (geo) => { const c = geo.clone(); c.scale(1, 1, len / 2); c.translate(0, 0, 0.22 - len / 2); return c; };
+  for (const p of g.body) put(shift(p), S(M.WOOD, 0x7a5a40), xf, yTop); for (const p of g.tiles) put(shift(p), roofS, xf, yTop); put(shift(g.boards[1]), K.trim, xf, yTop); put(shift(g.boards[3]), K.trim, xf, yTop);
+  const [mx, mz] = at(xf - 0.6, along), hx = A ? 0.6 : w / 2, hz = A ? w / 2 : 0.6;
+  parent.subs.push(addCollider({ type: 'box', minX: mx - hx, maxX: mx + hx, minZ: mz - hz, maxZ: mz + hz, minY: topY + yb - 0.2, maxY: yTop + 0.35 }));
 }
 // Meubles du pack 3D : instanciés par flora, visibles seulement autour de la caméra.
 { const FD = LOWQ ? 26 : HIGHQ ? 62 : 46; for (const id in MEUBLE_SIZE) { const r = Math.max(...MEUBLE_SIZE[id]) < 0.4 ? FD * 0.5 : FD; flora.kind(id, { R: r, fade: r }); } }
@@ -1743,7 +1654,7 @@ function furniture(cx, cz, y, w, d, skipCorner, accent, avoid, office) {
     placed++;
   }
   // suspension au plafond, décalée à l'écart de l'escalier et au-dessus des têtes
-  flora.add(office ? 'plafond2' : 'plafond', cx + w / 8, y + 2.62, cz + d / 8, 0, 1);
+  flora.add(office ? 'plafond2' : 'plafond', cx + w / 8, y + 2.86, cz + d / 8, 0, 1);
 }
 // collider de décor indestructible (mobilier, coffres, caisses, pads…)
 const propCols = [];
@@ -1774,84 +1685,85 @@ function propBoxRot(x, y, z, hx, hz, h, a) {
 }
 function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
   // rot: 0..3 -> door side
-  const ST = STYLE_COLS[style] || STYLE_COLS.wood;
-  const wallHex = pick(ST.walls), roofHex = pick(ST.roofs), trim = ST.trim ?? 0xf4efe4, frame = ST.frame ?? 0x5a3a24, accent = pick([0xd2483a, 0x3b6fd1, 0x2f9e7a, 0xe08a2e, 0x9b59b6]);
-  const mat = ST.mat;
+  if (!HOUSE_KIT[style]) style = 'wood';
+  const K = { ...HOUSE_KIT[style], snow: style === 'chalet' };
+  const hr = mulberry32((Math.round(cx * 73) ^ Math.round(cz * 179)) >>> 0), hp = (a) => a[(hr() * a.length) | 0], RICH = !LOWQ; // hasard des détails, propre à chaque maison
+  const wallHex = S(K.wall, hp(K.walls)), roofHex = S(K.roof, hp(K.roofs)), doorC = hp(K.door), shutC = K.shut && S(M.LOUVER, hp(K.shut)), accent = doorC, mat = K.mat, inner = hp(INNER_WALLS);
   const twoStory = (style === 'brick' || style === 'wood' || style === 'adobe') && w >= 10 && R() < 0.45;
-  const H = twoStory ? 4 : 4.2, T = 0.35, levels = twoStory ? 2 : 1;
-  const o = { hp: ST.hp, mat };
-  // foundation + floor
-  makeStructBox(cx, baseY - 3, cz, w + 0.6, 3.15, d + 0.6, matC(style === 'beach' ? 0xc49a62 : 0x8d8a84), { indestructible: true });
-  hbox(style === 'adobe' ? 0xc8a070 : 0xb98a5a, cx, baseY + 0.15, cz, w - 0.3, 0.03, d - 0.3);
+  const H = 4, T = 0.35, levels = twoStory ? 2 : 1, alongZ = w <= d;
+  const o = { hp: K.hp, mat, inner };
+  const upHex = style === 'wood' && twoStory && hr() < 0.5 ? S(M.BOARDS, wallHex & 0xffffff) : wallHex; // étage en planches verticales
+  // soubassement de pierre et parquet
+  makeStructBox(cx, baseY - 3, cz, w + 0.6, 3.15, d + 0.6, matC(K.base & 0xffffff), { indestructible: true, sm: K.base >>> 24 });
+  hbox(S(style === 'adobe' ? M.PAVE : M.FLOOR, style === 'adobe' ? 0xc98a5c : hp([0xb98a5a, 0xa8764a, 0xc79c68, 0x8f6440])), cx, baseY + 0.15, cz, w - 0.3, 0.03, d - 0.3);
   const sides = footprintSides(cx, cz, w, d);
+  // cheminée extérieure adossée à un pignon (jamais côté porte)
+  const gables = alongZ ? [0, 2] : [1, 3], chimSide = (style === 'wood' || style === 'chalet') ? gables.find((g) => g !== rot && g !== (rot + 2) % 4) ?? gables.find((g) => g !== rot) : -1;
+  const wk = { frame: K.frame, trim: K.trim, style, sill: style === 'brick' ? K.trim : undefined };
   for (let lv = 0; lv < levels; lv++) {
-    const ly = baseY + lv * H;
+    const ly = baseY + lv * H, wh = lv ? upHex : wallHex;
     sides.forEach((s, i) => {
-      const door = lv === 0 && i === rot;
-      const ops = [];
-      if (door) ops.push({ u: 0, w: 1.8, y0: 0, y1: 2.6, kind: 'door' });
-      else if (R() < 0.8) {
-        const two = s.len >= 10 && R() < 0.6;
-        if (two) ops.push({ u: -s.len / 4, w: 1.5, y0: 1.2, y1: 2.6, kind: 'win' }, { u: s.len / 4, w: 1.5, y0: 1.2, y1: 2.6, kind: 'win' });
-        else ops.push({ u: 0, w: 1.6, y0: 1.2, y1: 2.6, kind: 'win' });
-      }
-      wallWithOpenings(s, ly, H, T, ops, wallHex, o);
+      const door = lv === 0 && i === rot, ops = [], y0 = 0.95, y1 = style === 'adobe' ? 2.55 : 2.8;
+      const win = (u, ww) => ops.push({ u, w: ww, y0, y1, kind: 'win' });
+      if (door) { ops.push({ u: 0, w: 1.8, y0: 0, y1: 2.6, kind: 'door' }); if (s.len >= 8) for (const sd of [-1, 1]) win(sd * s.len * 0.335, s.len >= 10 ? 1.5 : 1.2); }
+      else if (i === chimSide || s.len >= 10 || hr() < 0.5) { win(-s.len / 4, s.len >= 10 ? 1.6 : 1.35); win(s.len / 4, s.len >= 10 ? 1.6 : 1.35); if (s.len >= 12 && i !== chimSide) win(0, 1.6); }
+      else win(0, 2.3);
+      wallWithOpenings(s, ly, H, T, ops, wh, o);
       for (const op of ops) {
         const par = op.sill || op.lintel;
         if (op.kind === 'win') {
-          windowFrame(s, ly, op, T, frame, par);
-          if (style !== 'adobe') { // shutters
-            const sh = style === 'chalet' ? 0x2f5a3a : style === 'beach' ? pick([0x3fa9ff, 0xff7aa8, 0x2fc4b2]) : accent;
-            sbox(s, sh, op.u - op.w / 2 - 0.45, ly + op.y0, T / 2 + 0.06, 0.55, op.y1 - op.y0, 0.08, par);
-            sbox(s, sh, op.u + op.w / 2 + 0.45, ly + op.y0, T / 2 + 0.06, 0.55, op.y1 - op.y0, 0.08, par);
+          windowFrame(s, ly, op, T, wk, par);
+          const gap = op.w / 2 + 0.15, sw = Math.min(0.52, op.w * 0.36), hh = op.y1 - op.y0;
+          if (shutC && op.w < 2 && style !== 'beach') for (const sd of [-1, 1]) { // persiennes
+            sbox(s, shutC, op.u + sd * (gap + sw / 2 + 0.03), ly + op.y0, T / 2 + 0.05, sw, hh, 0.07, par);
+            sbox(s, S(M.TRIM, shutC & 0xffffff), op.u + sd * (gap + sw / 2 + 0.03), ly + op.y0 + hh * 0.48, T / 2 + 0.06, sw + 0.02, 0.1, 0.09, par);
           }
-          if (style !== 'brick' && R() < 0.7) { // flower box
-            sbox(s, 0x7a4e2c, op.u, ly + op.y0 - 0.55, T / 2 + 0.25, op.w + 0.1, 0.35, 0.4, par);
-            for (let f = 0; f < 4; f++) sbox(s, pick([0xff4d6d, 0xffd23f, 0xff9de0, 0xffffff]), op.u - op.w / 2 + 0.25 + f * (op.w - 0.5) / 3, ly + op.y0 - 0.2, T / 2 + 0.25, 0.22, 0.22, 0.22, par);
+          if (style === 'beach' && s.ax === 'x') hdeco(BOX, shutC, s.x + op.u, ly + op.y1 - 0.02, s.z + s.out * (T / 2 + 0.5), op.w + 0.2, 0.06, 1.05, s.out * 0.5, 0, 0, par); // volet relevé
+          else if (style === 'beach') hdeco(BOX, shutC, s.x + s.out * (T / 2 + 0.5), ly + op.y1 - 0.02, s.z + op.u, 1.05, 0.06, op.w + 0.2, 0, 0, -s.out * 0.5, par);
+          if (style === 'adobe') { // auvent de tuiles sur consoles de bois
+            const aw = op.w + 0.9; sgeo(s, tileRows(0.85, -0.5, 0, 0, -aw / 2, aw / 2, 3, 0.06).rotateY(-Math.PI / 2), roofHex, op.u, ly + op.y1 + 0.72, T / 2, par);
+            for (const sd of [-1, 1]) sbox(s, K.frame, op.u + sd * (aw / 2 - 0.2), ly + op.y1 + 0.16, T / 2 + 0.36, 0.13, 0.13, 0.72, par);
+          }
+          if ((style === 'wood' || style === 'chalet' || style === 'adobe') && lv === 0 && hr() < 0.65 || (lv > 0 && hr() < 0.35)) { // jardinière fleurie
+            sbox(s, S(M.WOOD, style === 'chalet' ? 0x6b4628 : 0x8a5c38), op.u, ly + op.y0 - 0.5, T / 2 + 0.24, op.w + 0.1, 0.3, 0.34, par);
+            sbox(s, S(M.LEAF, 0x4f8a3a), op.u, ly + op.y0 - 0.24, T / 2 + 0.25, op.w, 0.16, 0.36, par);
+            const fc = hp([[0xe8465a, 0xff8fa8], [0xf2c230, 0xffffff], [0xa65fd0, 0xff9de0], [0xff6a3a, 0xffd24a]]), nf = RICH ? 7 : 4;
+            for (let f = 0; f < nf; f++) hdeco(SPH_GEO, fc[f & 1], ...spos(s, op.u - op.w / 2 + 0.12 + f * (op.w - 0.24) / (nf - 1), T / 2 + 0.25 + (f % 3 - 1) * 0.09), 0.17, 0.15, 0.17, 0, 0, 0, par, 'XYZ', ly + op.y0 - 0.06 + (f % 2) * 0.05);
           }
         } else {
-          // porte réelle : elle s'ouvre avec E et bloque le passage fermée
-          const doorC = style === 'adobe' ? 0x6e4a2c : style === 'chalet' ? 0x4a2e1a : accent;
-          addDoor(s, ly, op, T, doorC);
-          sbox(s, frame, 0, ly + op.y1, 0, op.w + 0.4, 0.2, T + 0.14, par);
-          sbox(s, frame, -op.w / 2 - 0.08, ly, 0, 0.16, op.y1, T + 0.14, null);
-          sbox(s, frame, op.w / 2 + 0.08, ly, 0, 0.16, op.y1, T + 0.14, null);
-          sbox(s, 0x9a9690, 0, baseY - 0.25, T / 2 + 0.85, op.w + 1.2, 0.4, 1.3, null);
-          if (style === 'wood' || style === 'chalet') {
-            sbox(s, roofHex, 0, ly + 2.95, T / 2 + 0.85, op.w + 1.6, 0.16, 1.9, par);
-            sbox(s, trim, -op.w / 2 - 0.65, baseY + 0.15, T / 2 + 1.6, 0.18, 2.8, 0.18, null);
-            sbox(s, trim, op.w / 2 + 0.65, baseY + 0.15, T / 2 + 1.6, 0.18, 2.8, 0.18, null);
-          } else if (style === 'beach') {
-            const c1 = pick([0xff5a5a, 0x3fa9ff, 0x2fc4b2]);
-            for (let k = 0; k < 5; k++) sbox(s, k % 2 ? 0xffffff : c1, -op.w / 2 - 0.5 + k * (op.w + 1) / 4.6, ly + 2.85, T / 2 + 0.7, (op.w + 1) / 5, 0.12, 1.4, par);
-          } else if (style === 'brick') {
-            sbox(s, 0xfff2b0, op.w / 2 + 0.55, ly + 1.9, T / 2 + 0.1, 0.22, 0.32, 0.2, par); // lamp
-            sbox(s, 0x2b2f36, op.w / 2 + 0.55, ly + 2.2, T / 2 + 0.1, 0.3, 0.08, 0.26, par);
-          } else if (style === 'adobe') {
-            sbox(s, 0x2fb4a8, 0, ly + op.y1 + 0.2, 0, op.w + 0.7, 0.3, T + 0.2, par);
-          }
+          addDoor(s, ly, op, T, doorC); // porte réelle : elle s'ouvre avec E et bloque le passage fermée
+          const fr = style === 'brick' ? K.trim : K.frame;
+          sbox(s, fr, 0, ly + op.y1, 0, op.w + 0.44, 0.22, T + 0.16, par);
+          for (const sd of [-1, 1]) sbox(s, fr, sd * (op.w / 2 + 0.1), ly, 0, 0.2, op.y1, T + 0.16, null);
+          housePorch(s, baseY, ly, op, T, { K, style, roofHex, wallHex, accent, par, hr, RICH });
         }
       }
+      // plinthe : pierre dehors, bois peint dedans (interrompue devant la porte)
+      if (lv === 0) for (const [a, b] of door ? [[-s.len / 2 - 0.2, -1.1], [1.1, s.len / 2 + 0.2]] : [[-s.len / 2 - 0.2, s.len / 2 + 0.2]]) sbox(s, K.base, (a + b) / 2, baseY + 0.15, 0.09, b - a, style === 'adobe' ? 0.42 : 0.55, T);
+      for (const [a, b] of door ? [[-s.len / 2 + 0.2, -1.1], [1.1, s.len / 2 - 0.2]] : [[-s.len / 2 + 0.2, s.len / 2 - 0.2]]) sbox(s, S(M.TRIM, 0xefe8da), (a + b) / 2, ly + (lv ? 0.12 : 0.15), -T / 2 - 0.02, b - a, 0.18, 0.05);
       // rampe intérieure dans l'angle nord-ouest des maisons à étage : mur laissé nu
       wallDecor(s, ly, H, T, ops, { accent, office: style === 'bunker', skip: twoStory && (i === 0 || i === 3) ? (u0) => u0 < -s.len / 2 + 4.6 : null });
     });
-    // corner posts + floor band
-    const ch = H, cy = ly;
-    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) hbox(style === 'adobe' ? 0xc89a68 : trim, cx + sx * (w / 2), cy, cz + sz * (d / 2), 0.55, ch, 0.55);
-    if (lv > 0) for (const s of sides) sbox(s, trim, 0, ly - 0.12, 0, s.len + 0.6, 0.24, T + 0.22);
+    // angles : planches cornières, chaînes de pierre, rondins croisés ou contreforts
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const px = cx + sx * w / 2, pz = cz + sz * d / 2;
+      if (style === 'brick' && RICH) for (let q = 0; q < 9; q++) { const a = q % 2 ? 0.52 : 0.78, b = q % 2 ? 0.78 : 0.52; hbox(K.trim, px - sx * (a - 0.46) / 2, ly + 0.05 + q * 0.44, pz + sz * 0.03, a, 0.36, 0.4); hbox(K.trim, px + sx * 0.03, ly + 0.05 + q * 0.44, pz - sz * (b - 0.46) / 2, 0.4, 0.36, b); }
+      else if (style === 'chalet') { if (RICH) for (let q = 0; q < 9; q++) { const lx = q % 2 === 0; hdeco(CYL8, S(M.WOOD, 0x8a5a34), px + (lx ? sx * 0.22 : 0), ly + 0.23 + q * 0.44, pz + (lx ? 0 : sz * 0.22), 0.37, 0.9, 0.37, lx ? 0 : Math.PI / 2, 0, lx ? Math.PI / 2 : 0); } else hbox(K.trim, px + sx * 0.08, ly, pz + sz * 0.08, 0.5, H, 0.5); }
+      else if (style === 'adobe') { hbox(wallHex, px + sx * 0.05, ly, pz + sz * 0.05, 0.44, H, 0.44); if (!lv) hbox(wallHex, px + sx * 0.15, ly, pz + sz * 0.15, 0.64, 1.5, 0.64); }
+      else hbox(K.trim, px + sx * 0.04, ly, pz + sz * 0.04, 0.42, H, 0.42);
+    }
+    if (lv > 0) for (const s of sides) { sbox(s, K.trim, 0, ly - 0.16, 0, s.len + 0.5, 0.28, T + 0.16); if (style === 'brick') sbox(s, K.trim, 0, ly + 0.14, 0, s.len + 0.6, 0.1, T + 0.28); }
   }
-  // skirt band
-  for (const s of sides) sbox(s, style === 'adobe' ? 0xb98a5a : 0x6b6560, 0, baseY + 0.15, 0, s.len + 0.5, 0.45, T + 0.12);
   if (twoStory) {
     // interior ramp (rises toward +z) and upper floor with a stair hole
     const x0 = cx - w / 2 + 0.2, z0 = cz - d / 2 + 0.2;
-    hdeco(rampDecoGeo, 0x9a7048, x0 + 2, baseY + 2, z0 + 2, 1, 1, 1, Math.PI / 4, Math.PI, 0, null, 'YXZ');
+    hdeco(rampDecoGeo, S(M.WOOD, 0x9a7048), x0 + 2, baseY + 2, z0 + 2, 1, 1, 1, Math.PI / 4, Math.PI, 0, null, 'YXZ');
     addCollider({ type: 'ramp', cx: x0 / CELL, cz: z0 / CELL, y: baseY, d: 2, minX: x0, maxX: x0 + CELL, minZ: z0, maxZ: z0 + CELL, minY: baseY, maxY: baseY + CELL });
-    const slab = matC(0xd8c8a8);
+    const slab = matC(0xb08a5e), so = { hp: 240, mat, indestructible: true, sm: M.FLOOR, faces: [{ n: [0, -1, 0], hex: CEIL }] };
     const ax0 = x0 + 4, ax1 = cx + w / 2;
-    makeStructBox((ax0 + ax1) / 2, baseY + H - 0.12, cz, ax1 - ax0, 0.24, d, slab, { hp: 240, mat, indestructible: true });
+    makeStructBox((ax0 + ax1) / 2, baseY + H - 0.12, cz, ax1 - ax0, 0.24, d, slab, so);
     const bx0 = cx - w / 2, bz0 = z0 + 4, bz1 = cz + d / 2;
-    makeStructBox((bx0 + ax0) / 2, baseY + H - 0.12, (bz0 + bz1) / 2, ax0 - bx0, 0.24, bz1 - bz0, slab, { hp: 240, mat, indestructible: true });
+    makeStructBox((bx0 + ax0) / 2, baseY + H - 0.12, (bz0 + bz1) / 2, ax0 - bx0, 0.24, bz1 - bz0, slab, so);
     // coffre de l'étage placé avant le mobilier : le mobilier évite son emplacement
     const upAvoid = [];
     if (R() < 0.6) { const c = spawnChest(cx + w / 4 + rand(-1, 1), baseY + H + 0.12, cz - d / 4); upAvoid.push({ x: c.x, z: c.z }); }
@@ -1865,149 +1777,226 @@ function buildHouseInner(cx, cz, baseY, w, d, rot, style) {
   if (R() < 0.5) { const a = spawnAmmoBox(cx + rand(0, w / 3), baseY, cz + rand(-d / 3, d / 3)); ammoBoxes.push(a); avoid.push({ x: a.x, z: a.z }); }
   furniture(cx, cz, baseY + 0.17, w, d, twoStory, accent, avoid);
   const topY = baseY + H * levels;
-  // roof slab (walkable) + decorative roof
-  const roofCol = makeStructBox(cx, topY, cz, w + 0.8, 0.35, d + 0.8, matC(style === 'adobe' ? 0xd8b080 : 0xe8dcc4), { hp: 220, mat });
-  if (style === 'adobe') {
-    for (const s of sides) sbox(s, 0xc99a62, 0, topY + 0.35, 0.1, s.len + 0.8, 0.7, 0.35, roofCol); // parapet
-    for (const s of sides) for (let u = -s.len / 2 + 1; u < s.len / 2 - 0.5; u += 1.6) sbox(s, 0x6e4a2c, u, topY - 0.45, T / 2 + 0.3, 0.26, 0.26, 0.7, roofCol); // vigas
-    if (R() < 0.6) { hdeco(CYL_GEO, 0xb8643a, cx + w / 4, topY + 0.85, cz - d / 4, 0.9, 1.0, 0.9, 0, 0, 0, roofCol); }
+  // dalle de plafond (marchable) puis toiture
+  const flat = style === 'adobe';
+  const roofCol = makeStructBox(cx, topY, cz, w + (flat ? 0.5 : 0.4), 0.35, d + (flat ? 0.5 : 0.4), matC(flat ? 0xc98a5c : K.trim & 0xffffff), { hp: 220, mat, sm: flat ? M.PAVE : M.TRIM, faces: [{ n: [0, -1, 0], hex: CEIL }] });
+  if (flat) {
+    for (const s of sides) { // acrotère arrondi, poutres apparentes, gargouilles
+      sbox(s, wallHex, 0, topY - 0.05, 0.1, s.len + 0.75, 1.0, 0.42, roofCol);
+      sbox(s, K.trim, 0, topY + 0.93, 0.1, s.len + 0.85, 0.12, 0.52, roofCol);
+      for (let u = -s.len / 2 + 0.9; u < s.len / 2 - 0.4; u += 1.15) { const [x, y_, z] = spos(s, u, T / 2 + 0.42); hdeco(CYL8, K.frame, x, topY - 0.32, z, 0.24, 0.95, 0.24, s.ax === 'x' ? Math.PI / 2 : 0, 0, s.ax === 'x' ? 0 : Math.PI / 2, roofCol); }
+    }
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { hbox(wallHex, cx + sx * (w / 2 + 0.05), topY - 0.05, cz + sz * (d / 2 + 0.05), 0.8, 1.35, 0.8, roofCol); hbox(K.trim, cx + sx * (w / 2 + 0.05), topY + 1.3, cz + sz * (d / 2 + 0.05), 0.92, 0.12, 0.92, roofCol); }
+    // édicule de toit : petit volume plein coiffé de tuiles, pergola et jarre
+    const kx = hr() < 0.5 ? 1 : -1, kz = hr() < 0.5 ? 1 : -1, vx = cx + kx * (w / 2 - 1.75), vz = cz + kz * (d / 2 - 1.75);
+    makeStructBox(vx, topY + 0.35, vz, 2.6, 2.1, 2.6, matC(wallHex & 0xffffff), { hp: 220, mat, sm: wallHex >>> 24 });
+    const vg = gableParts({ hs: 1.3, y0: 0, rise: 0.75, over: 0.35, L: 1.6, rows: 4, lift: 0.07, th: 0.16, board: 0.2 });
+    for (const g of vg.tiles) hdeco(g, roofHex, vx, topY + 2.45, vz, 1, 1, 1); for (const g of [...vg.body, ...vg.boards]) hdeco(g, K.frame, vx, topY + 2.45, vz, 1, 1, 1);
+    for (const e of [-1, 1]) hdeco(prism([[-1.25, 0], [1.25, 0], [0, 0.7]], -0.1, 0.1), wallHex, vx, topY + 2.45, vz + e * 1.2, 1, 1, 1);
+    hdeco(archPoly3(0.8, 0.5, 0.05), S(M.PANE, 0x2f4a5a), vx - kx * 1.3, topY + 1.6, vz, 1, 1, 1, 0, Math.PI / 2, 0); hbox(S(M.PANE, 0x2f4a5a), vx - kx * 1.3, topY + 0.9, vz, 0.1, 0.72, 0.8);
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) hbox(K.frame, vx - kx * 3.3 + a * 1.1, topY + 0.35, vz + b * 1.1, 0.14, 2.1, 0.14, roofCol);
+    for (let q = 0; q < 6; q++) hbox(K.frame, vx - kx * 3.3 - 1.2 + q * 0.48, topY + 2.45, vz, 0.12, 0.14, 2.7, roofCol);
+    hdeco(SPH_GEO, S(M.STUCCO, 0xb8643a), cx - kx * (w / 2 - 1), topY + 0.8, cz - kz * (d / 2 - 1), 0.8, 0.95, 0.8, 0, 0, 0, roofCol); hdeco(CYL8, S(M.STUCCO, 0xa5552f), cx - kx * (w / 2 - 1), topY + 1.28, cz - kz * (d / 2 - 1), 0.45, 0.2, 0.45, 0, 0, 0, roofCol);
   } else {
-    const roofH = style === 'chalet' ? 3.6 : style === 'beach' ? 1.8 : 2.6;
-    const shadC = style === 'chalet' ? 0x6e4a30 : style === 'brick' ? pick([0x8a4a3a, 0x6b5548, 0x5a6a75]) : style === 'beach' ? pick([0xc98a4a, 0x4a9a7a, 0x7a8a9a]) : pick([0x7a5535, 0x5a4a3a, 0x94553a]);
-    gableRoof(cx, cz, topY + 0.35, w, d, roofH, wallHex, roofHex, { parent: roofCol, snow: style === 'chalet', drain: true, shingles: shadC, chimney: style === 'beach' ? 0 : style === 'chalet' ? 0x8d8a84 : 0xa0523d, trim: frame });
-    // Lucarnes de toit (dormers) sur grandes toitures pour le charme architectural Fortnite
-    if (w >= 10 && d >= 8 && style !== 'adobe') {
-      const dormY = topY + roofH * 0.42;
-      const dOff = (w <= d ? d : w) * 0.22;
-      const alongZ = w <= d;
-      const dormHex = wallHex;
-      const dormSpan = (alongZ ? d : w) + 0.5;
-      if (alongZ) {
-        hbox(dormHex, cx - dormSpan / 2 + 0.4, dormY, cz + dOff, 1.4, 1.2, 1.4, roofCol);
-        hbox(0x9fc8e8, cx - dormSpan / 2 + 0.15, dormY + 0.2, cz + dOff, 0.1, 0.7, 0.8, roofCol);
-        hbox(shadC, cx - dormSpan / 2 + 0.4, dormY + 1.25, cz + dOff, 1.6, 0.15, 1.6, roofCol);
-      } else {
-        hbox(dormHex, cx + dOff, dormY, cz - dormSpan / 2 + 0.4, 1.4, 1.2, 1.4, roofCol);
-        hbox(0x9fc8e8, cx + dOff, dormY + 0.2, cz - dormSpan / 2 + 0.15, 0.8, 0.7, 0.1, roofCol);
-        hbox(shadC, cx + dOff, dormY + 1.25, cz - dormSpan / 2 + 0.4, 1.6, 0.15, 1.6, roofCol);
+    const span = Math.min(w, d) + 0.5, rise = span * K.rise;
+    const RF = gableRoof(cx, cz, topY + 0.35, w, d, rise, K, K.wall === M.LOGS ? S(M.BOARDS, wallHex & 0xffffff) : upHex, roofHex, { parent: roofCol, stepped: style === 'brick' });
+    if (K.snow) { // manteau de neige, congères au bord et stalactites
+      const L = RF.L + 0.04, ry = RF.alongZ ? 0 : Math.PI / 2, put = (g, hex) => hdeco(g, hex, cx, topY + 0.35, cz, 1, 1, 1, 0, ry, 0, roofCol), sn = S(M.SNOW, 0xf2f6fb);
+      for (const sd of [-1, 1]) {
+        const P = [[0, RF.yr + 0.06], [sd * (RF.xe + 0.1), RF.ye + 0.04], [sd * (RF.xe + 0.16), RF.ye + 0.14], [sd * (RF.xe - 0.02), RF.ye + 0.3], [sd * RF.xe * 0.55, RF.yr - RF.k * RF.xe * 0.55 + 0.3], [0, RF.yr + 0.3]];
+        put(prism(sd > 0 ? P : P.slice().reverse(), -L, L), sn);
+        if (RICH) for (let q = 0; q < 16; q++) { const z = -L + 0.3 + (q + hr() * 0.7) * (2 * L - 0.6) / 16, h = 0.18 + hr() * 0.5, x = sd * (RF.xe + 0.02); hdeco(CONE6, 0xd6ecfa, cx + (RF.alongZ ? x : z), topY + 0.35 + RF.ye - 0.12 - h / 2, cz + (RF.alongZ ? z : x), 0.11, h, 0.11, Math.PI, 0, 0, roofCol); }
       }
+      for (const e of [-1, 1]) for (const sd of [-1, 1]) { // consoles sous le débord
+        const x = sd * (RF.hs - 0.25), z = e * (RF.half + 0.55); hbox(K.trim, cx + (RF.alongZ ? x : z), topY - 0.05, cz + (RF.alongZ ? z : x), RF.alongZ ? 0.24 : 1.1, 0.24, RF.alongZ ? 1.1 : 0.24, roofCol);
+      }
+      // balcon de bois sur le pignon opposé à la cheminée
+      const gi = gables.find((g) => g !== chimSide), s = sides[gi], bl = Math.min(5.4, s.len - 1.4), by = topY - 0.3;
+      sbox(s, K.trim, 0, by, T / 2 + 0.5, bl, 0.16, 1.0, roofCol);
+      for (const sd of [-1, 1]) { sbox(s, K.trim, sd * (bl / 2 - 0.5), by - 0.55, T / 2 + 0.32, 0.16, 0.55, 0.5, roofCol); sbox(s, K.frame, sd * (bl / 2 - 0.05), by + 0.16, T / 2 + 0.5, 0.1, 0.95, 1.0, roofCol); }
+      sbox(s, K.frame, 0, by + 1.05, T / 2 + 0.96, bl, 0.12, 0.14, roofCol);
+      for (let u = -bl / 2 + 0.2; u < bl / 2; u += 0.34) sbox(s, S(M.WOOD, 0x8a5a34), u, by + 0.16, T / 2 + 0.96, 0.22, 0.9, 0.05, roofCol);
     }
+    if (chimSide >= 0) { // conduit de pierre ou de brique, large au foyer
+      const s = sides[chimSide], cm = style === 'chalet' ? S(M.STONE, 0x8f8b84) : S(M.BRICK, 0x9a4f3c), gh = topY + 0.35 + rise, n = T / 2 + 0.38;
+      const [x, , z] = spos(s, 0, n), sx = s.ax === 'x';
+      makeStructBox(x, baseY - 0.5, z, sx ? 1.9 : 0.8, 3.1, sx ? 0.8 : 1.9, matC(cm & 0xffffff), { indestructible: true, sm: cm >>> 24 });
+      sgeo(s, prism([[-0.95, 0], [0.95, 0], [0.55, 0.6], [-0.55, 0.6]], -0.4, 0.4), cm, 0, baseY + 2.6, n); sbox(s, cm, 0, baseY + 3.2, n, 1.1, gh - baseY - 3.2 + 0.7, 0.8);
+      sbox(s, K.base, 0, gh + 0.7, n, 1.34, 0.16, 1.04); sbox(s, 0x2f2a28, 0, gh + 0.86, n, 0.7, 0.24, 0.4); if (K.snow) sbox(s, S(M.SNOW, 0xf2f6fb), 0, gh + 0.86, n, 1.3, 0.14, 1.0);
+    } else if (style === 'brick') for (const e of [-1, 1]) { // souches doubles sur les pignons
+      const z = e * RF.half; for (const q of [-0.2, 0.2]) hdeco(CYL8, S(M.STUCCO, 0xb0603c), cx + (RF.alongZ ? q : z), topY + 0.35 + rise + 1.25, cz + (RF.alongZ ? z : q), 0.26, 0.5, 0.26, 0, 0, 0, roofCol);
+      hbox(S(M.BRICK, wallHex & 0xffffff), cx + (RF.alongZ ? 0 : z), topY + 0.35 + rise + 0.3, cz + (RF.alongZ ? z : 0), RF.alongZ ? 1.0 : 0.6, 0.65, RF.alongZ ? 0.6 : 1.0, roofCol);
+      hbox(K.trim, cx + (RF.alongZ ? 0 : z), topY + 0.35 + rise + 0.95, cz + (RF.alongZ ? z : 0), RF.alongZ ? 1.14 : 0.74, 0.12, RF.alongZ ? 0.74 : 1.14, roofCol);
+    }
+    if ((style === 'wood' || style === 'brick') && Math.max(w, d) >= 10) for (const sd of [-1, 1]) for (const u of Math.max(w, d) >= 12 ? [-2.6, 2.6] : [0]) dormer(cx, cz, topY + 0.35, RF, K, S(style === 'brick' ? M.TRIM : M.SIDING, style === 'brick' ? K.trim & 0xffffff : wallHex & 0xffffff), roofHex, sd, 0.72, u, roofCol);
   }
-  if (style === 'beach' && R() < 0.8) { // surfboard + deck chair outside
-    const s = sides[(rot + 1) % 4];
-    sbox(s, pick([0xff5a5a, 0x3fa9ff, 0xffd23f]), 0, baseY + 0.15, T / 2 + 0.2, 0.55, 2.2, 0.1);
-  }
-  // --- cour réaliste façon Fortnite : allée, boîte aux lettres, buissons taillés, banc ---
+  // --- abords : allée de dalles, boîte aux lettres, massifs, banc
   {
-    const ds = sides[rot], DW = ds.len;
-    const walkC = style === 'adobe' ? 0xc9a570 : 0x9a9a92;
-    // allée depuis la porte vers l'extérieur
-    for (let k = 0; k < 4; k++) sbox(ds, walkC, 0, baseY + 0.12, T / 2 + 1.8 + k * 1.15, DW * 0.4 + 0.6, 0.04, 1.0, null);
-    // boîte aux lettres sur poteau
-    const mOff = DW * 0.45 + 1.2;
-    sbox(ds, 0x4a3a28, 0, baseY + 0.55, T / 2 + 2.6 + 1.0, 0.1, 0.8, 0.1, null);
-    sbox(ds, pick([0x3b6fd1, 0xd2483a, 0x2f9e7a]), 0, baseY + 1.05, T / 2 + 2.6 + 1.0, 0.32, 0.3, 0.45, null);
-    // buissons taillés de chaque côté de la porte
-    for (const sgn of [-1, 1]) {
-      const bx = sgn * (DW * 0.5 + 1.1);
-      { const gx = ds.x + (ds.ax === 'x' ? bx : ds.out * (T / 2 + 1.2)), gz = ds.z + (ds.ax === 'x' ? ds.out * (T / 2 + 1.2) : bx); flora.add('bush', gx, terrainH(gx, gz) + 0.1, gz, rand(6.28), 0.72, 0.78, 0.72, _fc.setHSL(0.31, 0.6, 0.28)); }
+    const ds = sides[rot], DW = ds.len, near = T / 2 + 2.25;
+    for (let k = 0; k < 4; k++) sbox(ds, S(M.PAVE, style === 'adobe' ? 0xc9a070 : 0xa8a298), (k % 2 ? 0.18 : -0.18), baseY + 0.02, near + 0.35 + k * 0.82, 1.5 - (k % 2) * 0.2, 0.07, 0.66);
+    sbox(ds, S(M.WOOD, 0x5a4230), 1.5, baseY, near + 2.6, 0.1, 1.05, 0.1); sbox(ds, S(M.TRIM, doorC), 1.5, baseY + 1.0, near + 2.6, 0.28, 0.26, 0.46); sbox(ds, 0xf2c230, 1.5, baseY + 1.26, near + 2.75, 0.04, 0.16, 0.04);
+    if (style !== 'chalet' && style !== 'adobe') for (const sd of [-1, 1]) { // haies basses sous les fenêtres
+      const a = 1.9, b = DW / 2 - 0.3, u = sd * (a + b) / 2, len = b - a; if (len < 0.8) continue;
+      sbox(ds, S(M.LEAF, 0x4f8a36), u, baseY - 0.05, T / 2 + 0.62, len, 0.62, 0.6);
+      if (RICH) for (let f = 0; f < 6; f++) hdeco(SPH_GEO, hp([0xffffff, 0xff8fb0, 0xffd24a, 0xe8465a]), ...spos(ds, u + (f / 5 - 0.5) * (len - 0.3), T / 2 + 0.62 + (hr() - 0.5) * 0.4), 0.14, 0.12, 0.14, 0, 0, 0, null, 'XYZ', baseY + 0.6);
     }
-    // banc / table de pique-nique devant, parfois
-    if (R() < 0.5) {
-      const bOff = DW * 0.5 + 2.6;
-      sbox(ds, 0x8a6a42, 0, baseY + 0.5, T / 2 + bOff, 1.7, 0.08, 0.55, null);
-      sbox(ds, 0x6b4a2c, 0, baseY + 0.22, T / 2 + bOff - 0.25, 1.7, 0.28, 0.08, null);
+    for (const sgn of [-1, 1]) { const bx = sgn * (DW * 0.5 + 0.9), gx = ds.x + (ds.ax === 'x' ? bx : ds.out * (T / 2 + 1.0)), gz = ds.z + (ds.ax === 'x' ? ds.out * (T / 2 + 1.0) : bx); if (style !== 'adobe') flora.add('bush', gx, terrainH(gx, gz) + 0.05, gz, hr() * 6.28, 0.72, 0.78, 0.72, _fc.setHSL(0.28, 0.5, 0.3)); }
+    if (hr() < 0.6) { // banc contre la façade latérale
+      const s = sides[(rot + 1) % 4]; if ((rot + 1) % 4 !== chimSide) { sbox(s, S(M.WOOD, 0x9a6c42), 0, baseY + 0.48, T / 2 + 0.62, 1.7, 0.07, 0.5); sbox(s, S(M.WOOD, 0x9a6c42), 0, baseY + 0.62, T / 2 + 0.36, 1.7, 0.42, 0.06); for (const sd of [-1, 1]) sbox(s, S(M.IRON, 0x3a3f45), sd * 0.7, baseY - 0.1, T / 2 + 0.58, 0.08, 0.58, 0.44); }
+    }
+    if (style === 'beach') { const s = sides[(rot + 1) % 4], [x, , z] = spos(s, DW * 0.12 + 1.6, T / 2 + 0.28); hdeco(SPH_GEO, hp([0xff5a5a, 0x3fa9ff, 0xffd23f]), x, baseY + 1.15, z, s.ax === 'x' ? 0.6 : 0.12, 2.5, s.ax === 'x' ? 0.12 : 0.6); } // planche de surf
+    if (style === 'adobe') { // pots en terre et four à pain
+      for (const sd of [-1, 1]) { const [x, , z] = spos(ds, sd * 1.7, T / 2 + 0.7); hdeco(CYL8, S(M.STUCCO, 0xb8643a), x, baseY + 0.3, z, 0.55, 0.6, 0.55); hdeco(SPH_GEO, S(M.LEAF, 0x5f8f4a), x, baseY + 0.85, z, 0.75, 0.8, 0.75); }
+      const s = sides[(rot + 3) % 4], [x, , z] = spos(s, 0, T / 2 + 1.0); if (s.len > 8) { hdeco(SPH_GEO, S(M.STUCCO, 0xd9a070), x, baseY + 0.55, z, 1.5, 1.7, 1.5); hdeco(SPH_GEO, 0x2f2018, x + (s.ax === 'x' ? 0 : s.out * 0.5), baseY + 0.45, z + (s.ax === 'x' ? s.out * 0.5 : 0), 0.6, 0.65, 0.6); propBox(x, baseY, z, 0.6, 0.6, 1.2); }
     }
   }
-  // chest / loot (déplacés avant furniture() : voir plus haut)
+}
+// position (x, _, z) d'un point d'une façade : u le long du mur, n vers l'extérieur
+function spos(s, u, n) { return s.ax === 'x' ? [s.x + u, 0, s.z + n * s.out] : [s.x + n * s.out, 0, s.z + u]; }
+// Entrée : perron + porche à fronton (bardage, plage), fronton de pierre (brique), auvent de rondins (chalet), arche (adobe)
+function housePorch(s, baseY, ly, op, T, q) {
+  const { K, style, roofHex, wallHex, par, RICH } = q, out = 1.9, n0 = T / 2, pw = op.w + 1.7;
+  const deck = (hex, dn, wd) => { const [x, , z] = spos(s, 0, n0 + dn / 2 + 0.1), ax = s.ax === 'x'; makeStructBox(x, baseY - 0.6, z, ax ? wd : dn, 0.73, ax ? dn : wd, matC(hex & 0xffffff), { indestructible: true, sm: hex >>> 24 }); };
+  const lamp = (u, y) => { sbox(s, S(M.IRON, 0x2b2f36), u, y, n0 + 0.14, 0.2, 0.06, 0.24, par); sbox(s, 0xfff0b8, u, y - 0.26, n0 + 0.14, 0.15, 0.26, 0.15, par); sbox(s, S(M.IRON, 0x2b2f36), u, y - 0.3, n0 + 0.14, 0.18, 0.04, 0.18, par); };
+  if (style === 'wood' || style === 'beach' || style === 'chalet' || style === 'bunker') {
+    const thatch = K.roof === M.THATCH, log = style === 'chalet', post = log || thatch ? S(M.WOOD, log ? 0x7a4e2c : 0x9a7448) : K.trim, py = ly + 2.86;
+    deck(S(M.FLOOR, log ? 0x8a5f3a : 0xa8825a), out, pw);
+    for (const sd of [-1, 1]) {
+      if (log || thatch) hdeco(CYL8, post, ...spos(s, sd * (pw / 2 - 0.2), n0 + out - 0.2), 0.26, py - baseY - 0.1, 0.26, 0, 0, 0, null, 'XYZ', (py + baseY + 0.1) / 2);
+      else { sbox(s, post, sd * (pw / 2 - 0.2), baseY + 0.13, n0 + out - 0.2, 0.2, py - baseY - 0.13, 0.2); sbox(s, K.base, sd * (pw / 2 - 0.2), baseY - 0.1, n0 + out - 0.2, 0.44, 0.9, 0.44); sbox(s, post, sd * (pw / 2 - 0.2), py - 0.16, n0 + out - 0.2, 0.34, 0.12, 0.34); }
+      sbox(s, post, sd * (pw / 2 - 0.2), py, n0 + out / 2, 0.18, 0.2, out, par);
+      if (!log && !thatch) { sbox(s, S(M.WOOD, 0x8a5c38), sd * (pw / 2 + 0.02), baseY + 0.13, n0 + 0.95, 0.36, 0.34, 1.0); sbox(s, S(M.LEAF, 0x4f8a36), sd * (pw / 2 + 0.02), baseY + 0.45, n0 + 0.95, 0.34, 0.24, 0.96); }
+    }
+    sbox(s, post, 0, py, n0 + out - 0.2, pw, 0.2, 0.2, par);
+    const g = gableParts({ hs: pw / 2, y0: 0, rise: pw * 0.5 * (log ? 0.42 : 0.62), over: 0.3, L: 1, rows: 4, lift: thatch ? 0.13 : 0.06, th: thatch ? 0.2 : 0.13, board: 0.22 }), len = out + 0.35;
+    const sh = (geo) => geo.clone().scale(1, 1, len / 2).translate(0, 0, len / 2), put = (geo, hex) => sgeo(s, geo, hex, 0, py + 0.2, n0, par);
+    for (const p of g.body) put(sh(p), S(M.WOOD, 0x8a6a4c)); for (const p of g.tiles) put(sh(p), roofHex); for (const i of [1, 3]) put(sh(g.boards[i]), K.trim);
+    put(prism([[-pw / 2 + 0.1, 0], [pw / 2 - 0.1, 0], [0, g.yr - 0.14]], out - 0.2, out - 0.08), K.wall === M.LOGS ? S(M.BOARDS, 0x8a5a34) : S(K.wall, wallHex & 0xffffff));
+    if (log) { const sn = S(M.SNOW, 0xf2f6fb); for (const sd of [-1, 1]) { const P = [[0, g.yr + 0.05], [sd * (g.xe + 0.06), g.ye + 0.03], [sd * (g.xe + 0.06), g.ye + 0.2], [0, g.yr + 0.24]]; put(prism(sd > 0 ? P : P.slice().reverse(), 0, len + 0.04), sn); } }
+    if (thatch && RICH) for (let i = 0; i < 7; i++) hdeco(SPH_GEO, [0xff6a5a, 0xffd24a, 0x5ac8d8][i % 3], ...spos(s, -pw / 2 + 0.4 + i * (pw - 0.8) / 6, n0 + out), 0.17, 0.2, 0.17, 0, 0, 0, par, 'XYZ', py - 0.1 - Math.sin(i / 6 * Math.PI) * 0.2); // guirlande
+    lamp(op.w / 2 + 0.5, ly + 2.2);
+  } else if (style === 'brick') {
+    deck(S(M.PAVE, 0xb8ae9c), 1.5, op.w + 1.3);
+    for (const sd of [-1, 1]) { sbox(s, K.trim, sd * (op.w / 2 + 0.38), ly + 0.13, n0 + 0.1, 0.36, 2.7, 0.3); sbox(s, K.trim, sd * (op.w / 2 + 0.38), ly + 0.13, n0 + 0.12, 0.46, 0.3, 0.36); sbox(s, K.trim, sd * (op.w / 2 + 0.38), ly + 2.62, n0 + 0.12, 0.46, 0.2, 0.36); lamp(sd * (op.w / 2 + 0.85), ly + 2.3); }
+    sbox(s, K.trim, 0, ly + 2.82, n0 + 0.14, op.w + 1.3, 0.26, 0.4, par); sgeo(s, prism([[-op.w / 2 - 0.75, 0], [op.w / 2 + 0.75, 0], [0, 0.62]], 0, 0.34), K.trim, 0, ly + 3.08, n0, par); sgeo(s, prism([[-op.w / 2 - 0.4, 0.08], [op.w / 2 + 0.4, 0.08], [0, 0.46]], 0, 0.36), S(M.BRICK, wallHex & 0xffffff), 0, ly + 3.08, n0, par);
+  } else { // adobe : encadrement épais, arc et auvent de tuiles
+    deck(S(M.PAVE, 0xc98a5c), 1.7, op.w + 1.4);
+    for (const sd of [-1, 1]) sbox(s, K.trim, sd * (op.w / 2 + 0.36), ly + 0.1, n0 + 0.08, 0.5, 2.6, 0.22);
+    sgeo(s, archPoly3(op.w + 1.2, 0.85, 0.11), K.trim, 0, ly + 2.68, n0 + 0.08, par); sgeo(s, archPoly3(op.w + 0.3, 0.55, 0.13), S(M.STUCCO, q.accent), 0, ly + 2.7, n0 + 0.08, par);
+    lamp(op.w / 2 + 0.9, ly + 2.2); lamp(-op.w / 2 - 0.9, ly + 2.2);
+  }
 }
 // Apartment buildings: 3 to 5 storeys, zig-zag interior ramps, rooftop access
 const TOWER_PAL = [
-  { wall: 0xe8e1d0, trim: 0xb8b0a0, accent: 0xd2483a }, { wall: 0x9fb4c7, trim: 0xf2efe6, accent: 0xffb43a },
-  { wall: 0xc98b6b, trim: 0xf2efe6, accent: 0x2f9e7a }, { wall: 0x8fa39a, trim: 0xe9e4d6, accent: 0x3b6fd1 },
-  { wall: 0xd9c9a3, trim: 0x6b6560, accent: 0xb65cff },
+  { wall: S(M.BRICK, 0xa8553f), trim: S(M.TRIM, 0xe6dcc8), accent: 0x2f6b4f, frame: S(M.IRON, 0x2b3038), shop: S(M.TRIM, 0x24483a) },
+  { wall: S(M.STUCCO, 0xe9d9b4), trim: S(M.TRIM, 0xf6efe0), accent: 0xb8402f, frame: S(M.TRIM, 0xf4efe4), shop: S(M.TRIM, 0x6b2a24) },
+  { wall: S(M.BRICK, 0xc9b79a), trim: S(M.TRIM, 0x8a7f70), accent: 0x2f5f9f, frame: S(M.IRON, 0x30363f), shop: S(M.TRIM, 0x24385a) },
+  { wall: S(M.STUCCO, 0x9db8b4), trim: S(M.TRIM, 0xf2efe6), accent: 0xd08a2a, frame: S(M.TRIM, 0xf4efe4), shop: S(M.TRIM, 0x2f4a4a) },
+  { wall: S(M.CONCRETE, 0xc4c0b8), trim: S(M.CONCRETE, 0x8f8b84), accent: 0xe0a02f, frame: S(M.IRON, 0x2b2f36), shop: S(M.IRON, 0x33383f) },
 ];
 const towers = [];
 function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
   towers.push({ cx, cz, baseY, w, d, floors, X0: cx - w / 2 + 0.25, Z0: cz - d / 2 + 0.25 });
-  const PAL = pal || pick(TOWER_PAL), H = 4, T = 0.4, frame = 0x2f3540;
-  const o = { hp: 300, mat: 'stone' };
-  makeStructBox(cx, baseY - 3, cz, w + 0.8, 3.15, d + 0.8, matC(0x8d8a84), { indestructible: true });
-  hbox(0x9aa0a6, cx, baseY + 0.15, cz, w - 0.3, 0.03, d - 0.3);
+  const PAL = pal || pick(TOWER_PAL), H = 4, T = 0.4, RICH = !LOWQ, wm = PAL.wall >>> 24;
+  const hr = mulberry32((Math.round(cx * 73) ^ Math.round(cz * 179)) >>> 0), hp = (a) => a[(hr() * a.length) | 0];
+  const wk = { frame: PAL.frame, trim: PAL.trim, style: 'brick', sill: PAL.trim }, iron = S(M.IRON, 0x2b3038);
+  makeStructBox(cx, baseY - 3, cz, w + 0.8, 3.15, d + 0.8, matC(0x9a958c), { indestructible: true, sm: M.STONE });
+  hbox(S(M.FLOOR, 0x9a7a58), cx, baseY + 0.15, cz, w - 0.3, 0.03, d - 0.3);
   const sides = footprintSides(cx, cz, w, d);
   const X0 = cx - w / 2 + T / 2 + 0.05, Z0 = cz - d / 2 + T / 2 + 0.05;
   const cellA = [X0, Z0], cellB = [X0 + 4, Z0 + 4];
   for (let f = 0; f < floors; f++) {
-    const ly = baseY + f * H, office = R() < 0.6; // étage de bureaux ou logement
+    const ly = baseY + f * H, office = R() < 0.6, inner = office ? S(M.PLASTER, 0xe9eaea) : pick(INNER_WALLS); // étage de bureaux ou logement
+    const o = { hp: 300, mat: 'stone', inner };
     sides.forEach((s, i) => {
       const ops = [];
       const n = Math.max(2, Math.floor((s.len - 1) / 3.2));
       for (let k = 0; k < n; k++) {
         const u = -s.len / 2 + (k + 0.5) * s.len / n;
         if (f === 0 && (i === rot || i === (rot + 2) % 4) && k === Math.floor(n / 2)) ops.push({ u, w: 2.0, y0: 0, y1: 2.8, kind: 'door' });
-        else if (f === 0) ops.push({ u, w: 2.0, y0: 0.7, y1: 2.9, kind: 'shop' });
-        else ops.push({ u, w: 1.5, y0: 1.0, y1: 2.8, kind: 'win' });
+        else if (f === 0) ops.push({ u, w: 2.2, y0: 0.6, y1: 2.9, kind: 'shop' });
+        else ops.push({ u, w: 1.55, y0: 0.85, y1: 2.95, kind: 'win' });
       }
-      wallWithOpenings(s, ly, H, T, ops, PAL.wall, o);
+      wallWithOpenings(s, ly, H, T, ops, f === 0 && wm === M.BRICK ? S(M.STONE, 0xb0a594) : PAL.wall, o);
       for (const op of ops) {
         const par = op.sill || op.lintel;
         if (op.kind === 'door') {
-          sbox(s, frame, op.u, ly + op.y1, 0, op.w + 0.4, 0.2, T + 0.14, par);
-          addDoor(s, ly, op, T, 0x6e4a2c); // vraie porte qui s'ouvre avec E
-          const c1 = PAL.accent;
-          for (let k = 0; k < 5; k++) sbox(s, k % 2 ? 0xffffff : c1, op.u - op.w / 2 - 0.4 + k * (op.w + 0.8) / 4.6, ly + 3.05, T / 2 + 0.75, (op.w + 0.8) / 5, 0.12, 1.5, par);
+          for (const sd of [-1, 1]) sbox(s, PAL.shop, op.u + sd * (op.w / 2 + 0.14), ly, 0, 0.28, op.y1, T + 0.2, null);
+          sbox(s, PAL.shop, op.u, ly + op.y1, 0, op.w + 0.56, 0.24, T + 0.2, par);
+          addDoor(s, ly, op, T, PAL.shop & 0xffffff); // vraie porte qui s'ouvre avec E
+          sgeo(s, awningGeo(op.w + 1.0, 1.35, 0.5), S(M.CLOTH, PAL.accent), op.u, ly + 3.5, T / 2 + 0.02, par);
+          for (const sd of [-1, 1]) { sbox(s, iron, op.u + sd * (op.w / 2 + 0.62), ly + 2.35, T / 2 + 0.14, 0.18, 0.06, 0.24, par); sbox(s, 0xfff0b8, op.u + sd * (op.w / 2 + 0.62), ly + 2.07, T / 2 + 0.14, 0.16, 0.28, 0.16, par); }
         } else {
-          windowFrame(s, ly, op, T, frame, par);
-          if (op.kind === 'win' && R() < 0.15) { // AC unit
-            sbox(s, 0xd8dde2, op.u + 0.4, ly + op.y0 - 0.75, T / 2 + 0.3, 0.8, 0.55, 0.5, par);
-            sbox(s, 0x6b7177, op.u + 0.4, ly + op.y0 - 0.55, T / 2 + 0.56, 0.5, 0.3, 0.04, par);
-          }
-          if (op.kind === 'win' && R() < 0.12) { // balcony (walkable)
-            const b = s.ax === 'x' ? makeStructBox(s.x + op.u, ly - 0.12, s.z + s.out * (T / 2 + 0.7), op.w + 1.0, 0.18, 1.4, matC(PAL.trim), { hp: 150, mat: 'stone' }) : makeStructBox(s.x + s.out * (T / 2 + 0.7), ly - 0.12, s.z + op.u, 1.4, 0.18, op.w + 1.0, matC(PAL.trim), { hp: 150, mat: 'stone' });
-            sbox(s, frame, op.u, ly + 0.06, T / 2 + 1.35, op.w + 1.0, 0.9, 0.06, b);
-            sbox(s, frame, op.u - op.w / 2 - 0.47, ly + 0.06, T / 2 + 0.7, 0.06, 0.9, 1.4, b);
-            sbox(s, frame, op.u + op.w / 2 + 0.47, ly + 0.06, T / 2 + 0.7, 0.06, 0.9, 1.4, b);
+          windowFrame(s, ly, op, T, op.kind === 'shop' ? { ...wk, frame: PAL.shop, cols: 3, rows: 1, style: 'shop' } : wk, par);
+          if (op.kind === 'shop') { sbox(s, PAL.shop, op.u, ly + 0.15, T / 2 + 0.04, op.w + 0.3, 0.42, 0.1, par); if ((i === rot || i === (rot + 2) % 4)) sgeo(s, awningGeo(op.w + 0.5, 1.1, 0.42), S(M.CLOTH, PAL.accent), op.u, ly + 3.42, T / 2 + 0.02, par); }
+          if (op.kind === 'win' && hr() < 0.12) { // climatiseur
+            sbox(s, S(M.IRON, 0xc4cad0), op.u + 0.35, ly + op.y0 - 0.72, T / 2 + 0.28, 0.8, 0.55, 0.46, par); sbox(s, S(M.LOUVER, 0x6b7177), op.u + 0.35, ly + op.y0 - 0.66, T / 2 + 0.5, 0.56, 0.42, 0.05, par);
+          } else if (op.kind === 'win' && R() < 0.16) { // balcon marchable, garde-corps à barreaux
+            const so = { hp: 150, mat: 'stone', sm: PAL.trim >>> 24 }, tm = matC(PAL.trim & 0xffffff), bw = op.w + 1.0, n1 = T / 2 + 0.7;
+            const b = s.ax === 'x' ? makeStructBox(s.x + op.u, ly - 0.12, s.z + s.out * n1, bw, 0.18, 1.4, tm, so) : makeStructBox(s.x + s.out * n1, ly - 0.12, s.z + op.u, 1.4, 0.18, bw, tm, so);
+            for (const sd of [-1, 1]) sbox(s, PAL.trim, op.u + sd * (bw / 2 - 0.25), ly - 0.5, T / 2 + 0.3, 0.2, 0.4, 0.6, b);
+            for (const yy of [0.1, 0.95]) { sbox(s, iron, op.u, ly + yy, T / 2 + 1.35, bw, 0.06, 0.06, b); for (const sd of [-1, 1]) sbox(s, iron, op.u + sd * (bw / 2 - 0.03), ly + yy, n1, 0.06, 0.06, 1.36, b); }
+            const nb = RICH ? 11 : 5; for (let q = 0; q <= nb; q++) sbox(s, iron, op.u - bw / 2 + 0.03 + q * (bw - 0.06) / nb, ly + 0.1, T / 2 + 1.35, 0.035, 0.88, 0.035, b);
+            if (RICH) for (const sd of [-1, 1]) for (let q = 1; q < 5; q++) sbox(s, iron, op.u + sd * (bw / 2 - 0.03), ly + 0.1, T / 2 + 0.05 + q * 0.28, 0.035, 0.88, 0.035, b);
+          } else if (op.kind === 'win' && hr() < 0.25) { // bac à fleurs
+            sbox(s, iron, op.u, ly + op.y0 - 0.36, T / 2 + 0.2, op.w, 0.22, 0.28, par); sbox(s, S(M.LEAF, 0x4f8a36), op.u, ly + op.y0 - 0.16, T / 2 + 0.2, op.w - 0.1, 0.18, 0.28, par);
           }
         }
       }
-      if (f === 0) sbox(s, PAL.accent, 0, ly + 3.2, T / 2 + 0.05, Math.min(5, s.len * 0.45), 0.6, 0.12); // shop sign band
+      if (f === 0) { // devanture : bandeau d'enseigne et corniche
+        sbox(s, PAL.shop, 0, ly + 3.42, T / 2 + 0.04, s.len - 0.9, 0.46, 0.12);
+        if (i === rot || i === (rot + 2) % 4) { sbox(s, S(M.TRIM, 0xf2e6c4), 0, ly + 3.5, T / 2 + 0.11, Math.min(4.4, s.len * 0.4), 0.3, 0.04); for (let q = 0; q < 7; q++) sbox(s, S(M.TRIM, PAL.accent), (q - 3) * 0.42, ly + 3.56, T / 2 + 0.14, 0.2 + (q % 3) * 0.06, 0.18, 0.03); }
+      }
+      // plinthe intérieure
+      for (const g of s.segs) sbox(s, S(M.TRIM, 0xe4e0d6), (g.a + g.b) / 2, ly + (f ? 0.12 : 0.15), -T / 2 - 0.02, g.b - g.a, 0.18, 0.05, g.col);
       wallDecor(s, ly, H, T, ops, { accent: PAL.accent, office, skip: i === 0 ? (u0) => u0 < -s.len / 2 + 4.6 : i === 3 ? (u0) => u0 < -s.len / 2 + 8.8 : null });
     });
-    // floor ledge + corner pilasters
-    for (const s of sides) sbox(s, PAL.trim, 0, ly + H - 0.2, 0, s.len + 0.7, 0.3, T + 0.3);
-    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) hbox(PAL.trim, cx + sx * (w / 2), ly, cz + sz * (d / 2), 0.7, H, 0.7);
+    // cordon de pierre, chaînes d'angle
+    for (const s of sides) { sbox(s, PAL.trim, 0, ly + H - 0.2, 0, s.len + 0.62, 0.2, T + 0.24); if (f === 0) sbox(s, PAL.trim, 0, ly + H, 0, s.len + 0.8, 0.1, T + 0.42); }
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const px = cx + sx * (w / 2), pz = cz + sz * (d / 2);
+      if (wm === M.BRICK && RICH) for (let q = 0; q < 8; q++) { const a = q % 2 ? 0.58 : 0.86, b = q % 2 ? 0.86 : 0.58; hbox(PAL.trim, px - sx * (a - 0.5) / 2, ly + 0.02 + q * 0.48, pz + sz * 0.03, a, 0.42, 0.45); hbox(PAL.trim, px + sx * 0.03, ly + 0.02 + q * 0.48, pz - sz * (b - 0.5) / 2, 0.45, 0.42, b); }
+      else hbox(PAL.trim, px + sx * 0.06, ly, pz + sz * 0.06, 0.5, H, 0.5);
+    }
     // ramp from storey f to f+1 (alternating cells so the climb zig-zags)
     const even = f % 2 === 0, cell = even ? cellA : cellB, dd = even ? 2 : 0;
-    hdeco(rampDecoGeo, 0x8a8f96, cell[0] + 2, ly + 2, cell[1] + 2, 1, 1, 1, Math.PI / 4, even ? Math.PI : 0, 0, null, 'YXZ');
+    hdeco(rampDecoGeo, S(M.WOOD, 0x8a6a4a), cell[0] + 2, ly + 2, cell[1] + 2, 1, 1, 1, Math.PI / 4, even ? Math.PI : 0, 0, null, 'YXZ');
     addCollider({ type: 'ramp', cx: cell[0] / CELL, cz: cell[1] / CELL, y: ly, d: dd, minX: cell[0], maxX: cell[0] + CELL, minZ: cell[1], maxZ: cell[1] + CELL, minY: ly, maxY: ly + CELL });
     // slab of the storey above, with a hole over this ramp
-    const sy = ly + H - 0.12, slabM = matC(f === floors - 1 ? 0xb8b4ac : 0xd8d2c4);
+    const last = f === floors - 1, sy = ly + H - 0.12, slabM = matC(last ? 0xb4aea4 : 0xa8845c), so = { hp: 300, mat: 'stone', indestructible: true, sm: last ? M.PAVE : M.FLOOR, faces: [{ n: [0, -1, 0], hex: CEIL }] };
     const fx0 = cx - w / 2 + T / 2, fx1 = cx + w / 2 - T / 2, fz0 = cz - d / 2 + T / 2, fz1 = cz + d / 2 - T / 2;
     const hx0 = cell[0], hx1 = cell[0] + CELL, hz0 = cell[1], hz1 = cell[1] + CELL;
-    const rect = (a, b, c, e) => { if (b - a > 0.1 && e - c > 0.1) makeStructBox((a + b) / 2, sy, (c + e) / 2, b - a, 0.24, e - c, slabM, { hp: 300, mat: 'stone', indestructible: true }); };
+    const rect = (a, b, c, e) => { if (b - a > 0.1 && e - c > 0.1) makeStructBox((a + b) / 2, sy, (c + e) / 2, b - a, 0.24, e - c, slabM, so); };
     rect(fx0, hx0, fz0, fz1); rect(hx1, fx1, fz0, fz1); rect(hx0, hx1, fz0, hz0); rect(hx0, hx1, hz1, fz1);
     // loot on each storey
     const fy = f === 0 ? baseY + 0.17 : ly + 0.12;
-    if (f > 0) hbox(0xa89a84, cx + w / 4, fy - 0.02, cz + d / 4, w / 2 - 1, 0.03, d / 2 - 1);
+    if (f > 0) hbox(S(M.CLOTH, 0x8a5a4a), cx + w / 4, fy - 0.02, cz + d / 4, w / 2 - 2, 0.03, d / 2 - 2);
     // coffre posé avant le mobilier de l'étage
     const tAvoid = [];
     if (R() < 0.5) { const c = spawnChest(cx + w / 4 + rand(-1, 1), fy - 0.02, cz + rand(-d / 4, d / 4)); tAvoid.push({ x: c.x, z: c.z }); }
     furniture(cx + w / 8, cz + d / 8, fy, w * 0.7, d * 0.7, true, PAL.accent, tAvoid, office);
     lootSpots.push({ x: cx + rand(0, w / 3), y: fy + 0.05, z: cz + rand(0, d / 3) });
   }
-  // rooftop: parapet, water tank, AC units, antenna
-  const topY = baseY + floors * H;
+  // toit-terrasse : corniche à modillons, acrotère, château d'eau, verrière, jardinières
+  const topY = baseY + floors * H, po = { hp: 300, mat: 'stone', sm: wm };
   for (const s of sides) {
-    if (s.ax === 'x') makeStructBox(s.x, topY + 0.12, s.z, s.len + T, 1.0, T, matC(PAL.wall), o);
-    else makeStructBox(s.x, topY + 0.12, s.z, T, 1.0, s.len - T, matC(PAL.wall), o);
-    sbox(s, PAL.trim, 0, topY + 1.1, 0, s.len + 0.6, 0.18, T + 0.25);
+    const wallM = matC(PAL.wall & 0xffffff);
+    if (s.ax === 'x') makeStructBox(s.x, topY + 0.12, s.z, s.len + T, 1.0, T, wallM, po);
+    else makeStructBox(s.x, topY + 0.12, s.z, T, 1.0, s.len - T, wallM, po);
+    sbox(s, PAL.trim, 0, topY + 1.1, 0, s.len + 0.7, 0.16, T + 0.3);
+    sbox(s, PAL.trim, 0, topY - 0.1, 0.16, s.len + 1.1, 0.3, T + 0.5); sbox(s, PAL.trim, 0, topY + 0.2, 0.1, s.len + 0.9, 0.14, T + 0.3);
+    if (RICH) for (let u = -s.len / 2 + 0.3; u < s.len / 2; u += 0.75) sbox(s, PAL.trim, u, topY - 0.42, T / 2 + 0.18, 0.22, 0.32, 0.36);
   }
   const tx = cx + w / 4, tz = cz - d / 4;
-  for (const [a, b] of [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]]) hbox(0x4a4f5a, tx + a, topY + 0.12, tz + b, 0.16, 1.4, 0.16);
-  hdeco(CYL_GEO, 0x8a6a4a, tx, topY + 2.4, tz, 2.0, 2.0, 2.0);
-  hdeco(CYL_GEO, 0x5a3a24, tx, topY + 3.5, tz, 2.1, 0.2, 2.1);
-  hbox(0xd8dde2, cx - w / 4, topY + 0.12, cz + d / 4, 1.6, 0.9, 1.1); hbox(0x6b7177, cx - w / 4, topY + 1.02, cz + d / 4, 1.0, 0.08, 0.8);
-  hbox(0x6b7177, cx + w / 3, topY + 0.12, cz + d / 3, 0.1, 4.5, 0.1); hbox(0xff3b3b, cx + w / 3, topY + 4.6, cz + d / 3, 0.25, 0.25, 0.25);
+  for (const [a, b] of [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]]) hbox(iron, tx + a, topY + 0.12, tz + b, 0.14, 1.5, 0.14);
+  hbox(iron, tx, topY + 1.5, tz, 1.9, 0.12, 1.9);
+  hdeco(CYL_GEO, S(M.BOARDS, 0x8a6244), tx, topY + 2.6, tz, 2.1, 2.0, 2.1);
+  for (const yy of [1.9, 2.6, 3.3]) hdeco(CYL_GEO, iron, tx, topY + yy, tz, 2.16, 0.08, 2.16);
+  hdeco(CONE6, S(M.SEAM, 0x5a6068), tx, topY + 4.05, tz, 2.5, 0.95, 2.5);
+  propBox(tx, topY + 0.12, tz, 1.0, 1.0, 4.3); propBox(cx - w / 4, topY + 0.12, cz + d / 4, 0.8, 0.55, 0.9); for (const q of [-1, 1]) propBox(cx + q * 1.6, topY + 0.12, cz + d / 2 - 0.75, 1.1, 0.35, 0.8);
+  hbox(S(M.IRON, 0xc4cad0), cx - w / 4, topY + 0.12, cz + d / 4, 1.6, 0.9, 1.1); hbox(S(M.LOUVER, 0x6b7177), cx - w / 4, topY + 0.2, cz + d / 4, 1.64, 0.7, 0.8);
+  hbox(iron, cx + w / 3, topY + 0.12, cz + d / 3, 0.08, 4.2, 0.08); hbox(iron, cx + w / 3, topY + 3.5, cz + d / 3, 1.2, 0.05, 0.05); hbox(iron, cx + w / 3, topY + 3.9, cz + d / 3, 0.8, 0.05, 0.05); hbox(0xff3b3b, cx + w / 3, topY + 4.3, cz + d / 3, 0.2, 0.2, 0.2);
+  for (const q of [-1, 1]) { hbox(S(M.WOOD, 0x8a5c38), cx + q * 1.6, topY + 0.12, cz + d / 2 - 0.75, 2.2, 0.5, 0.7); hbox(S(M.LEAF, 0x4f8a36), cx + q * 1.6, topY + 0.6, cz + d / 2 - 0.75, 2.0, 0.4, 0.6); }
   if (R() < 0.7) spawnChest(cx - w / 4, topY + 0.12, cz - d / 4 + 1);
   lootSpots.push({ x: cx, y: topY + 0.2, z: cz + d / 4 });
 }
@@ -2134,11 +2123,11 @@ for (const p of POIS) {
     const a = rand(Math.PI * 2), r = rand(4, p.r - 6);
     const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
     const w = pick([8, 10, 12]), d = pick([8, 10]);
-    if (placed.some((q) => Math.abs(q.x - x) < (q.w + w) / 2 + 3 && Math.abs(q.z - z) < (q.d + d) / 2 + 3)) continue;
+    if (placed.some((q) => Math.abs(q.x - x) < (q.w + w) / 2 + 5 && Math.abs(q.z - z) < (q.d + d) / 2 + 5)) continue;
     // a few taller apartment buildings in the brick towns
     if (p.style === 'brick' && k < 2 && tries < 40) {
       const tw = 12, td = 12;
-      if (placed.some((q) => Math.abs(q.x - x) < (q.w + tw) / 2 + 3 && Math.abs(q.z - z) < (q.d + td) / 2 + 3) || Math.hypot(x - p.x, z - p.z) > p.r - 8) continue;
+      if (placed.some((q) => Math.abs(q.x - x) < (q.w + tw) / 2 + 5 && Math.abs(q.z - z) < (q.d + td) / 2 + 5) || Math.hypot(x - p.x, z - p.z) > p.r - 8) continue;
       placed.push({ x, z, w: tw, d: td }); buildTower(x, z, p.h, tw, td, randi(3, 4), randi(0, 3)); k++; continue;
     }
     placed.push({ x, z, w, d });
@@ -2148,7 +2137,7 @@ for (const p of POIS) {
   for (let k = 0; k < 2; k++) {
     const a = rand(6.28), r = rand(4, p.r);
     const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-    if (placed.some((q) => Math.abs(q.x - x) < q.w / 2 + 3 && Math.abs(q.z - z) < q.d / 2 + 4)) continue;
+    if (placed.some((q) => Math.abs(q.x - x) < q.w / 2 + 5 && Math.abs(q.z - z) < q.d / 2 + 6)) continue;
     spawnCar(x, z, 0);
   }
 }
@@ -7182,7 +7171,7 @@ function warmupShaders() {
   const vis = [];
   for (const c of chars) { vis.push([c.mesh, c.mesh.visible], [c.parts.glider, c.parts.glider.visible]); c.mesh.visible = true; c.parts.glider.visible = true; }
   impIM.count = 1; dummy.position.set(0, -50, 0); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); impIM.setMatrixAt(0, dummy.matrix); impIM.setColorAt(0, _c.set(0xffffff));
-  flora.warm();
+  flora.warm(); grass.warm();
   try { outline.compile(scene, camera); } catch (e) {}
   for (const [o, v] of vis) o.visible = v;
   impIM.count = 0;
@@ -9735,7 +9724,7 @@ function frame() {
     const lp = player.alive ? player.pos : camera.position;
     sunLight.position.copy(lp).add(SUN_OFF); sunLight.target.position.copy(lp);
   } else { sunLight.position.copy(SUN_OFF).multiplyScalar(1.5); sunLight.target.position.set(0, 0, 0); }
-  flora.update(camera.position);
+  flora.update(camera.position); bendGrass(); grass.update(camera.position);
   syncLin(); outline.render(scene, camera);
   updateConfetti(dt);
   fpsAcc += dt; fpsN++;
@@ -9757,13 +9746,14 @@ window.render_game_to_text = () => JSON.stringify({
   build: { piece: buildPiece, rotation: buildRot, editing: !!editing }, marker: { on: marker.on, pos: marker.pos.toArray() }, shoulder: shoulderSide, inventoryOpen: touchBagOpen,
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { flora, structs, rebuildHouse, towers, outline,
+window.__game = { flora, grass, doors, structs, rebuildHouse, towers, outline,
   ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; }, get bus() { return bus; }, waveAt, get footprints() { return footPrints.filter((f) => f.life > 0).length; }, get snowfall() { return snowF.k; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on, outfit) => setDisguise(player, on, false, outfit), SHADOW_OUTFITS, get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; },
   // capture libre (QA visuelle) : rendu depuis un point de vue arbitraire
-  snap: (x, y, z, lx, ly, lz) => { const p0 = camera.position.clone(), q0 = camera.quaternion.clone(); camera.position.set(x, y, z); camera.lookAt(lx, ly, lz); camera.updateMatrixWorld(); flora.update(camera.position); renderer.render(scene, camera); const u = renderer.domElement.toDataURL('image/png'); camera.position.copy(p0); camera.quaternion.copy(q0); return u; } };
+  snap: (x, y, z, lx, ly, lz) => { const p0 = camera.position.clone(), q0 = camera.quaternion.clone(); camera.position.set(x, y, z); camera.lookAt(lx, ly, lz); camera.updateMatrixWorld(); flora.update(camera.position); grass.update(camera.position); renderer.render(scene, camera); const u = renderer.domElement.toDataURL('image/png'); camera.position.copy(p0); camera.quaternion.copy(q0); return u; } };
 // storm est aussi exposé directement : window.__game.storm
 
+cutGrass();
 // Auto-start the match once everything is built
 refreshLabels();
 setTimeout(() => {

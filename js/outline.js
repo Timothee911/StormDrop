@@ -29,6 +29,7 @@ void main() {
   e *= 1.0 - smoothstep(fadeNear, fadeFar, z0);
   e *= step(z0, cFar * 0.98);
   e *= strength;
+  if (useAlpha < 0.5) e *= smoothstep(0.15, 0.7, c.a); // alpha 0 : herbe, pas de trait
   // light grade: a touch more saturation for the sunny cartoon look
   vec3 g = mix(vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), c.rgb, 1.05);
   vec3 col = mix(max(g, 0.0), lineColor, e);

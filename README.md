@@ -13,6 +13,11 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 - `js/flora.js` les dessine par instances : arbres détaillés près de la caméra, simplifiés au loin ; petites plantes autour de la caméra seulement. Le feuillage collé à la caméra se dissout pour ne pas boucher la vue.
 - Les tirs et la récolte utilisent des volumes simples invisibles ; les buissons et plantes n'ont pas de collision.
 
+## Maisons
+
+- Cinq styles avec leurs matières (`js/housemat.js`) : pavillon en bardage, maison de ville en brique à pignons à redents, chalet en rondins sous la neige, cabane de plage au toit de palme, maison du désert en crépi avec terrasse. Les immeubles ont devanture, stores rayés, balcons à barreaux et corniche.
+- Toits à vrais rangs de tuiles, marchables jusqu'au bout du débord ; vitres transparentes ; papier peint et parquet à l'intérieur.
+
 ## Meubles (pack 3D)
 
 - Maisons et immeubles sont meublés avec l'« Office Pack » : bureaux équipés, canapés, fauteuils, bibliothèques, armoires, salles d'eau, cartons, plantes, distributeurs, fontaines, imprimantes, lampes. Les immeubles mélangent étages de bureaux et logements.
@@ -57,7 +62,7 @@ Refaite pour se rapprocher de la Grotte du Chapitre 2 Saison 2 :
 ## Hélico de combat et nouveau sol
 
 - **Hélico de combat** : le bus de combat est remplacé par un hélicoptère militaire kaki à bandes jaunes. Il a un cockpit vitré, des portes latérales ouvertes avec mitrailleuses, des ailerons à paniers de roquettes, un canon sous le nez et des patins. Le rotor principal et le rotor de queue tournent, l'appareil vole nez légèrement piqué, et on entend le « tchop » des pales. Le trajet, le saut et le compte à rebours de la zone ne changent pas.
-- **Herbe** : trois verts mélangés à grande échelle. Au sol, le shader dessine des brins, des creux sombres entre les touffes, des pointes éclairées, du trèfle et de petites fleurs des champs. Les touffes en 3D ont des pieds plus sombres et des pointes plus claires.
+- **Herbe** (`js/grass.js`) : prairie continue autour de la caméra, dessinée par la carte graphique. Les brins prennent la couleur du sol, ondulent sous les rafales et se couchent sous les pas et les roues. Pelouse plus rase dans les villages, rien sous les bâtiments, les allées et les rochers. Fleurs des champs par zones de couleur.
 - **Terre** : plaques de terre battue dans les prairies et sentiers sinueux à travers l'île, avec un bord irrégulier contre l'herbe. On y voit des mottes, des cailloux, des fissures et quelques pousses. Aucune touffe d'herbe ne pousse sur la terre.
 
 ## Ciel et tenues de l'Ombre
