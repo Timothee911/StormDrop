@@ -274,10 +274,21 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     check('COURIR : activation explicite', await page.$eval('#tSprint', e => e.getAttribute('aria-pressed') === 'true'));
     await page.tap('#tSprint');
     check('COURIR : désactivation sans touche bloquée', await page.$eval('#tSprint', e => e.getAttribute('aria-pressed') === 'false') && await page.evaluate(() => !__game.keys[__game.binds.sprint]));
+    // sol dégagé devant soi : un ennemi, un coffre ou du butin sous le viseur serait signalé à la place du repère
+    await page.evaluate(() => {
+      const g = __game, p = g.player, d = new g.THREE.Vector3();
+      for (let i = 0; i < 16; i++) {
+        g.setCam(i * Math.PI / 8, -.45); advanceTime(60); g.camera.getWorldDirection(d);
+        const h = g.castRay(g.camera.position, d, 700, p); if (!h) continue;
+        const far = (o) => Math.hypot(o.x - h.point.x, o.z - h.point.z) > 5;
+        if (g.loot.every((l) => !l.alive || far(l.pos)) && g.chests.every((c) => c.opened || far(c)) && g.drops.every((c) => c.opened || far(c)) && g.chars.every((c) => c === p || !c.alive || Math.hypot(c.pos.x - p.pos.x, c.pos.z - p.pos.z) > 25)) break;
+      }
+    });
     await page.tap('#tMarker');
     check('MARQUER : vrai repère dans le monde', await page.evaluate(() => JSON.parse(render_game_to_text()).marker.on));
     await page.tap('#tMarker');
     check('MARQUER : second toucher retire le repère', await page.evaluate(() => !JSON.parse(render_game_to_text()).marker.on));
+    await page.evaluate(() => { __game.setCam(0, -.1); advanceTime(60); });
     const shoulder = await page.evaluate(() => JSON.parse(render_game_to_text()).shoulder);
     await page.tap('#tShoulder');
     check('ÉPAULE : changement réel de côté', await page.evaluate(v => JSON.parse(render_game_to_text()).shoulder === -v, shoulder));
