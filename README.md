@@ -13,6 +13,21 @@ Inspirée du Chapitre 2 Saison 2 de Fortnite : cinq POI espions (L'Agence, Le Re
 - `js/flora.js` les dessine par instances : arbres détaillés près de la caméra, simplifiés au loin ; petites plantes autour de la caméra seulement. Le feuillage collé à la caméra se dissout pour ne pas boucher la vue.
 - Les tirs et la récolte utilisent des volumes simples invisibles ; les buissons et plantes n'ont pas de collision.
 
+## Mécaniques (`js/play.js`)
+
+- **Déplacement** : escalade des rebords (Saut maintenu contre un mur jusqu'à environ 3 m), roulade (Alt gauche, moitié des dégâts reçus, recharge 2,4 s), glissade plus rapide en descente, élan conservé en l'air.
+- **Objets à lancer** : grenade, onde de choc (projette tout le monde, sans dégâts de chute), fumigène (coupe la vue des IA). Tir maintenu = trajectoire affichée, relâcher = lancer.
+- **Établis** : améliorent la rareté de l'arme en main contre des matériaux, jusqu'à Légendaire.
+- **Contrats** : chasse, pilleur, tireur, bûcheron, téméraire ; récompense en butin et en XP.
+- **Tyroliennes** entre les villages, **barils explosifs** (percés, ils brûlent puis explosent).
+- **Événements** au hasard pendant la partie : pluie de météorites, gravité lunaire, ruée vers l'or, vent arrière. Désactivés dans un navigateur piloté (`navigator.webdriver`) pour des tests reproductibles.
+- **IA** : roulades, grenades, vue coupée par la fumée.
+
+## Image et effets
+
+- `js/outline.js` : contours teintés, occlusion ambiante, brume lointaine, halo, rayons du soleil, étalonnage, netteté. Coupé sur téléphone en qualité basse et sur un rendu logiciel.
+- `js/fx.js` : particules animées par la carte graphique (tirs, impacts, explosions, fumée, bouclier brisé, éliminations).
+
 ## Maisons
 
 - Cinq styles avec leurs matières (`js/housemat.js`) : pavillon en bardage, maison de ville en brique à pignons à redents, chalet en rondins sous la neige, cabane de plage au toit de palme, maison du désert en crépi avec terrasse. Les immeubles ont devanture, stores rayés, balcons à barreaux et corniche.

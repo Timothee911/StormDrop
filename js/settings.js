@@ -1,7 +1,7 @@
 // Shared settings (lobby + match), persisted in localStorage when available
 export const ACTIONS = [
   ['forward', 'Avancer', 'KeyW'], ['back', 'Reculer', 'KeyS'], ['left', 'Gauche', 'KeyA'], ['right', 'Droite', 'KeyD'],
-  ['jump', 'Sauter / planeur', 'Space'], ['sprint', 'Sprinter', 'ShiftLeft'], ['crouch', 'S\u2019accroupir', 'KeyF'],
+  ['jump', 'Sauter / planeur', 'Space'], ['sprint', 'Sprinter', 'ShiftLeft'], ['crouch', 'S\u2019accroupir / glisser', 'KeyF'], ['dodge', 'Roulade', 'AltLeft'],
   ['interact', 'Interagir / véhicule', 'KeyE'], ['reload', 'Recharger', 'KeyR'], ['buildToggle', 'Mode construction', 'KeyQ'],
   ['wall', 'Mur', 'KeyZ'], ['floor', 'Sol', 'KeyX'], ['ramp', 'Rampe', 'KeyC'], ['cone', 'Toit', 'KeyV'],
   ['edit', 'Éditer une pièce', 'KeyG'], ['matCycle', 'Changer de matériau', 'KeyT'], ['shoulder', 'Changer d\u2019épaule', 'KeyH'],

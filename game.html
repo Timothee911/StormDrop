@@ -23,6 +23,7 @@
   <div id="matFly" aria-hidden="true"></div>
   <div id="vignette"></div>
   <div id="uwTint"></div>
+  <div id="lowHp"></div>
   <div id="stormOverlay"></div>
   <div id="scope"><div class="scope-ring"></div></div>
   <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
@@ -40,6 +41,11 @@
   </div>
 
   <div id="killfeed"></div>
+  <div id="evTag"></div>
+  <div id="contract"></div>
+  <div id="evBanner" role="status"></div>
+  <div id="medal"></div>
+  <div id="dodgeUI" aria-hidden="true"></div>
   <div id="centerMsg"></div>
   <div id="disguiseTag">DÉGUISEMENT · HOMME DE MAIN</div>
   <div id="prompt"></div>
@@ -100,6 +106,7 @@
       <span><kbd data-a="buildToggle"></kbd> construire</span><span><kbd data-a="edit"></kbd> éditer</span><span><kbd data-a="shoulder"></kbd> épaule</span>
       <span><kbd data-a="interact"></kbd> interagir / véhicule</span><span><kbd data-a="marker"></kbd> marqueur</span><span><kbd data-a="map"></kbd> carte</span>
       <span>Clic droit : viser (arme) / matériau (construction)</span>
+      <span><kbd data-a="dodge"></kbd> roulade</span><span>Saut maintenu contre un rebord : escalader</span><span>Grenade : maintenir le tir pour viser, relâcher pour lancer</span>
     </div>
     <button id="quitBtn" class="btn-ghost">QUITTER LA PARTIE</button>
   </div>
@@ -136,7 +143,7 @@
 
 <div id="loading"><div class="ld-logo">STORM<span>DROP</span></div><div class="ld-sub">Chargement de l'île…</div><div class="ld-bar"><i></i></div></div>
 
-<script type="module" src="js/main.js?v=73"></script>
+<script type="module" src="js/main.js?v=88"></script>
 <script data-pplx-inline-edit>
 (function () {
   if (window === window.top) return;

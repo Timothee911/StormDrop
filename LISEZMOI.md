@@ -17,6 +17,9 @@ Les touches sont définies par position physique : le jeu affiche automatiquemen
 | Déplacement | Z Q S D | W A S D |
 | Sauter / Sprint / Accroupi | Espace / Maj / F | Espace / Maj / F |
 | Glissade | F pendant un sprint (Espace pour un saut glissé) | F pendant un sprint |
+| Roulade | Alt gauche (ou F une seconde fois pendant la glissade) | Alt gauche |
+| Escalader un rebord | Espace maintenu en avançant | Espace maintenu en avançant |
+| Grenade, onde de choc, fumigène | Clic maintenu pour viser, relâcher pour lancer | idem |
 | Mode construction | A | Q |
 | Mur / Sol / Rampe / Toit | W X C V | Z X C V |
 | Changer de matériau | T ou clic droit en construction | T |

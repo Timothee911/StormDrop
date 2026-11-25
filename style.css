@@ -524,3 +524,39 @@ body.touch:has(#tPieces.on) #prompt { visibility: hidden; }
 #hud.downed #hotbar, #hud.downed #buildbar, #hud.downed #crosshair { opacity: .25; }
 .tm.down { border-left-color: #ff8a3d; animation: tmDown 1s ease-in-out infinite; } .tm.down .tm-n { color: #ffb37a; } .tm.down .tm-bars .h { background: #ff8a3d !important; } .tm.down .tm-bars .s { width: 0 !important; }
 @keyframes tmDown { 50% { background: rgba(255,138,61,.25); } }
+
+/* ---- v88 : événements, contrats, séries, roulade, dernier souffle ---- */
+#lowHp { position: absolute; inset: 0; opacity: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(150,0,20,0) 46%, rgba(170,0,24,.32) 78%, rgba(120,0,14,.72) 100%); }
+#hitmarker { filter: drop-shadow(0 0 2px rgba(0,0,0,.8)); }
+#hitmarker.kill i { box-shadow: 0 0 8px rgba(255,60,90,.9); }
+#evTag { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); padding: 4px 14px; border-radius: 4px; background: rgba(10,16,30,.62); color: #fff; font: 700 16px var(--font-body); letter-spacing: .04em; opacity: 0; transition: opacity .3s; pointer-events: none; }
+#evTag.on { opacity: 1; }
+#evTag b { margin-right: 6px; }
+#evBanner { position: absolute; top: 30%; left: 0; right: 0; padding: 14px 0 16px; text-align: center; color: #fff; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(8,12,24,0), rgba(8,12,24,.72) 28%, rgba(8,12,24,.72) 72%, rgba(8,12,24,0)); }
+#evBanner small { display: block; font: 800 14px var(--font-body); letter-spacing: .34em; opacity: .85; }
+#evBanner b { display: block; font: 400 44px/1.1 var(--font-display); text-shadow: 0 3px 0 rgba(0,0,0,.45); }
+#evBanner span { font: 700 18px var(--font-body); color: #e6ecff; }
+#evBanner.on { animation: evIn 4.4s ease forwards; }
+@keyframes evIn { 0% { opacity: 0; transform: scaleY(.2); } 7% { opacity: 1; transform: none; } 86% { opacity: 1; } 100% { opacity: 0; } }
+#medal { position: absolute; left: 50%; top: 63%; transform: translateX(-50%); text-align: center; pointer-events: none; opacity: 0; }
+#medal b { display: block; font: italic 400 34px/1 var(--font-display); text-shadow: 0 3px 0 rgba(0,0,0,.5), 0 0 18px currentColor; }
+#medal span { font: 700 16px var(--font-body); color: #fff; text-shadow: 0 1px 3px #000; }
+#medal.on { animation: medalIn 1.9s cubic-bezier(.2,1.4,.4,1) forwards; }
+@keyframes medalIn { 0% { opacity: 0; transform: translateX(-50%) scale(1.9); } 14% { opacity: 1; transform: translateX(-50%) scale(1); } 78% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-14px); } }
+#contract { position: absolute; left: 18px; top: 46px; width: 260px; padding: 8px 12px 10px; border-left: 4px solid #ffb02e; border-radius: 3px; background: rgba(10,16,30,.66); color: #fff; opacity: 0; transform: translateX(-14px); transition: opacity .25s, transform .25s; pointer-events: none; }
+#contract.on { opacity: 1; transform: none; }
+#contract b { font: 800 15px var(--font-body); letter-spacing: .08em; color: #ffcf6a; }
+#contract em { float: right; font: 700 16px var(--font-body); font-variant-numeric: tabular-nums; }
+#contract span { display: block; margin-top: 2px; font: 700 16px/1.2 var(--font-body); }
+#contract i { display: block; height: 5px; margin-top: 7px; border-radius: 3px; background: rgba(255,255,255,.2); overflow: hidden; }
+#contract u { display: block; height: 100%; background: #ffb02e; transition: width .15s linear; }
+#dodgeUI { position: absolute; left: 50%; bottom: 26%; width: 92px; height: 5px; margin-left: -46px; border-radius: 3px; background: rgba(0,0,0,.45); opacity: 0; transition: opacity .2s; pointer-events: none; overflow: hidden; }
+#dodgeUI.on { opacity: .9; }
+#dodgeUI::after { content: ''; display: block; height: 100%; width: calc(var(--k, 0) * 100%); background: #8fe8ff; }
+body.touch #contract { left: calc(var(--touch-left) + 252px); top: calc(var(--touch-top) + 100px); width: 190px; padding: 4px 8px 6px; }
+body.touch #contract b, body.touch #contract em, body.touch #contract span { font-size: 12px; }
+body.touch #evTag { top: calc(var(--touch-top) + 34px); font-size: 12px; padding: 2px 8px; }
+body.touch #evBanner b { font-size: 26px; } body.touch #evBanner span { font-size: 13px; } body.touch #evBanner small { font-size: 11px; }
+body.touch #medal b { font-size: 24px; } body.touch #medal span { font-size: 12px; }
+body.touch #dodgeUI { width: 60px; margin-left: -30px; bottom: 34%; }
+@media (prefers-reduced-motion: reduce) { #medal.on, #evBanner.on { animation-timing-function: linear; } }

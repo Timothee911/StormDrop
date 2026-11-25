@@ -24,8 +24,8 @@ export const GRASS_GLSL = `
 export function createGrass(scene, T, { lowq = false, highq = false, weak = false, wind, heightAt }) {
   const NV = T.SEG + 1, STEP = T.SIZE / T.SEG, HALF = T.SIZE / 2, CELL = 10;
   if (weak) highq = false;
-  const R = lowq ? 34 : highq ? 74 : 52, HI_D = lowq ? 0 : highq ? 26 : 20;
-  const N_HI = highq ? 900 : 580, N_LO = lowq ? 300 : highq ? 330 : 270, N_FL = lowq ? 10 : highq ? 34 : 24;
+  const R = lowq ? 34 : highq ? 74 : weak ? 47 : 52, HI_D = lowq ? 0 : highq ? 26 : 20;
+  const N_HI = highq ? 900 : 620, N_LO = lowq ? 300 : highq ? 330 : 270, N_FL = lowq ? 10 : highq ? 34 : 24;
 
   // ---- textures lues par le shader
   const hg = new Float32Array(NV * NV * 2), cg = new Uint8Array(NV * NV * 4);
@@ -43,20 +43,20 @@ export function createGrass(scene, T, { lowq = false, highq = false, weak = fals
   const gr = mulberry32(90210), rr = (a, b) => a + (b - a) * gr();
   // brins : position = (x, hauteur relative, z), aT = (t le long du brin, hasard du brin)
   function tuftGeo(blades, segs, wide) {
-    const pos = [], at = [], idx = [];
+    const pos = [], at = [], aw = [], idx = []; // aw : demi-largeur du brin (amincie tout près de la caméra)
     for (let b = 0; b < blades; b++) {
-      const ang = gr() * 6.283, rad = Math.sqrt(gr()) * 0.3, bx = Math.cos(ang) * rad, bz = Math.sin(ang) * rad;
-      const yaw = ang + rr(-1.1, 1.1), lean = rr(0.16, 0.5), h = rr(0.62, 1.05), w = rr(0.026, 0.042) * wide, rnd = gr();
+      const ang = gr() * 6.283, rad = Math.sqrt(gr()) * 0.36, bx = Math.cos(ang) * rad, bz = Math.sin(ang) * rad;
+      const yaw = ang + rr(-1.1, 1.1), lean = rr(0.14, 0.58), h = rr(0.55, 1.08), w = rr(0.012, 0.022) * wide, rnd = gr();
       const dx = Math.sin(yaw), dz = Math.cos(yaw), wx = Math.cos(yaw), wz = -Math.sin(yaw), o = pos.length / 3;
       for (let s = 0; s <= segs; s++) {
-        const t = s / segs, off = lean * t * t, ww = w * (1 - t * t * 0.55), cx = bx + dx * off, cz = bz + dz * off, y = t * h;
-        if (s < segs) { pos.push(cx - wx * ww, y, cz - wz * ww, cx + wx * ww, y, cz + wz * ww); at.push(t, rnd, t, rnd); }
-        else { pos.push(cx, y, cz); at.push(t, rnd); }
+        const t = s / segs, off = lean * t * t, ww = w * (1 - t * t * 0.7), cx = bx + dx * off, cz = bz + dz * off, y = t * h;
+        if (s < segs) { pos.push(cx - wx * ww, y, cz - wz * ww, cx + wx * ww, y, cz + wz * ww); at.push(t, rnd, t, rnd); aw.push(-wx * ww, -wz * ww, wx * ww, wz * ww); }
+        else { pos.push(cx, y, cz); at.push(t, rnd); aw.push(0, 0); }
         if (s < segs - 1) idx.push(o + s * 2, o + s * 2 + 1, o + s * 2 + 2, o + s * 2 + 1, o + s * 2 + 3, o + s * 2 + 2);
         else if (s === segs - 1) idx.push(o + s * 2, o + s * 2 + 1, o + s * 2 + 2);
       }
     }
-    return { pos, at, idx };
+    return { pos, at, aw, idx };
   }
   // fleur : tige, 6 pétales, cœur ; aT.y : 2 = tige, 3 = pétale, 4 = cœur
   function flowerGeo() {
@@ -65,11 +65,11 @@ export function createGrass(scene, T, { lowq = false, highq = false, weak = fals
     pos.push(0, 0, -0.014, 0, 0, 0.014, 0, H, 0); at.push(0, 2, 0, 2, 1, 2); idx.push(3, 4, 5);
     for (let i = 0; i < 6; i++) { // pétales en losange, légèrement relevés
       const a = i / 6 * 6.283, c = Math.cos(a), s = Math.sin(a), o = pos.length / 3;
-      pos.push(0, H, 0, c * 0.07 - s * 0.042, H + 0.03, s * 0.07 + c * 0.042, c * 0.135, H + 0.035, s * 0.135, c * 0.07 + s * 0.042, H + 0.03, s * 0.07 - c * 0.042);
+      pos.push(0, H, 0, c * 0.046 - s * 0.028, H + 0.03, s * 0.046 + c * 0.028, c * 0.088, H + 0.035, s * 0.088, c * 0.046 + s * 0.028, H + 0.03, s * 0.046 - c * 0.028);
       at.push(0.75, 3, 1, 3, 1, 3, 1, 3); idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
     }
     const o = pos.length / 3; pos.push(0, H + 0.065, 0); at.push(1, 4);
-    for (let i = 0; i < 5; i++) { const a = i / 5 * 6.283; pos.push(Math.cos(a) * 0.045, H + 0.03, Math.sin(a) * 0.045); at.push(0.8, 4); idx.push(o, o + 1 + i, o + 1 + (i + 1) % 5); }
+    for (let i = 0; i < 5; i++) { const a = i / 5 * 6.283; pos.push(Math.cos(a) * 0.03, H + 0.03, Math.sin(a) * 0.03); at.push(0.8, 4); idx.push(o, o + 1 + i, o + 1 + (i + 1) % 5); }
     return { pos, at, idx };
   }
   // instances : décalage dans le carré + 4 hasards. Les premières sont bien réparties (version lointaine = début de la liste).
@@ -90,13 +90,13 @@ export function createGrass(scene, T, { lowq = false, highq = false, weak = fals
   const setHi = scatterSet(Math.max(N_HI, N_LO)), setFl = scatterSet(N_FL);
   function inst(g, set, n) {
     const G = new THREE.InstancedBufferGeometry();
-    G.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3)); G.setAttribute('aT', new THREE.Float32BufferAttribute(g.at, 2)); G.setIndex(g.idx);
+    G.setAttribute('position', new THREE.Float32BufferAttribute(g.pos, 3)); G.setAttribute('aT', new THREE.Float32BufferAttribute(g.at, 2)); G.setAttribute('aW', new THREE.Float32BufferAttribute(g.aw || new Float32Array(g.at.length), 2)); G.setIndex(g.idx);
     G.setAttribute('aOff', new THREE.InstancedBufferAttribute(set.off.subarray(0, n * 2), 2)); G.setAttribute('aRnd', new THREE.InstancedBufferAttribute(set.rnd.subarray(0, n * 4), 4));
     G.instanceCount = n; G.boundingSphere = new THREE.Sphere(new THREE.Vector3(CELL / 2, 0.5, CELL / 2), CELL * 0.75 + 5);
     G.boundingBox = new THREE.Box3(new THREE.Vector3(-1, -6, -1), new THREE.Vector3(CELL + 1, 7, CELL + 1));
     return G;
   }
-  const gHi = lowq ? null : inst(tuftGeo(6, 2, 1), setHi, N_HI), gLo = inst(tuftGeo(lowq ? 6 : 7, 1, 1.75), setHi, N_LO), gFl = inst(flowerGeo(), setFl, N_FL);
+  const gHi = lowq ? null : inst(tuftGeo(weak ? 8 : 10, 2, 1), setHi, N_HI), gLo = inst(tuftGeo(lowq ? 6 : weak ? 7 : 9, 1, weak || lowq ? 3 : 2.5), setHi, N_LO), gFl = inst(flowerGeo(), setFl, N_FL);
 
   // ---- matériau
   const uni = {
@@ -108,7 +108,7 @@ export function createGrass(scene, T, { lowq = false, highq = false, weak = fals
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, uni);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
-        attribute vec2 aT; attribute vec2 aOff; attribute vec4 aRnd;
+        attribute vec2 aT; attribute vec2 aW; attribute vec2 aOff; attribute vec4 aRnd;
         uniform float uWind, uR; uniform vec3 uCam; uniform vec4 uBend[4];
         uniform highp sampler2D tH; uniform sampler2D tC; uniform sampler2D tM;
         varying vec3 vGC; varying float vGT;
@@ -137,10 +137,11 @@ export function createGrass(scene, T, { lowq = false, highq = false, weak = fals
         ${kind === 'fl' ? 'dens *= smoothstep(0.5, 0.72, gn2(gw * 0.05 + 63.0)) * (0.35 + 0.65 * step(0.35, gn2(gw * 0.4 + 2.0)));' : ''}
         float keep = 1.0 - smoothstep(dens - 0.06, dens + 0.02, aRnd.w);
         keep *= step(0.02, dens) * (1.0 - smoothstep(uR * 0.72, uR, gd * (0.9 + 0.2 * aRnd.x)));
-        float hgt = ${kind === 'fl' ? '(0.4 + 0.24 * aRnd.z) * (0.55 + 0.45 * tr.w)' : '(mix(0.36, 0.2 + 0.36 * patchy, smoothstep(0.5, 0.95, tr.w)) + 0.12 * aRnd.z) * tr.w * (aRnd.x > 0.94 ? 1.5 : 1.0)'};
+        float hgt = ${kind === 'fl' ? '(0.4 + 0.24 * aRnd.z) * (0.55 + 0.45 * tr.w)' : '(mix(0.36, 0.2 + 0.36 * patchy, smoothstep(0.5, 0.95, tr.w)) + 0.12 * aRnd.z) * tr.w * (aRnd.x > 0.95 ? 1.28 : 1.0)'};
         hgt *= keep;
         float cy = cos(aRnd.y), sy = sin(aRnd.y);
-        vec3 lp = vec3(position.x * cy - position.z * sy, position.y, position.x * sy + position.z * cy);
+        vec2 bp = position.xz - aW * 0.55 * (1.0 - smoothstep(1.0, 6.5, distance(gw, uCam.xz)));
+        vec3 lp = vec3(bp.x * cy - bp.y * sy, position.y, bp.x * sy + bp.y * cy);
         float bladeT = aT.y > 1.5 ? position.y : aT.x;
         float sz = ${kind === 'fl' ? '(0.75 + 0.5 * aRnd.x) * min(1.0, keep * 2.0)' : `(0.85 + 0.4 * aRnd.z) * min(1.0, keep * 3.0) * (1.0 + gd * ${kind === 'lo' ? '0.012' : '0.008'})`};
         lp.xz *= sz * (0.78 + 0.22 * tr.w); ${kind === 'fl' ? 'lp.y = lp.y * hgt;' : 'lp.y *= hgt;'}
@@ -157,7 +158,7 @@ export function createGrass(scene, T, { lowq = false, highq = false, weak = fals
         // couleur : celle du sol au pied, plus claire et plus chaude vers la pointe
         vec3 gcol = grassTone(gcd.rgb * gcd.rgb, gw);
         float far_ = smoothstep(uR * 0.3, uR * 0.95, gd);
-        vec3 root = gcol * mix(0.5, 0.96, far_), tip = gcol * mix(vec3(1.5, 1.42, 1.12), vec3(1.08), far_) * (0.86 + 0.28 * aT.y * step(aT.y, 1.5));
+        vec3 root = gcol * mix(0.46, 0.96, far_), tip = gcol * mix(vec3(1.52, 1.45, 1.08), vec3(1.08), far_) * (0.86 + 0.28 * aT.y * step(aT.y, 1.5));
         tip = mix(tip, tip * vec3(1.22, 1.08, 0.7), step(0.8, aRnd.z) * 0.5 * (1.0 - far_));
         vGC = mix(root, tip, bladeT * (0.55 + 0.45 * bladeT));
         vGC += gcol * vec3(0.5, 0.5, 0.32) * smoothstep(0.5, 0.82, gust) * bladeT * 0.55; // reflet de la rafale

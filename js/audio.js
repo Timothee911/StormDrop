@@ -124,6 +124,22 @@ export function sfx(name, vol = 1, pan = 0) {
     case 'drive': noise(o, t, 0.25, 'lowpass', 220, 1.2, 0.02, 0.6); break;
     case 'crit': tone(o, t, 0.12, 'sine', 900, 1800, 0.35); noise(o, t, 0.1, 'bandpass', 1200, 2, 0.002, 0.6); break;
     case 'rotor': noise(o, t, 0.11, 'lowpass', 260, 1.4, 0.006, 0.7); tone(o, t, 0.09, 'sine', 62, 44, 0.35); break; // pale d'hélico : « tchop » sourd
+    case 'boom': noise(o, t, 1.1, 'lowpass', 900, 0.5, 0.004, 1.5); noise(o, t, 0.16, 'highpass', 1800, 0.6, 0.002, 0.5); tone(o, t, 0.7, 'sine', 95, 26, 1.3); noise(o, t + 0.12, 1.5, 'lowpass', 260, 0.6, 0.05, 0.6); break;
+    case 'shock': tone(o, t, 0.5, 'sine', 620, 70, 0.8); noise(o, t, 0.45, 'bandpass', 900, 0.7, 0.004, 0.9); tone(o, t, 0.3, 'triangle', 1400, 200, 0.25); break;
+    case 'shieldbreak': noise(o, t, 0.35, 'highpass', 3200, 0.8, 0.002, 0.6); [2600, 1950, 3300, 1500].forEach((f, i) => tone(o, t + i * 0.03, 0.22, 'triangle', f, f * 0.6, 0.16)); break;
+    case 'climb': noise(o, t, 0.16, 'bandpass', 900, 0.9, 0.03, 0.45); tone(o, t + 0.1, 0.08, 'triangle', 170, 110, 0.25); break;
+    case 'roll': noise(o, t, 0.34, 'bandpass', 620, 0.8, 0.06, 0.6); noise(o, t + 0.18, 0.14, 'lowpass', 420, 0.8, 0.01, 0.6); break;
+    case 'throw': noise(o, t, 0.22, 'bandpass', 1500, 1.2, 0.05, 0.5); break;
+    case 'clank': tone(o, t, 0.09, 'triangle', 1250, 820, 0.22); noise(o, t, 0.05, 'highpass', 2500, 1, 0.002, 0.3); break;
+    case 'tick': tone(o, t, 0.05, 'square', 1900, 1900, 0.1); break;
+    case 'hiss': noise(o, t, 2.2, 'highpass', 2600, 0.5, 0.15, 0.4); break;
+    case 'forge': [0, 0.14, 0.3].forEach((d, i) => { tone(o, t + d, 0.3, 'triangle', 1500 + i * 260, 1300 + i * 260, 0.28); noise(o, t + d, 0.06, 'bandpass', 3000, 1.4, 0.002, 0.6); }); tone(o, t + 0.42, 0.5, 'sine', 780, 1560, 0.25); break;
+    case 'contract': [392, 523, 784].forEach((f, i) => tone(o, t + i * 0.09, 0.3, 'square', f, f, 0.09)); tone(o, t + 0.27, 0.5, 'triangle', 1046, 1046, 0.18); break;
+    case 'zip': noise(o, t, 0.4, 'bandpass', 2100, 3, 0.05, 0.45); tone(o, t, 0.35, 'sawtooth', 240, 330, 0.05); break;
+    case 'medal': [659, 880, 1318].forEach((f, i) => tone(o, t + i * 0.06, 0.34, 'triangle', f, f, 0.22)); break;
+    case 'meteor': noise(o, t, 2.4, 'bandpass', 420, 0.5, 0.9, 0.9); tone(o, t, 2.4, 'sawtooth', 190, 60, 0.12); break;
+    case 'event': [196, 294, 392, 587].forEach((f, i) => tone(o, t + i * 0.13, 0.5, 'sawtooth', f, f, 0.1)); tone(o, t + 0.5, 0.9, 'triangle', 784, 784, 0.22); break;
+    case 'heart': tone(o, t, 0.14, 'sine', 62, 40, 1.0); tone(o, t + 0.2, 0.16, 'sine', 54, 36, 0.8); break;
     case 'click': tone(o, t, 0.04, 'square', 900, 900, 0.08); break;
   }
 }

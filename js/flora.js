@@ -68,6 +68,25 @@ export function createFlora(scene, wind, { lowq = false, highq = false } = {}) {
         if (camD < 2.0) { float ig = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715)))); if (ig > smoothstep(0.5, 2.0, camD) + 0.04) discard; }`);
       // feuilles : même éclairage des deux côtés (les normales du pack forment une boule douce)
       if (plant) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal *= faceDirection;');
+      if (CUT[n]) {
+        // nuances calculées par sommet : (dessus / dessous, touffe, grande zone)
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+          varying vec3 vLK;
+          float fh(vec3 p) { return fract(sin(dot(p, vec3(12.99, 78.23, 37.72))) * 43758.5); }
+          float fn3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(mix(fh(i), fh(i + vec3(1,0,0)), f.x), mix(fh(i + vec3(0,1,0)), fh(i + vec3(1,1,0)), f.x), f.y), mix(mix(fh(i + vec3(0,0,1)), fh(i + vec3(1,0,1)), f.x), mix(fh(i + vec3(0,1,1)), fh(i + vec3(1,1,1)), f.x), f.y), f.z); }`)
+          .replace('#include <project_vertex>', `#include <project_vertex>
+          vec3 lw_ = (instanceMatrix * vec4(position, 1.0)).xyz; vLK = vec3(clamp(normalize(mat3(instanceMatrix) * objectNormal).y * 0.5 + 0.5, 0.0, 1.0), fn3(lw_ * 1.7), fn3(lw_ * 0.45 + 7.0));`);
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLK;')
+          .replace('#include <alphatest_fragment>', `
+          ${leafy ? `{
+            float up = vLK.x, tuft = vLK.y, big = vLK.z;
+            diffuseColor.rgb *= mix(0.6, 1.2, smoothstep(0.05, 0.95, up * 0.75 + tuft * 0.35)) * (0.86 + 0.28 * big);
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.22, 1.12, 0.72), smoothstep(0.55, 0.95, up * 0.6 + tuft * 0.5) * 0.6);
+          }` : ''}
+          #include <alphatest_fragment>`)
+          .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 0.0; // feuillage : pas de trait de contour (outline.js)');
+      }
     };
     m.customProgramCacheKey = () => 'flora' + key;
     matCache.set(key, m); return m;
