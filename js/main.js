@@ -134,7 +134,7 @@ function syncPost() {
   U.hazeCol.value.copy(FOG_COL).lerp(skyMat.uniforms.mid.value, 0.35).multiplyScalar(0.86);
   const low = clamp(1 - skyMat.uniforms.sunDir.value.y / 0.5, 0, 1);
   _pSun.setRGB(1, lerp(0.9, 0.55, low), lerp(0.7, 0.28, low)).multiplyScalar(clamp(1 - n * 1.3, 0, 1)); U.sunCol.value.copy(_pSun);
-  U.raysK.value = 0.07 + low * 0.28; U.bloomK.value = 0.42 + n * 0.5; U.nightK.value = n;
+  U.raysK.value = 0.06 + low * 0.24; U.bloomK.value = 0.42 + n * 0.5; U.nightK.value = n;
 }
 function syncLin() { const l = outline.linear ? 1 : 0; if (skyMat) skyMat.uniforms.lin.value = l; if (storm.mesh) storm.mesh.material.uniforms.lin.value = l; fx.linear = l; }
 const outline = createOutline(renderer, { enabled: !!SET.outline, width: SET.outlineW || 1, fadeNear: 70 * SET.viewDist, fadeFar: 260 * SET.viewDist, samples: LOWQ ? (SOFT_GPU || 'ontouchstart' in window ? 0 : 2) : HIGHQ && !WEAK_GPU ? 4 : 2, canvasAA: !SET.outline, strength: 0.8, fx: !SOFT_GPU && !(LOWQ && 'ontouchstart' in window), ao: LOWQ ? 0 : WEAK_GPU ? 5 : HIGHQ ? 12 : 8 });

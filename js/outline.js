@@ -60,7 +60,7 @@ void main() {
   vec2 sd = (vUv - sunUV.xy) * vec2(aspect, 1.0);
   float toSun = exp(-dot(sd, sd) * 2.2) * sunUV.z;
   float hz = (1.0 - exp(-max(z0 - 60.0, 0.0) / 760.0)) * hazeK * (1.0 - sky);
-  col = mix(col, hazeCol + sunCol * toSun * 0.22, hz);
+  col = mix(col, hazeCol + sunCol * toSun * 0.16, hz);
   // halo des lumières vives + rayons du soleil
   vec3 bl = texture2D(tBloomA, vUv).rgb * 0.55 + texture2D(tBloomB, vUv).rgb * 0.75;
   col += bl * bloomK;
@@ -95,7 +95,7 @@ void main() {
   for (int i = 0; i < 4; i++) {
     vec2 u = vUv + texel * vec2(i < 2 ? -1.0 : 1.0, (i == 0 || i == 2) ? -1.0 : 1.0);
     vec3 c = min(texture2D(tColor, u).rgb, vec3(6.0)); float l = max(c.r, max(c.g, c.b));
-    s += c * smoothstep(0.95, 1.7, l); sky += step(0.99999, texture2D(tDepth, u).x) * min(l, 1.6);
+    s += c * smoothstep(1.15, 2.1, l); sky += step(0.99999, texture2D(tDepth, u).x) * min(l, 1.6);
   }
   gl_FragColor = vec4(s * 0.25, sky * 0.25);
 }`;
@@ -116,7 +116,7 @@ void main() {
   float s = 0.0, w = 1.0;
   for (int i = 0; i < 14; i++) { s += textureLod(tSrc, u, 0.0).a * w; w *= 0.93; u += d; }
   vec2 q = (vUv - sunUV.xy) * vec2(aspect, 1.0);
-  gl_FragColor = vec4(s / 14.0 * exp(-dot(q, q) * 1.6) * sunUV.z, 0.0, 0.0, 1.0);
+  gl_FragColor = vec4(s / 14.0 * exp(-dot(q, q) * 4.2) * sunUV.z, 0.0, 0.0, 1.0);
 }`;
 // occlusion ambiante, demi-résolution : 1/z est affine sur un plan, donc tout échantillon devant ce plan est un vrai relief
 const FS_AO = `
