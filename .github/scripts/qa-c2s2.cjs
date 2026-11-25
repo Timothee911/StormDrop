@@ -844,5 +844,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('---');
   console.log(errors.length ? 'JS ERRORS:\n' + errors.slice(0, 10).join('\n') : 'AUCUNE ERREUR JS');
   await browser.close();
+  // raison lisible dans les annotations GitHub (sans ouvrir les journaux)
+  if (process.env.GITHUB_ACTIONS) for (const l of results.filter((r) => r.startsWith('FAIL')).concat(errors.slice(0, 5)).slice(0, 9)) console.log('::error title=qa-c2s2::' + String(l).split(String.fromCharCode(10)).join(' ').slice(0, 900));
   if (failed > 0 || errors.length > 0) { console.error(failed + ' assertion(s) en échec'); process.exit(1); }
 })().catch((e) => { console.error('FATAL', e); process.exit(1); });
