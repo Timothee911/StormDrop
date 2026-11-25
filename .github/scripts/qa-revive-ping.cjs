@@ -135,9 +135,12 @@ const puppeteer = require('puppeteer');
       // ping de butin
       g.ping.on = false;
       const item = g.randWeaponItem();
+      // le coéquipier partait vers l'ennemi et pouvait passer devant le viseur : on le remet derrière
+      const back = () => { window.__place(m, f.x - 6, f.z - 4); m.target = null; m.lootGoal = null; m.wp = null; m.think = 99; };
+      back();
       g.spawnLoot(item, f.x + 10, g.terrainH(f.x + 10, f.z) + 0.3, f.z);
       window.advanceTime(1200);
-      const L = g.loot.find(l => l.item === item && l.alive);
+      back(); const L = g.loot.find(l => l.item === item && l.alive);
       aimAt(L.pos.x, L.pos.y, L.pos.z);
       g.pingAhead();
       const lootPing = { on: g.ping.on, kind: g.ping.kind, label: g.ping.label };
