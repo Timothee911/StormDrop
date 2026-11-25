@@ -10,8 +10,9 @@ export const M = {
 // couleur + surface dans un seul nombre (les 24 bits bas restent la couleur)
 export const S = (m, hex) => m * 0x1000000 + hex;
 
-export function houseMaterial(lowq) {
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.06 });
+// simple : éclairage mat, bien plus léger (puces graphiques intégrées)
+export function houseMaterial(lowq, simple) {
+  const mat = simple ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.06 });
   mat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aM;\nvarying vec3 vWP;\nvarying vec2 vHU;\nvarying float vM;')

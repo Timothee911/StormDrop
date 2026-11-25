@@ -21,10 +21,11 @@ export const GRASS_GLSL = `
 `;
 
 // T : { SEG, SIZE, pos (Float32 xyz), cols (rgb linéaire), dens, len } par sommet du terrain
-export function createGrass(scene, T, { lowq = false, highq = false, wind, heightAt }) {
+export function createGrass(scene, T, { lowq = false, highq = false, weak = false, wind, heightAt }) {
   const NV = T.SEG + 1, STEP = T.SIZE / T.SEG, HALF = T.SIZE / 2, CELL = 10;
-  const R = lowq ? 30 : highq ? 74 : 54, HI_D = lowq ? 0 : highq ? 26 : 20;
-  const N_HI = highq ? 900 : 640, N_LO = lowq ? 190 : highq ? 330 : 270, N_FL = lowq ? 10 : highq ? 34 : 24;
+  if (weak) highq = false;
+  const R = lowq ? 34 : highq ? 74 : 52, HI_D = lowq ? 0 : highq ? 26 : 20;
+  const N_HI = highq ? 900 : 580, N_LO = lowq ? 300 : highq ? 330 : 270, N_FL = lowq ? 10 : highq ? 34 : 24;
 
   // ---- textures lues par le shader
   const hg = new Float32Array(NV * NV * 2), cg = new Uint8Array(NV * NV * 4);

@@ -89,11 +89,26 @@ const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !SET.outline, powerPreference: 'high-performance' });
 const LOWQ = /lowq/.test(location.search) || SET.quality === 'basse';
 const HIGHQ = SET.quality === 'haute' && !LOWQ;
-function applyPixelRatio() { renderer.setPixelRatio(LOWQ ? Math.min(window.devicePixelRatio, 0.75) : HIGHQ ? Math.min(window.devicePixelRatio, 2.5) : Math.min(window.devicePixelRatio, 1.6)); }
+// puce graphique intégrée ou mobile : moins d'anticrénelage, résolution plafonnée
+const GPU_NAME = (() => { try { const gl = renderer.getContext(), e = gl.getExtension('WEBGL_debug_renderer_info'); return e ? String(gl.getParameter(e.UNMASKED_RENDERER_WEBGL)) : ''; } catch (e) { return ''; } })();
+const SOFT_GPU = /swiftshader|basic render|llvmpipe/i.test(GPU_NAME), WEAK_GPU = SOFT_GPU || /intel|uhd|iris|mali|adreno|powervr/i.test(GPU_NAME) && !/arc/i.test(GPU_NAME);
+// RÉSOLUTION ADAPTATIVE : si le jeu rame, l'image est calculée un peu moins fine plutôt que saccadée
+let resScale = 1, resT = 0, resN = 0, resHold = 3;
+function applyPixelRatio() { const d = window.devicePixelRatio; renderer.setPixelRatio(Math.min(d, LOWQ ? (SOFT_GPU ? 0.75 : 1) : WEAK_GPU ? (HIGHQ ? 1.25 : 1) : HIGHQ ? 2.5 : 1.6) * resScale); }
+function adaptRes(rawDt) {
+  if (document.hidden || rawDt > 0.5 || SOFT_GPU) return;
+  resT += rawDt; resN++; if (resT < 2) return;
+  const fps = resN / resT; resT = 0; resN = 0;
+  if (resHold > 0) { resHold--; return; } // démarrage, compilation des shaders
+  const s0 = resScale;
+  if (fps < 27 && resScale > 0.77) resScale = Math.max(0.75, resScale - 0.1);
+  else if (fps > 50 && resScale < 1) resScale = Math.min(1, resScale + 0.1);
+  if (resScale !== s0) { resHold = resScale > s0 ? 4 : 1; applyPixelRatio(); }
+}
 applyPixelRatio();
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = !LOWQ;
-renderer.shadowMap.type = HIGHQ ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+renderer.shadowMap.type = HIGHQ && !WEAK_GPU ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
@@ -104,7 +119,7 @@ scene.fog = new THREE.Fog(0x16608e, 1e8, 2e8); // brouillard « invisible » au-
 const camera = new THREE.PerspectiveCamera(SET.fov, window.innerWidth / window.innerHeight, 0.1, 30000); // portée très longue : la mer et les décors lointains vont jusqu'à l'horizon
 // cartoon outlines (post-process, one extra full-screen pass)
 function syncLin() { const l = outline.linear ? 1 : 0; if (skyMat) skyMat.uniforms.lin.value = l; if (storm.mesh) storm.mesh.material.uniforms.lin.value = l; }
-const outline = createOutline(renderer, { enabled: !!SET.outline, width: SET.outlineW || 1, fadeNear: 70 * SET.viewDist, fadeFar: 260 * SET.viewDist, samples: LOWQ ? 0 : HIGHQ ? 4 : 2, canvasAA: !SET.outline });
+const outline = createOutline(renderer, { enabled: !!SET.outline, width: SET.outlineW || 1, fadeNear: 70 * SET.viewDist, fadeFar: 260 * SET.viewDist, samples: LOWQ ? (SOFT_GPU || 'ontouchstart' in window ? 0 : 2) : HIGHQ && !WEAK_GPU ? 4 : 2, canvasAA: !SET.outline });
 scene.add(camera);
 
 window.addEventListener('resize', () => {
@@ -361,7 +376,7 @@ let waterMatRef = null; // exposé au cycle jour/nuit : l'eau reflète le ciel e
   grassT = { SEG, SIZE: TERRAIN_SIZE, pos: pos.array, cols, dens: gDens, len: gLen };
   geo.setAttribute('aGrass', new THREE.BufferAttribute(gDens, 1));
   geo.computeVertexNormals();
-  const tmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+  const tmat = new THREE.MeshLambertMaterial({ vertexColors: true });
   // per-pixel detail on top of the vertex colours (one vertex every ~3 m): grass patches, fine grain,
   // darker steep slopes and an animated foam line where the island meets the sea
   tmat.onBeforeCompile = (sh) => {
@@ -1095,7 +1110,7 @@ function makeStructBox(x, y, z, w, h, d, mat, o = {}) {
 // Static batching: every building is drawn as ONE merged mesh with vertex colours
 // (walls + decorations). Destroying a wall rebuilds that building's mesh only.
 let curHouse = null;
-const HOUSE_MAT = houseMaterial(LOWQ), GLASS_MAT = glassMaterial();
+const HOUSE_MAT = houseMaterial(LOWQ, LOWQ || WEAK_GPU), GLASS_MAT = glassMaterial();
 const _hcCache = new Map();
 function hcol(hex) { let c = _hcCache.get(hex); if (!c) { c = new THREE.Color(hex); _hcCache.set(hex, c); } return c; }
 function colorize(g, c, m = 0, faces = null) {
@@ -1159,7 +1174,7 @@ const SPH_GEO = new THREE.SphereGeometry(0.5, 16, 12);
 // =====================================================================
 const flora = createFlora(scene, windT, { lowq: LOWQ, highq: HIGHQ });
 // Herbe : prairie continue autour de la caméra (grass.js)
-const grass = createGrass(scene, grassT, { lowq: LOWQ, highq: HIGHQ, wind: windT, heightAt: terrainH });
+const grass = createGrass(scene, grassT, { lowq: LOWQ, highq: HIGHQ, weak: WEAK_GPU, wind: windT, heightAt: terrainH });
 grassU.uGrassR.value = grass.R; grassU.uGrassCam.value = grass.uniforms.uCam.value;
 const grassHouses = []; // bâtiments : leurs éléments posés au sol sont retirés de l'herbe
 function cutGrass() {
@@ -1232,7 +1247,7 @@ let trunkIM, leafIM, leafBallIM, rockIM, cactusIM;
   trunkIM = new THREE.InstancedMesh(trunkG, hitMat, pts.length);
   leafIM = new THREE.InstancedMesh(coneG, hitMat, pts.length);
   leafBallIM = new THREE.InstancedMesh(ballG, hitMat, pts.length);
-  const TR = LOWQ ? 70 : HIGHQ ? 160 : 115; // distance du modèle complet : l'arbre est déjà entier bien avant qu'on arrive
+  const TR = LOWQ ? 70 : WEAK_GPU ? 100 : HIGHQ ? 160 : 115; // distance du modèle complet : l'arbre est déjà entier bien avant qu'on arrive
   for (const id in TREE_INFO) flora.kind(id, { R: TR, sway: 0.006, snow: id.startsWith('pine'), cast: true });
   const lc = new THREE.Color(), off = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
   pts.forEach((p, i) => {
@@ -1311,6 +1326,7 @@ let trunkIM, leafIM, leafBallIM, rockIM, cactusIM;
 scatterPlants(flora, groundDirtW, { lowq: LOWQ, highq: HIGHQ });
 
 // Houses
+const SHARED_GEO = new Set(); // géométries partagées : jamais libérées
 const chests = [], ammoBoxes = [], lootSpots = [];
 let chestHumT = 0;
 // ---- STYLES DE MAISONS : chaque style a ses matières, son toit et ses détails.
@@ -1425,7 +1441,7 @@ function wallDecor(s, ly, H, T, ops, o) {
 // Portes réelles : elles se ferment, bloquent le passage et s'ouvrent avec E
 // (les bots les ouvrent tout seuls en s'en approchant). Cassables comme les murs.
 // =====================================================================
-const doors = [];
+const doors = [], DOOR_HIT = new THREE.MeshBasicMaterial({ visible: false });
 function addDoor(s, ly, op, T, hex) {
   // la porte remplit l'ouverture (juste le jeu fonctionnel de 4 cm) : plus de trou
   // ni au-dessus ni sur les côtés entre la porte et le mur.
@@ -1453,6 +1469,7 @@ function addDoor(s, ly, op, T, hex) {
   if (s.ax === 'x') { handle.scale.set(0.06, 0.3, 0.24); handle.position.set(dw - 0.17, 1.05, 0); }
   else { handle.scale.set(0.24, 0.3, 0.06); handle.position.set(0, 1.05, dw - 0.17); }
   g.add(handle);
+  bake(g, 'porte' + s.ax + op.w + '|' + op.y1 + '|' + hex); panel.material = DOOR_HIT; panel.castShadow = false; g.add(panel); // panel : cible des tirs, invisible
   scene.add(g);
   const d = {
     group: g, panel, open: false, broken: false, angle: 0, hx: hinge[0], hz: hinge[1], ly,
@@ -2001,6 +2018,26 @@ function buildTowerInner(cx, cz, baseY, w, d, floors, rot, pal) {
   lootSpots.push({ x: cx, y: topY + 0.2, z: cz + d / 4 });
 }
 
+// Petits objets faits de nombreuses pièces (coffre, caisse, porte) : leurs pièces sont soudées en un
+// seul mesh à couleurs de sommets, partagé par tous les objets identiques. keep = pièces à laisser.
+const BAKED = new Map(), BAKE_MAT = LOWQ || WEAK_GPU ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.15 });
+function bake(g, key, keep = []) {
+  const parts = g.children.filter((m) => m.isMesh && !keep.includes(m) && m.material && m.material.color && !m.material.map && !m.material.transparent);
+  if (!parts.length) return;
+  let geo = BAKED.get(key);
+  if (!geo) {
+    geo = mergeGeometries(parts.map((m) => {
+      m.updateMatrix(); const q = m.geometry.index ? m.geometry.clone() : m.geometry.clone(), k = m.material.color.clone();
+      if (m.material.emissive) k.add(m.material.emissive.clone().multiplyScalar((m.material.emissiveIntensity ?? 1) * 0.7));
+      for (const n of Object.keys(q.attributes)) if (n !== 'position' && n !== 'normal' && n !== 'uv') q.deleteAttribute(n);
+      const a = new Float32Array(q.attributes.position.count * 3); for (let i = 0; i < a.length; i += 3) { a[i] = k.r; a[i + 1] = k.g; a[i + 2] = k.b; }
+      q.setAttribute('color', new THREE.BufferAttribute(a, 3)); return q.applyMatrix4(m.matrix);
+    }));
+    BAKED.set(key, geo); SHARED_GEO.add(geo);
+  }
+  for (const m of parts) g.remove(m);
+  const m = new THREE.Mesh(geo, BAKE_MAT); m.castShadow = true; m.receiveShadow = true; g.add(m);
+}
 function spawnChest(x, y, z) {
   const g = new THREE.Group();
   const gold = matC(0xffc93a, { emissive: 0x8a5a00, emissiveIntensity: 0.6, metalness: 0.4, roughness: 0.4 });
@@ -2034,6 +2071,7 @@ function spawnChest(x, y, z) {
   addBox(g, 0.16, 0.05, 0.05, 0, 0.66, 0.4, bronze);
   // rivets sur le devant du corps
   for (const rx of [-0.42, 0.42]) { addBox(g, 0.06, 0.06, 0.06, rx, 0.3, 0.36, gold); addBox(g, 0.06, 0.06, 0.06, rx, 0.6, 0.36, gold); }
+  bake(g, 'coffre'); bake(lid, 'couvercle');
   g.add(lid); g.position.set(x, y, z); g.rotation.y = rand(6.28);
   // AABB tourné : le coffre (1,15 x 0,75, ~0,9 de haut avec le couvercle) bloque dans toutes les orientations
   const col = propBoxRot(x, y, z, 0.6, 0.42, 0.9, g.rotation.y);
@@ -2072,6 +2110,7 @@ function spawnAmmoBox(x, y, z) {
   addBox(g, 0.06, 0.08, 0.2, 0.47, 0.28, 0, steel);
   // marquage pochoir
   addBox(g, 0.3, 0.22, 0.02, 0, 0.24, 0.29, matC(0xd8c24a, { roughness: 0.9 }));
+  bake(g, 'caisse'); bake(lid, 'caissec'); bake(tops, 'caisset');
   g.add(lid, tops); g.position.set(x, y, z); g.rotation.y = rand(6.28); scene.add(g);
   const col = propBoxRot(x, y, z, 0.48, 0.32, 0.6, g.rotation.y); // caisse solide (0,94 x 0,62 x 0,58)
   return { x, y, z, mesh: g, lid, tops, opened: false, col };
@@ -2250,7 +2289,6 @@ function spawnLoot(item, x, y, z, toss = true) {
   const L = { item, mesh: g, model, pos: g.position, vel: new THREE.Vector3(toss ? rand(-2.5, 2.5) : 0, toss ? 5 : 0, toss ? rand(-2.5, 2.5) : 0), alive: true, t: rand(6) };
   loot.push(L); return L;
 }
-const SHARED_GEO = new Set();
 function removeLoot(L) {
   L.alive = false; scene.remove(L.mesh);
   // free GPU buffers of one-off geometries (shared ones are re-uploaded automatically if reused)
@@ -9704,7 +9742,7 @@ function step(dt) {
 }
 function frame() {
   requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = clock.getDelta(), dt = Math.min(rawDt, 0.05); adaptRes(rawDt);
   // ralenti du top 1 : 1,4 s sur l'horloge réelle, le monde tourne au ralenti
   let sdt = dt;
   if (top1Pending) {
@@ -9724,6 +9762,8 @@ function frame() {
     const lp = player.alive ? player.pos : camera.position;
     sunLight.position.copy(lp).add(SUN_OFF); sunLight.target.position.copy(lp);
   } else { sunLight.position.copy(SUN_OFF).multiplyScalar(1.5); sunLight.target.position.set(0, 0, 0); }
+  updateLamps(); cullSmall(dt);
+  renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = (shadowN++ & 1) === 0; // ombres recalculées une image sur deux
   flora.update(camera.position); bendGrass(); grass.update(camera.position);
   syncLin(); outline.render(scene, camera);
   updateConfetti(dt);
@@ -9754,6 +9794,45 @@ window.__game = { flora, grass, doors, structs, rebuildHouse, towers, outline,
 // storm est aussi exposé directement : window.__game.storm
 
 cutGrass();
+// LAMPES : chaque lampe du décor était calculée pour chaque pixel de l'image (49 sur l'île, plus de la
+// moitié du temps de rendu). Elles restent en place (et continuent de clignoter) mais ne sont plus rendues
+// directement : un petit nombre de lampes réelles prend, à chaque image, la place des plus proches.
+const LAMPS = [], LAMP_SLOTS = [];
+scene.traverse((o) => { if (o.isPointLight) LAMPS.push(o); });
+for (const l of LAMPS) l.layers.disableAll();
+for (let i = 0; i < (LOWQ ? 2 : HIGHQ ? 5 : 3); i++) { const l = new THREE.PointLight(0xffffff, 0, 6); l.userData.slot = true; scene.add(l); LAMP_SLOTS.push(l); }
+const _lampL = [];
+// Petits objets lointains : pas dessinés (coffres, caisses, portes, modèles du butin)
+let cullT = 0, shadowN = 0;
+function cullSmall(dt) {
+  cullT -= dt; if (cullT > 0) return; cullT = 0.25;
+  const c = camera.position, R1 = (LOWQ ? 60 : HIGHQ ? 110 : 85) ** 2, R2 = (LOWQ ? 45 : HIGHQ ? 80 : 65) ** 2, near = (p, r) => (p.x - c.x) ** 2 + (p.z - c.z) ** 2 + (p.y - c.y) ** 2 < r;
+  if (scopeOn) { for (const d of doors) d.group.visible = true; for (const q of chests) q.mesh.visible = true; return; } // lunette : on voit loin
+  for (const d of doors) d.group.visible = near(d.group.position, R1);
+  for (const q of chests) q.mesh.visible = near(q.mesh.position, R1);
+  for (const q of ammoBoxes) q.mesh.visible = near(q.mesh.position, R2);
+  for (const l of loot) if (l.alive) { l.model.visible = near(l.pos, R2); l.mesh.visible = near(l.pos, R1 * 4); }
+}
+function updateLamps() {
+  _lampL.length = 0;
+  for (const l of LAMPS) {
+    if (!(l.intensity > 0)) continue;
+    let on = true; for (let o = l; o && o !== scene; o = o.parent) if (!o.visible) { on = false; break; }
+    if (!on) continue;
+    if (l.parent === scene) _v1.copy(l.position); else _v1.setFromMatrixPosition(l.matrixWorld);
+    const d = _v1.distanceTo(camera.position) - (l === flashLight ? 60 : l.distance * 0.5); if (d > 70) continue;
+    l.userData.score = d; _lampL.push(l);
+  }
+  _lampL.sort((a, b) => a.userData.score - b.userData.score);
+  const n = LAMP_SLOTS.length, next = _lampL[n] ? _lampL[n].userData.score : 70;
+  for (let i = 0; i < n; i++) {
+    const S_ = LAMP_SLOTS[i], l = _lampL[i];
+    if (!l) { S_.intensity = 0; continue; }
+    if (l.parent === scene) S_.position.copy(l.position); else S_.position.setFromMatrixPosition(l.matrixWorld);
+    S_.color.copy(l.color); S_.distance = l.distance; S_.decay = l.decay;
+    S_.intensity = l.intensity * clamp((next - l.userData.score) / 5, 0, 1); // s'éteint en douceur avant de céder sa place
+  }
+}
 // Auto-start the match once everything is built
 refreshLabels();
 setTimeout(() => {
