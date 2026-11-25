@@ -1326,6 +1326,8 @@ let trunkIM, leafIM, leafBallIM, rockIM, cactusIM;
     const a = rand(Math.PI * 2), r = Math.sqrt(R()) * ISLAND_R * 0.95;
     const x = Math.cos(a) * r * OVAL_X, z = Math.sin(a) * r * OVAL_Z, h = terrainH(x, z);
     if (h < 1.2 || inPOI(x, z, 4)) continue;
+    // la caverne de la Grotte déborde de son lieu : un rocher y bouchait parfois un escalier
+    if (Math.hypot(x - GROTTO.cavernX, z - GROTTO.cavernZ) < 60 || inGrotto(x, z) || inGrotto(x - 4, z) || inGrotto(x + 4, z) || inGrotto(x, z - 4) || inGrotto(x, z + 4)) continue;
     rpts.push({ x, z, h });
   }
   rockIM = new THREE.InstancedMesh(rg, hitMat, rpts.length); // volume invisible pour les tirs et la pioche
@@ -9904,7 +9906,7 @@ window.render_game_to_text = () => JSON.stringify({
   build: { piece: buildPiece, rotation: buildRot, editing: !!editing }, marker: { on: marker.on, pos: marker.pos.toArray() }, shoulder: shoulderSide, inventoryOpen: touchBagOpen,
   alive: chars.filter((c) => c.alive && !c.hench).length, storm: { phase: storm.phase, r: Math.round(storm.r), stage: storm.stage }, builds: builds.size,
 });
-window.__game = { get play() { return play; }, fx, flora, grass, doors, structs, rebuildHouse, towers, outline,
+window.__game = { rocks, get play() { return play; }, fx, flora, grass, doors, structs, rebuildHouse, towers, outline,
   ambient: { get birds() { return birds; }, get bflies() { return bflies; }, get fishes() { return fishes; }, get fireflies() { return ffPts; }, get ripples() { return ripples; }, get nightF() { return nightF; }, splashFX, ripple, spawnFish, updateDayNight }, vehicles, enterVehicle, exitVehicle, startEdit, confirmEdit, applyEdit, builds, mates, setMarker, pads, vents, get editing() { return editing; }, botBox, leaderboard, get tod() { return tod; }, set tod(v) { tod = v; }, drops, spawnSupplyDrop, weak, stats, get xp() { return matchXP; }, chests, ammoBoxes, get gameT() { return gameT; }, get busActive() { return bus.active; }, get bus() { return bus; }, waveAt, get footprints() { return footPrints.filter((f) => f.life > 0).length; }, get snowfall() { return snowF.k; },  damage: (...a) => damageChar(...a), damageStruct, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geo: renderer.info.memory.geometries, targets: rayTargets.length }), stepOnly: (dt) => step(dt), castRay, terrainH: terrainH, camera, THREE, POIS, loot, bots, spawnLoot, randWeaponItem, pickupItem, interact, selectSlot, fire, terrainH, get player() { return player; }, chars, keys, mouse, setCam: (y, p) => { camYaw = y; camPitch = p; }, startGame, jumpFromBus: () => jumpFromBus(player), setBuildMode, placeBuild, computeTarget, storm, vaults, booths, SPY_STAFF, openVault, openChest, setDisguise: (on, outfit) => setDisguise(player, on, false, outfit), SHADOW_OUTFITS, get bosses() { return chars.filter((c) => c.boss); }, get henchmen() { return chars.filter((c) => c.hench); }, doors, toggleDoor, win: () => startVictory(), get matchOver() { return matchOver; }, get grottoSkullBounds() { return grottoSkullBounds; }, get terrainMesh() { return terrainMeshRef; }, get grottoRockMesh() { return grottoRockMesh; }, inGrotto, get scene() { return scene; },
   PHASES, stormDamageFor, get playerTotal() { return PLAYER_TOTAL; }, propCols, binds: BIND, settings: SET, get busEnded() { return bus.ended; }, matGain, matFlights: () => matFlights.length, pickTrailPool, goDown, reviveChar, canGoDown, ping, pingAhead, get marker() { return marker; },
   // capture libre (QA visuelle) : rendu depuis un point de vue arbitraire
