@@ -294,9 +294,11 @@ const base = process.env.QA_URL || 'http://localhost:8090';
     check('ÉPAULE : changement réel de côté', await page.evaluate(v => JSON.parse(render_game_to_text()).shoulder === -v, shoulder));
     await page.tap('#tShoulder');
     check('ÉPAULE : retour au côté initial', await page.evaluate(v => JSON.parse(render_game_to_text()).shoulder === v, shoulder));
-    await page.evaluate(() => { __game.player.emoting = null; });
+    // joueur posé au sol (le bouton EMOTE est désactivé en l'air)
+    await page.evaluate(() => { const p = __game.player; p.emoting = null; p.mode = 'ground'; p.vel.set(0, 0, 0); p.pos.y = __game.terrainH(p.pos.x, p.pos.z) + 0.05; p.grounded = true; advanceTime(100); });
     await page.tap('#tEmote');
-    check('EMOTE : roue ouverte depuis le bouton', await page.evaluate(() => !document.getElementById('touchEmotes').hidden));
+    const emoteState = await page.evaluate(() => { const p = __game.player, b = document.getElementById('tEmote'); return { open: !document.getElementById('touchEmotes').hidden, disabled: b.disabled, mode: p.mode, grounded: p.grounded, alive: p.alive, build: JSON.parse(render_game_to_text()).player.buildMode }; });
+    check('EMOTE : roue ouverte depuis le bouton', emoteState.open, emoteState);
     await page.tap('#touchEmoteGrid [data-e="danse"]');
     check('EMOTE : lancer une animation', await page.evaluate(() => __game.player.emoting?.id === 'danse' && document.getElementById('touchEmotes').hidden));
     await page.tap('#tEmote');
