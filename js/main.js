@@ -5235,11 +5235,11 @@ function buildSpyPOI(p) {
     // la pente du terrain entre la fouille du sous-sol et le plateau du POI
     // (le maillage terrain ne peut pas suivre la falaise verticale de la fouille,
     // il interpole sur 3,4 m : sans plinth, cette pente verte entrerait dans la
-    // cave et se verrait derrière l'escalier). Le dessus affleure le sol 9,0.
-    makeStructBox(BX, A.floor, BZ + 12.25, 28, 9.0 - A.floor, 3.5, stoneM(), { indestructible: true });   // sud
-    makeStructBox(BX, A.floor, BZ - 12.25, 28, 9.0 - A.floor, 3.5, stoneM(), { indestructible: true });   // nord
-    makeStructBox(BX + 15.25, A.floor, BZ, 3.5, 9.0 - A.floor, 28, stoneM(), { indestructible: true });   // est
-    makeStructBox(BX - 15.25, A.floor, BZ, 3.5, 9.0 - A.floor, 28, stoneM(), { indestructible: true });   // ouest
+    // cave et se verrait derrière l'escalier). Le dessus dépasse le sol (9,0) de 3 cm : à la même hauteur, herbe et pierre clignotaient.
+    makeStructBox(BX, A.floor, BZ + 12.25, 28, 9.03 - A.floor, 3.5, stoneM(), { indestructible: true });   // sud
+    makeStructBox(BX, A.floor, BZ - 12.25, 28, 9.03 - A.floor, 3.5, stoneM(), { indestructible: true });   // nord
+    makeStructBox(BX + 15.25, A.floor, BZ, 3.5, 9.03 - A.floor, 28, stoneM(), { indestructible: true });   // est
+    makeStructBox(BX - 15.25, A.floor, BZ, 3.5, 9.03 - A.floor, 28, stoneM(), { indestructible: true });   // ouest
 
     // ---- MURS DU BÂTIMENT (4 niveaux, façade sud percée de la porte)
     const cN = [], cS = [], cE = [], cW = [];
