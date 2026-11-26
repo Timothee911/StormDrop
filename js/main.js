@@ -5108,6 +5108,8 @@ function buildSpyPOI(p) {
     // sol en gris clair brillant (hall et étages — plus aucun noir à l'Agence)
     const floorM = () => matC(0xdcdfe3, { roughness: 0.2, metalness: 0.0 });
     const oStone = { hp: 420, mat: 'stone' };
+    // planchers : indestructibles (une grenade de garde faisait disparaître tout le hall)
+    const oFloor = { indestructible: true, mat: 'stone' };
     curHouse = { boxes: [], deco: [], mesh: null };
 
     // ---- SOUS-SOL (cave du coffre-fort) : le terrain est creusé jusqu'à
@@ -5216,7 +5218,7 @@ function buildSpyPOI(p) {
     // (marbre clair brillant, comme le hall de l'Agence)
     const ceilingM = new THREE.MeshStandardMaterial({ color: 0xb9c2ce, roughness: 1, emissive: 0x748396, emissiveIntensity: 0.45 });
     const rdcSlab = (x, z, w, d) => {
-      const c = makeStructBox(BX + x, 8.6, BZ + z, w, 0.45, d, floorM(), oStone);
+      const c = makeStructBox(BX + x, 8.6, BZ + z, w, 0.45, d, floorM(), oFloor);
       // Sous-face neutre : le sol extérieur de l'éclairage hémisphérique
       // ne doit pas teinter le plafond intérieur en vert olive.
       const lining = new THREE.Mesh(BOX, ceilingM);
@@ -5281,7 +5283,7 @@ function buildSpyPOI(p) {
     const ringSlab = (y, stairSide) => {
       // bords affleurants aux murs (faces internes x ±12,75, z ±9,75) : aucune
       // fente sombre ne reste entre dalle et mur
-      const mk = (cx, cz, w, d) => makeStructBox(BX + cx, y, BZ + cz, w, 0.45, d, floorM(), oStone);
+      const mk = (cx, cz, w, d) => makeStructBox(BX + cx, y, BZ + cz, w, 0.45, d, floorM(), oFloor);
       if (stairSide === 'E') {
         mk(-8.625, 0, 8.25, 19.5);      // bande ouest (x -12,75..-4,5)
         mk(6.25, 0, 3.5, 19.5);        // bande est intérieure (x 4,5..8)
