@@ -942,52 +942,49 @@ const sqNeckZ = () => { let z0 = 9, z1 = -9; for (const t of sqTris('head')) for
 // --- Visage : une seule surface sculptée sur l'avant de la tête (arcades, orbites, nez,
 // pommettes, lèvres, menton, mâchoire), teintée par sommet (lèvres, joues, ombres des yeux),
 // plus des yeux sphériques sous paupières, des sourcils et des oreilles.
-const EYE = { x: 0.0385, y: 0.1945 };
+const EYE = { x: 0.0405, y: 0.1955 };
 const gau = (v, s) => Math.exp(-v * v / (2 * s * s));
 const sst = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 // relief du visage : poussée vers l'avant (z) et vers l'extérieur (r) au point (x, y)
 function faceRelief(x, y) {
   const X = Math.abs(x); let z = 0, r = 0;
-  // nez : arête qui s'élargit vers le bout, dessous net, ailes
-  const t = Math.min(1, Math.max(0, (0.203 - y) / 0.058));
-  const h = (0.003 + 0.019 * Math.pow(t, 1.35)) * sst(0.1295, 0.1395, y) * sst(0.216, 0.196, y);
-  z += h * Math.exp(-Math.pow(X / (0.0082 + 0.0042 * t), 2.4));
-  z += 0.0095 * gau(X - 0.0135, 0.0052) * gau(y - 0.1425, 0.0058);
-  z -= 0.005 * gau(X - 0.0068, 0.0028) * gau(y - 0.1335, 0.0026); // narines
-  // arcades, orbites, coin interne de l'œil
-  z += 0.0065 * gau(X - 0.034, 0.024) * gau(y - 0.2235, 0.0085) - 0.002 * gau(X, 0.006) * gau(y - 0.22, 0.008);
-  z -= 0.0048 * Math.exp(-Math.pow((X - EYE.x) / 0.027, 4) - Math.pow((y - EYE.y - 0.002) / 0.021, 4));
-  z -= 0.0022 * gau(X - 0.0135, 0.004) * gau(y - 0.193, 0.011);
-  // pommettes, creux des joues, sillon
-  r += 0.0055 * gau(X - 0.064, 0.018) * gau(y - 0.166, 0.013);
-  r -= 0.0008 * gau(X - 0.058, 0.018) * gau(y - 0.126, 0.014);
-  z -= 0.0005 * gau(X - 0.027 - (0.135 - y) * 0.28, 0.003) * sst(0.1, 0.112, y) * sst(0.145, 0.13, y);
-  const m = y - 5 * X * X; // commissures légèrement relevées
-  // bouche : volume, lèvres, fente, commissures
-  z += 0.004 * gau(X, 0.024) * gau(m - 0.103, 0.016);
-  z += 0.0048 * gau(X, 0.0155) * gau(m - 0.1088 + X * 0.07, 0.0038) - 0.0012 * gau(X, 0.0028) * gau(m - 0.1115, 0.004);
-  z += 0.0068 * gau(X, 0.0135) * gau(m - 0.0955 - X * 0.05, 0.0046);
-  z -= 0.0052 * Math.exp(-Math.pow(X / 0.0225, 6)) * gau(m - 0.1025, 0.0016);
-  z -= 0.0026 * gau(X - 0.0235, 0.0035) * gau(m - 0.1025, 0.004);
-  z -= 0.0035 * gau(X, 0.016) * gau(y - 0.0865, 0.0038); // pli sous la lèvre
-  z += 0.0085 * gau(X, 0.0165) * gau(y - 0.0735, 0.0095); // menton
-  r += 0.0055 * gau(X - 0.07, 0.02) * gau(y - 0.108, 0.02); // angle de la mâchoire
-  r += 0.004 * gau(X - 0.045, 0.02) * gau(y - 0.078, 0.012);
+  // nez court et rond : arête douce, bout en bouton, ailes bombées
+  const t = sst(0.212, 0.152, y);
+  z += (0.0015 + 0.0085 * t) * sst(0.141, 0.151, y) * Math.exp(-Math.pow(X / (0.0085 + 0.0045 * t), 2));
+  z += 0.0068 * gau(X, 0.0098) * gau(y - 0.1535, 0.0068); // bout du nez
+  z += 0.0052 * gau(X - 0.0122, 0.0052) * gau(y - 0.1485, 0.005); // ailes
+  z -= 0.0034 * gau(X - 0.0066, 0.0026) * gau(y - 0.1428, 0.0022); // narines
+  // front et arcades adoucies, orbites peu creusées
+  z += 0.0042 * gau(X - 0.036, 0.026) * gau(y - 0.2275, 0.0095);
+  z -= 0.0028 * Math.exp(-Math.pow((X - EYE.x) / 0.031, 4) - Math.pow((y - EYE.y) / 0.024, 4));
+  // joues pleines, pommettes rondes
+  r += 0.0075 * gau(X - 0.062, 0.022) * gau(y - 0.158, 0.02);
+  z += 0.0032 * gau(X - 0.047, 0.016) * gau(y - 0.152, 0.013);
+  // bouche souriante : lèvres fines, fente relevée aux coins, fossettes
+  const m = y - 6.5 * X * X;
+  z += 0.0035 * gau(X, 0.026) * gau(m - 0.112, 0.014); // volume du museau
+  z += 0.0032 * gau(X, 0.016) * gau(m - 0.1172, 0.0034); // lèvre supérieure
+  z += 0.0045 * gau(X, 0.0145) * gau(m - 0.1062 - X * 0.04, 0.0042); // lèvre inférieure
+  z -= 0.0042 * Math.exp(-Math.pow(X / 0.0245, 6)) * gau(m - 0.1118, 0.0015); // fente
+  z -= 0.0022 * gau(X - 0.027, 0.0035) * gau(y - 0.1178, 0.004); // fossettes
+  z -= 0.0022 * gau(X, 0.014) * gau(y - 0.0975, 0.0034); // pli sous la lèvre
+  z += 0.0068 * gau(X, 0.021) * gau(y - 0.0825, 0.0115); // menton rond
+  r += 0.0095 * gau(X - 0.068, 0.024) * gau(y - 0.11, 0.024); // mâchoire plus large
+  r += 0.0055 * gau(X - 0.045, 0.022) * gau(y - 0.083, 0.013);
   return [z, r];
 }
 // teinte par sommet (multiplie la couleur de peau)
 function faceTint(x, y) {
   const X = Math.abs(x), c = [1, 1, 1], mix = (k, r, g, b) => { c[0] *= 1 + (r - 1) * k; c[1] *= 1 + (g - 1) * k; c[2] *= 1 + (b - 1) * k; };
-  mix(gau(X - 0.052, 0.015) * gau(y - 0.148, 0.013) * 0.8, 1, 0.8, 0.76); // joues
-  mix(gau(X, 0.012) * gau(y - 0.143, 0.008) * 0.55, 1, 0.84, 0.8); // bout du nez
-  mix(Math.exp(-Math.pow((X - EYE.x) / 0.024, 4) - Math.pow((y - EYE.y) / 0.017, 4)), 0.94, 0.84, 0.81); // orbites
-  const m = y - 5 * X * X;
-  const up = 0.1125 - 0.0028 * gau(X, 0.003) - 5 * X * X, lo = 0.0905 + 8 * X * X;
-  mix(sst(up + 0.0016, up - 0.0006, m) * sst(lo - 0.0016, lo + 0.0006, m) * sst(0.0255, 0.022, X), 0.84, 0.53, 0.5); // lèvres
-  mix(sst(0.0248, 0.021, X) * gau(m - 0.1025, 0.0014), 0.36, 0.2, 0.2); // fente
-  mix(gau(X - 0.0068, 0.0026) * gau(y - 0.1335, 0.0022) * 0.85, 0.4, 0.26, 0.24); // narines
-  mix(gau(X, 0.013) * gau(y - 0.0862, 0.003) * 0.3, 0.8, 0.7, 0.68);
-  mix(gau(X - 0.058, 0.02) * gau(y - 0.118, 0.014) * 0.12, 0.82, 0.74, 0.72); // creux des joues
+  mix(gau(X - 0.056, 0.016) * gau(y - 0.15, 0.012) * 0.75, 1, 0.8, 0.77); // joues rosées
+  mix(gau(X, 0.011) * gau(y - 0.153, 0.007) * 0.45, 1, 0.85, 0.81); // bout du nez
+  mix(Math.exp(-Math.pow((X - EYE.x) / 0.028, 4) - Math.pow((y - EYE.y - 0.008) / 0.016, 4)) * 0.7, 0.93, 0.86, 0.84); // paupières
+  const m = y - 6.5 * X * X;
+  const up = 0.1205 - 0.0022 * gau(X, 0.003), lo = 0.1015 + 6 * X * X;
+  mix(sst(up + 0.0014, up - 0.0006, m) * sst(lo - 0.0014, lo + 0.0006, m) * sst(0.025, 0.0215, X), 0.9, 0.6, 0.56); // lèvres
+  mix(sst(0.0245, 0.0205, X) * gau(m - 0.1118, 0.0013), 0.42, 0.24, 0.23); // fente
+  mix(gau(X - 0.0066, 0.0024) * gau(y - 0.1428, 0.002) * 0.7, 0.5, 0.34, 0.31); // narines
+  mix(gau(X, 0.013) * gau(y - 0.0972, 0.0028) * 0.25, 0.82, 0.72, 0.7);
   return c;
 }
 function faceGeo() {
@@ -1052,7 +1049,7 @@ const IRIS = [0x2f8fe0, 0x8a4f24, 0x35a867, 0x5f7fd0, 0xc07a1e];
 // --- Yeux en amande, plaqués sur le visage : blanc ombré sous la paupière, iris dégradé,
 // pupille, reflets, trait de cils en virgule. Tout est découpé dans la forme de l'œil,
 // donc rien ne dépasse et le regard reste lisible de loin.
-const EYE_W = 0.0245, EYE_U = 0.0168, EYE_L = 0.0112;
+const EYE_W = 0.0262, EYE_U = 0.0195, EYE_L = 0.0138;
 // bords de l'œil à l'abscisse q (-1 = coin interne, 1 = coin externe)
 const eyeTilt = (q) => EYE.y + 0.0022 * q;
 const eyeTop = (q) => eyeTilt(q) + EYE_U * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(q + 0.06) / (q > -0.06 ? 1.06 : 0.94), 2.3)), 0.8);
@@ -1088,7 +1085,7 @@ function buildEyes(head, s, skinTone) {
   const pupil = mat(0x06060a, { roughness: 0.2, side: DS }), shine = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.9, side: DS });
   const lash = mat(0x140d0b, { roughness: 0.9, side: DS }), soft = mat(skinTone(0x4a1a12, 0.5), { roughness: 0.7, side: DS });
   const brow = mat(s.brows || s.hair || 0x2f2318, { roughness: 0.95, side: DS });
-  const IX = -0.0012, IY = EYE.y + 0.0026, IR = 0.0136;
+  const IX = -0.0012, IY = EYE.y + 0.0022, IR = 0.0158;
   for (const sx of [-1, 1]) {
     part(head, eyeSheet('white', sx, 24, 8, (u, v) => { const q = u * 2 - 1; return eyePt(sx, q, eyeLow(q) + (eyeTop(q) - eyeLow(q)) * v, 0.0012); },
       (u, v) => { const k = 1 - 0.36 * sst(0.62, 1, v) - 0.12 * Math.abs(u * 2 - 1) ** 3; return [k, k * 0.985, k * 1.0]; }), white, 0, 0, 0);
@@ -1136,12 +1133,14 @@ function buildOutfit(s, P) {
   part(torso, sqBand('torso', 0.052, 0.1, 0.009), belt, 0, 0, 0);
   sqOn(torso, 'torso', 0.06, 0.052, 0.034, 0, 0.076, metal, 0.01); // boucle
   part(torso, sqBand('torso', 0.752, 0.79, 0.009), trim, 0, 0, 0); // col
+  const abs = !s.outfit && s.style !== 'astro' && s.style !== 'knight';
+  if (abs) part(torso, absGeo(), mat(s.shirt, { roughness: 0.85, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), 0, 0, 0); // abdos
   if (s.outfit) buildShadowOutfit(s, torso);
   else if (s.extra === 'tiger') { // rayures de tigre
     const st = mat(0x241009, { roughness: 0.7 });
     [[-0.1, 0.22, 0.14], [0.1, 0.22, 0.14], [-0.045, 0.34, 0.18], [0.05, 0.4, 0.17], [-0.14, 0.46, 0.14], [0.14, 0.5, 0.14]].forEach(([x, y, h], i) => { for (const d of [-1, 1]) part(torso, sqTorsoPatch('tig' + i, y - h / 2, y + h / 2, (v) => x + Math.sin(v * 5) * 0.01, (v) => 0.004 + Math.sin(v * Math.PI) * 0.016, 0.005, d), st, 0, 0, 0); });
   } else {
-    part(torso, sqTorsoPatch('zip', 0.1, 0.74, () => 0, () => 0.008, 0.005, -1, 2, 18), trim, 0, 0, 0); // fermeture
+    part(torso, abs ? sqTorsoPatch('zipc', 0.5, 0.74, () => 0, () => 0.008, 0.005, -1, 2, 8) : sqTorsoPatch('zip', 0.1, 0.74, () => 0, () => 0.008, 0.005, -1, 2, 18), trim, 0, 0, 0); // fermeture (courte sur les abdos)
   }
   for (const [el, b] of [[elL, 'fore_L'], [elR, 'fore_R']]) part(el, sqBand(b, -0.272, -0.235, 0.008), trim, 0, 0, 0); // manchettes
   for (const [hip, b, sx] of [[hipL, 'hip_L', -1], [hipR, 'hip_R', 1]]) { // poches cargo
@@ -1154,6 +1153,34 @@ function buildOutfit(s, P) {
     part(kn, sqBand(b, -0.41, -0.375, 0.011), shoeTop, 0, 0, 0); // tige
     for (const z of [-0.075, -0.1, -0.125]) { const h = sqCast(b, new THREE.Vector3(sx * 0.02, -0.5, z), new THREE.Vector3(0, 1, 0)); if (h && h.y < -0.36) rbox(kn, 0.046, 0.009, 0.013, sx * 0.02, h.y, z, sole, 0.004); } // lacets
   }
+}
+// Abdos : plaque sculptée sur le ventre, sous le haut moulant : six blocs bombés,
+// ligne blanche au centre, sillons en V vers les hanches ; creux assombris par sommet
+function absHeight(x, y) {
+  const X = Math.abs(x), out = 0.071 - 0.02 * sst(0.25, 0.15, y); // bord extérieur, resserré vers le bas
+  const col = sst(0.006, 0.0125, X) * sst(out + 0.009, out - 0.005, X);
+  let row = sst(0.15, 0.185, y) * sst(0.462, 0.44, y);
+  for (const g of [0.285, 0.372]) row *= sst(0.003, 0.012, Math.abs(y - g + 0.012 * X / 0.07));
+  const dome = 0.75 + 0.25 * Math.cos(Math.min(1, Math.abs(X - 0.04) / 0.036) * Math.PI / 2);
+  return col * row * dome;
+}
+function absGeo() {
+  return geo('sqabs', () => {
+    const nu = 30, nv = 44, x0 = -0.14, x1 = 0.14, y0 = 0.1, y1 = 0.53, pos = [], col = [], idx = [], w = nu + 3;
+    for (let j = -1; j <= nv + 1; j++) for (let i = -1; i <= nu + 1; i++) {
+      const rim = i < 0 || j < 0 || i > nu || j > nv, u = Math.min(1, Math.max(0, i / nu)), v = Math.min(1, Math.max(0, j / nv));
+      const x = x0 + (x1 - x0) * u, y = y0 + (y1 - y0) * v, X = Math.abs(x), h = absHeight(x, y);
+      const fade = sst(0, 0.22, Math.min(u, 1 - u)) * sst(0, 0.12, Math.min(v, 1 - v)); // se fond dans le torse au bord
+      const zone = Math.exp(-Math.pow(X / 0.078, 6)) * sst(0.15, 0.19, y) * sst(0.475, 0.445, y); // autour des blocs
+      const vl = gau(X - 0.064 - 0.11 * sst(0.25, 0.12, y) * (0.25 - Math.min(0.25, y)), 0.006) * sst(0.11, 0.15, y) * sst(0.26, 0.2, y); // sillons en V
+      pos.push(x, y, sqZ('torso', x, y) - (rim ? -0.004 : (0.0012 + 0.0085 * h - 0.0012 * vl) * fade));
+      const k = 1 - fade * (0.26 * (1 - h) * zone + 0.12 * vl) + 0.06 * h;
+      col.push(k, k, k);
+    }
+    for (let j = 0; j < nv + 2; j++) for (let i = 0; i < w - 1; i++) { const a = j * w + i, b = a + w; idx.push(a, b, b + 1, a, b + 1, a + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  });
 }
 // Tenues de l'Ombre : costume, gilet tactique ou uniforme d'officier sur le mannequin
 function buildShadowOutfit(s, torso) {
